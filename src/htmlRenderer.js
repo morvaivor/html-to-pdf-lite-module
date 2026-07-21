@@ -48,6 +48,9 @@ function parseInlineStyle(element) {
       case 'color':
         style.color = value.startsWith('#') ? value : DEFAULT_STYLE.color;
         break;
+      case 'background-color':
+        style.backgroundColor = value.startsWith('#') ? value : undefined;
+        break;
       case 'font-size':
         style.fontSize = parseInt(value.replace('px', ''), 10) || DEFAULT_STYLE.fontSize;
         break;
@@ -59,6 +62,21 @@ function parseInlineStyle(element) {
         break;
       case 'font-family':
         style.fontFamily = value.split(',')[0].replace(/['"]/g, '').trim();
+        break;
+      case 'border':
+        style.border = value;
+        break;
+      case 'border-color':
+        style.borderColor = value.startsWith('#') ? value : '#000000';
+        break;
+      case 'border-width':
+        style.borderWidth = parseFloat(value.replace('px', '')) || 1;
+        break;
+      case 'padding':
+        style.padding = parseInt(value.replace('px', ''), 10) || 0;
+        break;
+      case 'text-align':
+        style.textAlign = value;
         break;
     }
   }
@@ -72,6 +90,14 @@ function resolveFontFamily(fontFamily, bold, italic) {
   if (bold) suffixes.push('-Bold');
   if (italic) suffixes.push('-Italic');
   return suffixes.length > 0 ? `${base}${suffixes.join('')}` : base;
+}
+
+function measureTextHeight(doc, text, fontFamily, fontSize, maxWidth) {
+  doc.font(fontFamily).fontSize(fontSize);
+  return doc.heightOfString(text, {
+    width: maxWidth,
+    lineGap: fontSize * 0.25,
+  });
 }
 
 function renderText(doc, text, style, options) {
@@ -91,13 +117,7 @@ function renderText(doc, text, style, options) {
 
   doc.x = leftMargin;
 
-  const lines = doc.text(text, doc.x, doc.y, {
-    width: contentWidth,
-    lineGap: fontSize * 0.25,
-    dryRun: true,
-  });
-
-  const textHeight = lines.reduce((sum, l) => sum + l.height, 0);
+  const textHeight = measureTextHeight(doc, text, fontFamily, fontSize, contentWidth);
 
   if (doc.y + textHeight > pageBottom) {
     doc.addPage({
@@ -115,13 +135,172 @@ function renderText(doc, text, style, options) {
 }
 
 function processChildren(doc, children, style, options) {
-  children.forEach(child => {
+  for (const child of children) {
     if (child.type === 'tag') {
       renderElement(doc, child, style, options);
     } else if (child.type === 'text' && child.data?.trim()) {
       renderText(doc, child.data.trim(), style, options);
     }
+  }
+}
+
+function getCellText(element) {
+  return element.children
+    .map(c => {
+      if (c.type === 'text') return c.data;
+      if (c.type === 'tag') return c.children.map(gc => gc.type === 'text' ? gc.data : '').join('');
+      return '';
+    })
+    .join('')
+    .trim();
+}
+
+function renderTable(doc, element, parentStyle, options) {
+  const leftMargin = options.margin?.left ?? 20;
+  const rightMargin = options.margin?.right ?? 20;
+  const topMargin = options.margin?.top ?? 20;
+  const bottomMargin = options.margin?.bottom ?? 20;
+  const contentWidth = doc.page.width - leftMargin - rightMargin;
+  const pageBottom = doc.page.height - bottomMargin;
+
+  const tableStyle = parseInlineStyle(element);
+
+  const defaultPadding = tableStyle.padding ?? 4;
+  const defaultBorder = tableStyle.border || null;
+  const defaultBorderColor = tableStyle.borderColor || '#000000';
+  const defaultBorderWidth = tableStyle.borderWidth ?? 1;
+
+  const allRows = [];
+  element.children.forEach(child => {
+    if (child.type === 'tag') {
+      if (child.name === 'thead' || child.name === 'tbody' || child.name === 'tfoot') {
+        child.children.forEach(grandchild => {
+          if (grandchild.type === 'tag' && grandchild.name === 'tr') {
+            allRows.push(grandchild);
+          }
+        });
+      } else if (child.name === 'tr') {
+        allRows.push(child);
+      }
+    }
   });
+
+  if (allRows.length === 0) return;
+
+  let maxCols = 0;
+  allRows.forEach(row => {
+    let cols = 0;
+    row.children.forEach(cell => {
+      if (cell.type === 'tag' && (cell.name === 'td' || cell.name === 'th')) {
+        cols += parseInt(cell.attribs.colspan || '1', 10);
+      }
+    });
+    if (cols > maxCols) maxCols = cols;
+  });
+
+  const colWidth = contentWidth / maxCols;
+
+  const cellData = [];
+  for (const row of allRows) {
+    const rowData = [];
+    for (const cell of row.children) {
+      if (cell.type === 'tag' && (cell.name === 'td' || cell.name === 'th')) {
+        const cellStyle = {
+          ...parentStyle,
+          ...parseInlineStyle(cell),
+          fontSize: parseInlineStyle(cell).fontSize ?? FONT_SIZES[cell.name] ?? parentStyle.fontSize,
+          bold: cell.name === 'th' || parseInlineStyle(cell).bold || parentStyle.bold,
+        };
+
+        const text = getCellText(cell);
+        const padding = cellStyle.padding ?? defaultPadding;
+        const fontFamily = resolveFontFamily(cellStyle.fontFamily, cellStyle.bold, cellStyle.italic);
+        const fontSize = cellStyle.fontSize;
+
+        const textHeight = measureTextHeight(doc, text, fontFamily, fontSize, colWidth - padding * 2);
+        const cellHeight = textHeight + padding * 2;
+
+        rowData.push({
+          text,
+          style: cellStyle,
+          padding,
+          fontSize,
+          fontFamily,
+          height: cellHeight,
+          colspan: parseInt(cell.attribs.colspan || '1', 10),
+        });
+      }
+    }
+    cellData.push(rowData);
+  }
+
+  const borderWidth = defaultBorder ? defaultBorderWidth : 0;
+  const borderColor = defaultBorder ? defaultBorderColor : undefined;
+
+  let rowIdx = 0;
+  while (rowIdx < cellData.length) {
+    const row = cellData[rowIdx];
+    const maxCellHeight = Math.max(...row.map(c => c.height));
+    const rowHeight = maxCellHeight + (borderWidth > 0 ? borderWidth : 0);
+
+    if (doc.y + rowHeight > pageBottom) {
+      doc.addPage({
+        size: options.format || 'A4',
+        layout: options.orientation || 'portrait',
+      });
+      doc.y = topMargin;
+      doc.x = leftMargin;
+    }
+
+    const y = doc.y;
+    let colX = leftMargin;
+
+    for (const cell of row) {
+      const cellWidth = colWidth * cell.colspan;
+      const cellY = y;
+
+      if (cell.style.backgroundColor) {
+        doc.fillColor(cell.style.backgroundColor)
+          .rect(colX, cellY, cellWidth, maxCellHeight)
+          .fill();
+      }
+
+      if (borderWidth > 0) {
+        doc.strokeColor(borderColor)
+          .lineWidth(borderWidth)
+          .rect(colX, cellY, cellWidth, maxCellHeight)
+          .stroke();
+      }
+
+      doc.font(cell.fontFamily)
+         .fontSize(cell.fontSize)
+         .fillColor(cell.style.color);
+
+      const textY = cellY + cell.padding + cell.fontSize;
+      const textX = colX + cell.padding;
+
+      if (cell.style.textAlign === 'center') {
+        doc.text(cell.text, textX, textY, {
+          width: cellWidth - cell.padding * 2,
+          align: 'center',
+        });
+      } else if (cell.style.textAlign === 'right') {
+        doc.text(cell.text, textX, textY, {
+          width: cellWidth - cell.padding * 2,
+          align: 'right',
+        });
+      } else {
+        doc.text(cell.text, textX, textY, {
+          width: cellWidth - cell.padding * 2,
+        });
+      }
+
+      colX += cellWidth;
+    }
+
+    doc.y = y + maxCellHeight + (borderWidth > 0 ? borderWidth : 0);
+    rowIdx++;
+  }
 }
 
 function renderElement(doc, element, parentStyle, options) {
@@ -136,6 +315,11 @@ function renderElement(doc, element, parentStyle, options) {
 
   if (tagName === 'br') {
     doc.text('', doc.x, doc.y);
+    return;
+  }
+
+  if (tagName === 'table') {
+    renderTable(doc, element, parentStyle, options);
     return;
   }
 
@@ -190,13 +374,13 @@ function renderHtmlToPdf(html, options = {}) {
 
   const rootStyle = { ...DEFAULT_STYLE };
 
-  body.children().each((_index, child) => {
+  for (const child of body.children().toArray()) {
     if (child.type === 'tag') {
       renderElement(doc, child, rootStyle, options);
     } else if (child.type === 'text' && child.data?.trim()) {
       renderText(doc, child.data.trim(), rootStyle, options);
     }
-  });
+  }
 
   return new Promise((resolve, reject) => {
     doc.on('end', () => resolve(Buffer.concat(buffers)));
