@@ -1,0 +1,14 @@
+{
+  "name": "pdf-generator",
+  "version": "1.0.0",
+  "description": "Minimal HTML to PDF generator using pdfkit + cheerio",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node test/manual-test.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "pdfkit": "^0.15.0"
+  }
+}
