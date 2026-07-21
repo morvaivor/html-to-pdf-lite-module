@@ -88,7 +88,13 @@ function resolveFontFamily(fontFamily, bold, italic) {
   const base = fontFamily || DEFAULT_STYLE.fontFamily;
   const suffixes = [];
   if (bold) suffixes.push('-Bold');
-  if (italic) suffixes.push('-Italic');
+  if (italic) {
+    if (base === 'Courier' || base === 'Helvetica') {
+      suffixes.push('-Oblique');
+    } else {
+      suffixes.push('-Italic');
+    }
+  }
   return suffixes.length > 0 ? `${base}${suffixes.join('')}` : base;
 }
 
