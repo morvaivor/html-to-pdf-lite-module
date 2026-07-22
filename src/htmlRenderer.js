@@ -498,6 +498,8 @@ function renderHtmlToPdf(html, options = {}) {
     currentPage++;
 
     const cw = doc.page.width - leftMargin - rightMargin;
+    const savedY = doc.y;
+    const savedX = doc.x;
 
     if (hasHeader) {
       const headerY = topMargin;
@@ -510,6 +512,9 @@ function renderHtmlToPdf(html, options = {}) {
       const footerHtml = options.footer.replace('{page}', currentPage).replace('{totalPages}', totalPages);
       renderHeaderFooterContent(doc, footerHtml, leftMargin, footerY, cw, 'left');
     }
+
+    doc.y = savedY;
+    doc.x = savedX;
   };
 
   doc.addPage({
