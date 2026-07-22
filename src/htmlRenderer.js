@@ -348,11 +348,51 @@ function renderElement(doc, element, parentStyle, options) {
   }
 }
 
-function renderHtmlToPdf(html, options = {}) {
-  if (!html || typeof html !== 'string') {
-    throw new Error('HTML content must be a non-empty string');
-  }
+function renderHeaderFooterContent(doc, html, x, y, width, align) {
+  if (!html) return;
 
+  const $ = cheerio.load(html);
+  const body = $('body').length > 0 ? $('body') : $(html);
+
+  body.children().each((_index, child) => {
+    if (child.type === 'tag') {
+      const inlineStyle = parseInlineStyle(child);
+      const tagName = child.name || 'span';
+      const style = {
+        ...DEFAULT_STYLE,
+        fontSize: inlineStyle.fontSize ?? FONT_SIZES[tagName] ?? DEFAULT_STYLE.fontSize,
+        ...inlineStyle,
+      };
+
+      const fontFamily = resolveFontFamily(style.fontFamily, style.bold, style.italic);
+      doc.font(fontFamily)
+         .fontSize(style.fontSize)
+         .fillColor(style.color);
+
+      const textContent = child.children
+        .filter(c => c.type === 'text')
+        .map(c => c.data)
+        .join('')
+        .trim();
+
+      if (textContent) {
+        const textOpts = { width: width };
+        if (align === 'center') textOpts.align = 'center';
+        else if (align === 'right') textOpts.align = 'right';
+
+        doc.text(textContent, x, y, textOpts);
+      }
+    } else if (child.type === 'text' && child.data?.trim()) {
+      doc.font('Helvetica').fontSize(12).fillColor('#000000');
+      const textOpts = { width: width };
+      if (align === 'center') textOpts.align = 'center';
+      else if (align === 'right') textOpts.align = 'right';
+      doc.text(child.data.trim(), x, y, textOpts);
+    }
+  });
+}
+
+function countPages(html, options) {
   const $ = cheerio.load(html);
 
   if (options.css) {
@@ -368,13 +408,11 @@ function renderHtmlToPdf(html, options = {}) {
     margin: 0,
   });
 
-  doc.setMaxListeners(0);
-
-  const buffers = [];
-  doc.on('data', (chunk) => buffers.push(chunk));
-
   const topMargin = options.margin?.top ?? 20;
+  const bottomMargin = options.margin?.bottom ?? 20;
   const leftMargin = options.margin?.left ?? 20;
+  const headerHeight = options.header ? 20 : 0;
+  const footerHeight = options.footer ? 20 : 0;
 
   doc.addPage({
     size: options.format || 'A4',
@@ -382,7 +420,95 @@ function renderHtmlToPdf(html, options = {}) {
   });
 
   doc.x = leftMargin;
-  doc.y = topMargin;
+  doc.y = topMargin + headerHeight;
+
+  const pageCount = { value: 1 };
+
+  const originalAddPage = doc.addPage.bind(doc);
+  doc.addPage = function(opts) {
+    originalAddPage(opts);
+    pageCount.value++;
+  };
+
+  const rootStyle = { ...DEFAULT_STYLE };
+
+  for (const child of body.children().toArray()) {
+    if (child.type === 'tag') {
+      renderElement(doc, child, rootStyle, options);
+    } else if (child.type === 'text' && child.data?.trim()) {
+      renderText(doc, child.data.trim(), rootStyle, options);
+    }
+  }
+
+  return pageCount.value;
+}
+
+function renderHtmlToPdf(html, options = {}) {
+  if (!html || typeof html !== 'string') {
+    throw new Error('HTML content must be a non-empty string');
+  }
+
+  const $ = cheerio.load(html);
+
+  if (options.css) {
+    applyCssToElements($, options.css);
+  }
+
+  const body = $('body').length > 0 ? $('body') : $(html);
+
+  const hasHeader = !!options.header;
+  const hasFooter = !!options.footer;
+  const headerHeight = hasHeader ? 20 : 0;
+  const footerHeight = hasFooter ? 20 : 0;
+
+  const totalPages = countPages(html, options);
+
+  const doc = new PDFDocument({
+    autoFirstPage: false,
+    size: options.format || 'A4',
+    layout: options.orientation || 'portrait',
+    margin: 0,
+  });
+
+  doc.setMaxListeners(0);
+
+  const buffers = [];
+  doc.on('data', (chunk) => buffers.push(chunk));
+
+  const topMargin = options.margin?.top ?? 20;
+  const bottomMargin = options.margin?.bottom ?? 20;
+  const leftMargin = options.margin?.left ?? 20;
+  const rightMargin = options.margin?.right ?? 20;
+
+  let currentPage = 0;
+
+  const originalAddPage = doc.addPage.bind(doc);
+  doc.addPage = function(opts) {
+    originalAddPage(opts);
+    currentPage++;
+
+    const cw = doc.page.width - leftMargin - rightMargin;
+
+    if (hasHeader) {
+      const headerY = topMargin;
+      const headerHtml = options.header.replace('{page}', currentPage).replace('{totalPages}', totalPages);
+      renderHeaderFooterContent(doc, headerHtml, leftMargin, headerY, cw, 'left');
+    }
+
+    if (hasFooter) {
+      const footerY = doc.page.height - footerHeight;
+      const footerHtml = options.footer.replace('{page}', currentPage).replace('{totalPages}', totalPages);
+      renderHeaderFooterContent(doc, footerHtml, leftMargin, footerY, cw, 'left');
+    }
+  };
+
+  doc.addPage({
+    size: options.format || 'A4',
+    layout: options.orientation || 'portrait',
+  });
+
+  doc.x = leftMargin;
+  doc.y = topMargin + headerHeight;
 
   const rootStyle = { ...DEFAULT_STYLE };
 

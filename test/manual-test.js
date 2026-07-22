@@ -256,6 +256,86 @@ async function runTests() {
   writeFileSync('output/test17-css-per-call.pdf', pdf17);
   console.log('  Saved output/test17-css-per-call.pdf\n');
 
+  console.log('\n=== Test 18: Header on every page ===');
+  const generatorHeader = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+    header: '<div style="font-size: 10px; color: #666666;">Mon Document - Rapport</div>',
+  });
+  let content18 = '<h1>Rapport</h1>';
+  for (let i = 0; i < 30; i++) {
+    content18 += '<p>Paragraphe ' + i + ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>';
+  }
+  const pdf18 = await generatorHeader.generate(content18);
+  console.log('  Buffer size: ' + pdf18.length + ' bytes');
+  writeFileSync('output/test18-header.pdf', pdf18);
+  console.log('  Saved output/test18-header.pdf\n');
+
+  console.log('=== Test 19: Footer on every page ===');
+  const generatorFooter = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+    footer: '<div style="font-size: 8px; color: #999999;">Page {page} / {totalPages} - Confidential</div>',
+  });
+  let content19 = '<h1>Rapport</h1>';
+  for (let i = 0; i < 30; i++) {
+    content19 += '<p>Paragraphe ' + i + ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>';
+  }
+  const pdf19 = await generatorFooter.generate(content19);
+  console.log('  Buffer size: ' + pdf19.length + ' bytes');
+  writeFileSync('output/test19-footer.pdf', pdf19);
+  console.log('  Saved output/test19-footer.pdf\n');
+
+  console.log('=== Test 20: Header + Footer combined ===');
+  const generatorBoth = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+    header: '<div style="font-size: 10px; font-weight: bold;">En-tête du document</div>',
+    footer: '<div style="font-size: 8px; color: #999999;">Page {page} / {totalPages}</div>',
+  });
+  let content20 = '<h1>Rapport Complet</h1>';
+  for (let i = 0; i < 40; i++) {
+    content20 += '<p>Paragraphe ' + i + ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam.</p>';
+  }
+  const pdf20 = await generatorBoth.generate(content20);
+  console.log('  Buffer size: ' + pdf20.length + ' bytes');
+  writeFileSync('output/test20-header-footer.pdf', pdf20);
+  console.log('  Saved output/test20-header-footer.pdf\n');
+
+  console.log('=== Test 21: Header/Footer per-call option ===');
+  const generatorNoHF = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+  });
+  let content21 = '<h1>Test</h1>';
+  for (let i = 0; i < 20; i++) {
+    content21 += '<p>Ligne ' + i + ' - Lorem ipsum dolor sit amet.</p>';
+  }
+  const pdf21 = await generatorNoHF.generate(content21, {
+    header: '<div style="font-size: 9px;">Per-call header</div>',
+    footer: '<div style="font-size: 8px;">Per-call footer</div>',
+  });
+  console.log('  Buffer size: ' + pdf21.length + ' bytes');
+  writeFileSync('output/test21-per-call-hf.pdf', pdf21);
+  console.log('  Saved output/test21-per-call-hf.pdf\n');
+
+  console.log('=== Test 22: Header/Footer single page ===');
+  const generatorSingle = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+    header: '<div style="font-size: 10px;">Header</div>',
+    footer: '<div style="font-size: 8px;">Footer - Page 1/1</div>',
+  });
+  const pdf22 = await generatorSingle.generate('<h1>Single Page</h1><p>Just one page.</p>');
+  console.log('  Buffer size: ' + pdf22.length + ' bytes');
+  writeFileSync('output/test22-single-page-hf.pdf', pdf22);
+  console.log('  Saved output/test22-single-page-hf.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 

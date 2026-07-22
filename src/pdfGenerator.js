@@ -16,6 +16,8 @@ export class PdfGenerator {
       defaultOrientation: config.defaultOrientation ?? DEFAULT_ORIENTATION,
       defaultMargin: config.defaultMargin ?? DEFAULT_MARGIN,
       css: config.css ?? '',
+      header: config.header ?? '',
+      footer: config.footer ?? '',
     };
   }
 
@@ -29,6 +31,8 @@ export class PdfGenerator {
         ...options.margin,
       },
       css: options.css ?? this.config.css,
+      header: options.header ?? this.config.header,
+      footer: options.footer ?? this.config.footer,
     };
 
     return renderHtmlToPdf(html, mergedOptions);
