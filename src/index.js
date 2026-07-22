@@ -1,1 +1,2 @@
-module.exports = require('./pdfGenerator');
+export * from './pdfGenerator.js';
+export { default } from './pdfGenerator.js';

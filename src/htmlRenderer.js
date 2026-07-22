@@ -1,5 +1,5 @@
-const cheerio = require('cheerio');
-const PDFDocument = require('pdfkit');
+import * as cheerio from 'cheerio';
+import PDFDocument from 'pdfkit';
 
 const DEFAULT_STYLE = {
   color: '#000000',
@@ -395,4 +395,4 @@ function renderHtmlToPdf(html, options = {}) {
   });
 }
 
-module.exports = { renderHtmlToPdf };
+export { renderHtmlToPdf };

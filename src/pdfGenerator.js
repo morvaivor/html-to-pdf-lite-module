@@ -1,4 +1,4 @@
-const { renderHtmlToPdf } = require('./htmlRenderer');
+import { renderHtmlToPdf } from './htmlRenderer.js';
 
 const DEFAULT_FORMAT = 'A4';
 const DEFAULT_ORIENTATION = 'portrait';
@@ -9,7 +9,7 @@ const DEFAULT_MARGIN = {
   right: 20,
 };
 
-class PdfGenerator {
+export class PdfGenerator {
   constructor(config = {}) {
     this.config = {
       defaultFormat: config.defaultFormat ?? DEFAULT_FORMAT,
@@ -33,8 +33,8 @@ class PdfGenerator {
   }
 }
 
-function createPdfGenerator(config = {}) {
+export function createPdfGenerator(config = {}) {
   return new PdfGenerator(config);
 }
 
-module.exports = { PdfGenerator, createPdfGenerator, default: PdfGenerator };
+export default PdfGenerator;

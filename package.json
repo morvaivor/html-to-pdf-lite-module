@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Minimal HTML to PDF generator using pdfkit + cheerio",
   "main": "src/index.js",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "test": "node test/manual-test.js"
   },

@@ -1,5 +1,5 @@
-const { createPdfGenerator } = require('../src/index');
-const { writeFileSync, mkdirSync } = require('fs');
+import { createPdfGenerator } from '../src/index.js';
+import { writeFileSync, mkdirSync } from 'fs';
 
 const generator = createPdfGenerator({
   defaultFormat: 'A4',
