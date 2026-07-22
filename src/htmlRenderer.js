@@ -112,8 +112,10 @@ function renderText(doc, text, style, options) {
   const rightMargin = options.margin?.right ?? 20;
   const topMargin = options.margin?.top ?? 20;
   const bottomMargin = options.margin?.bottom ?? 20;
+  const footerHeight = options._footerHeight ?? 0;
+  const headerHeight = options._headerHeight ?? 0;
   const contentWidth = doc.page.width - leftMargin - rightMargin;
-  const pageBottom = doc.page.height - bottomMargin;
+  const pageBottom = doc.page.height - bottomMargin - footerHeight;
 
   const fontFamily = resolveFontFamily(style.fontFamily, style.bold, style.italic);
   const fontSize = style.fontSize;
@@ -131,7 +133,7 @@ function renderText(doc, text, style, options) {
       size: options.format || 'A4',
       layout: options.orientation || 'portrait',
     });
-    doc.y = topMargin;
+    doc.y = topMargin + headerHeight;
     doc.x = leftMargin;
   }
 
@@ -167,8 +169,10 @@ function renderTable(doc, element, parentStyle, options) {
   const rightMargin = options.margin?.right ?? 20;
   const topMargin = options.margin?.top ?? 20;
   const bottomMargin = options.margin?.bottom ?? 20;
+  const footerHeight = options._footerHeight ?? 0;
+  const headerHeight = options._headerHeight ?? 0;
   const contentWidth = doc.page.width - leftMargin - rightMargin;
-  const pageBottom = doc.page.height - bottomMargin;
+  const pageBottom = doc.page.height - bottomMargin - footerHeight;
 
   const tableStyle = parseInlineStyle(element);
 
@@ -255,7 +259,7 @@ function renderTable(doc, element, parentStyle, options) {
         size: options.format || 'A4',
         layout: options.orientation || 'portrait',
       });
-      doc.y = topMargin;
+      doc.y = topMargin + headerHeight;
       doc.x = leftMargin;
     }
 
@@ -411,8 +415,8 @@ function countPages(html, options) {
   const topMargin = options.margin?.top ?? 20;
   const bottomMargin = options.margin?.bottom ?? 20;
   const leftMargin = options.margin?.left ?? 20;
-  const headerHeight = options.header ? 20 : 0;
-  const footerHeight = options.footer ? 20 : 0;
+  const headerHeight = options._headerHeight ?? 0;
+  const footerHeight = options._footerHeight ?? 0;
 
   doc.addPage({
     size: options.format || 'A4',
@@ -461,7 +465,13 @@ function renderHtmlToPdf(html, options = {}) {
   const headerHeight = hasHeader ? 20 : 0;
   const footerHeight = hasFooter ? 20 : 0;
 
-  const totalPages = countPages(html, options);
+  const renderOptions = {
+    ...options,
+    _headerHeight: headerHeight,
+    _footerHeight: footerHeight,
+  };
+
+  const totalPages = countPages(html, renderOptions);
 
   const doc = new PDFDocument({
     autoFirstPage: false,
@@ -514,9 +524,9 @@ function renderHtmlToPdf(html, options = {}) {
 
   for (const child of body.children().toArray()) {
     if (child.type === 'tag') {
-      renderElement(doc, child, rootStyle, options);
+      renderElement(doc, child, rootStyle, renderOptions);
     } else if (child.type === 'text' && child.data?.trim()) {
-      renderText(doc, child.data.trim(), rootStyle, options);
+      renderText(doc, child.data.trim(), rootStyle, renderOptions);
     }
   }
 

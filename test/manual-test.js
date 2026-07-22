@@ -9,9 +9,13 @@ const generator = createPdfGenerator({
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+let fileIdx = 0;
+
 async function savePdf(path, buffer) {
+  const newPath = path.replace('.pdf', `_${++fileIdx}.pdf`);
   await sleep(100);
-  writeFileSync(path, buffer);
+  writeFileSync(newPath, buffer);
+  return newPath;
 }
 
 async function runTests() {
@@ -269,7 +273,7 @@ async function runTests() {
   }
   const pdf18 = await generatorHeader.generate(content18);
   console.log('  Buffer size: ' + pdf18.length + ' bytes');
-  writeFileSync('output/test18-header.pdf', pdf18);
+  await savePdf('output/test18-header.pdf', pdf18);
   console.log('  Saved output/test18-header.pdf\n');
 
   console.log('=== Test 19: Footer on every page ===');
@@ -285,7 +289,7 @@ async function runTests() {
   }
   const pdf19 = await generatorFooter.generate(content19);
   console.log('  Buffer size: ' + pdf19.length + ' bytes');
-  writeFileSync('output/test19-footer.pdf', pdf19);
+  await savePdf('output/test19-footer.pdf', pdf19);
   console.log('  Saved output/test19-footer.pdf\n');
 
   console.log('=== Test 20: Header + Footer combined ===');
@@ -302,7 +306,7 @@ async function runTests() {
   }
   const pdf20 = await generatorBoth.generate(content20);
   console.log('  Buffer size: ' + pdf20.length + ' bytes');
-  writeFileSync('output/test20-header-footer.pdf', pdf20);
+  await savePdf('output/test20-header-footer.pdf', pdf20);
   console.log('  Saved output/test20-header-footer.pdf\n');
 
   console.log('=== Test 21: Header/Footer per-call option ===');
@@ -320,7 +324,7 @@ async function runTests() {
     footer: '<div style="font-size: 8px;">Per-call footer</div>',
   });
   console.log('  Buffer size: ' + pdf21.length + ' bytes');
-  writeFileSync('output/test21-per-call-hf.pdf', pdf21);
+  await savePdf('output/test21-per-call-hf.pdf', pdf21);
   console.log('  Saved output/test21-per-call-hf.pdf\n');
 
   console.log('=== Test 22: Header/Footer single page ===');
@@ -333,7 +337,7 @@ async function runTests() {
   });
   const pdf22 = await generatorSingle.generate('<h1>Single Page</h1><p>Just one page.</p>');
   console.log('  Buffer size: ' + pdf22.length + ' bytes');
-  writeFileSync('output/test22-single-page-hf.pdf', pdf22);
+  await savePdf('output/test22-single-page-hf.pdf', pdf22);
   console.log('  Saved output/test22-single-page-hf.pdf\n');
 
   console.log('\n=== All tests passed ===');
