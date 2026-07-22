@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import PDFDocument from 'pdfkit';
+import { applyCssToElements } from './cssParser.js';
 
 const DEFAULT_STYLE = {
   color: '#000000',
@@ -353,6 +354,11 @@ function renderHtmlToPdf(html, options = {}) {
   }
 
   const $ = cheerio.load(html);
+
+  if (options.css) {
+    applyCssToElements($, options.css);
+  }
+
   const body = $('body').length > 0 ? $('body') : $(html);
 
   const doc = new PDFDocument({

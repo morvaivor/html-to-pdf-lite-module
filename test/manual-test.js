@@ -161,6 +161,101 @@ async function runTests() {
   writeFileSync('output/test12-table-nested.pdf', pdf12);
   console.log('  Saved output/test12-table-nested.pdf\n');
 
+  console.log('\n=== Test 13: External CSS via config ===');
+  const generatorWithCSS = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+    css: `
+      h1 { color: #333333; font-size: 28px; }
+      h2 { color: #555555; font-size: 22px; }
+      p { color: #666666; font-size: 14px; }
+    `,
+  });
+  const pdf13 = await generatorWithCSS.generate(`
+    <h1>Titre principal</h1>
+    <h2>Sous-titre</h2>
+    <p>Paragraphe de test</p>
+  `);
+  console.log('  Buffer size: ' + pdf13.length + ' bytes');
+  writeFileSync('output/test13-external-css.pdf', pdf13);
+  console.log('  Saved output/test13-external-css.pdf\n');
+
+  console.log('=== Test 14: External CSS with classes ===');
+  const generatorWithClassCSS = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+    css: `
+      .red { color: #ff0000; }
+      .bold-text { font-weight: bold; }
+      .small { font-size: 10px; }
+    `,
+  });
+  const pdf14 = await generatorWithClassCSS.generate(`
+    <p class="red bold-text">Texte rouge en gras</p>
+    <span class="small">Texte petit</span>
+  `);
+  console.log('  Buffer size: ' + pdf14.length + ' bytes');
+  writeFileSync('output/test14-css-classes.pdf', pdf14);
+  console.log('  Saved output/test14-css-classes.pdf\n');
+
+  console.log('=== Test 15: Inline CSS overrides external CSS ===');
+  const generatorOverride = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+    css: `
+      p { color: #0000ff; font-size: 20px; }
+    `,
+  });
+  const pdf15 = await generatorOverride.generate(`
+    <p>Paragraphe bleu (CSS externe)</p>
+    <p style="color: #ff0000;">Paragraphe rouge (inline override)</p>
+    <p style="font-size: 10px;">Petit (inline override)</p>
+  `);
+  console.log('  Buffer size: ' + pdf15.length + ' bytes');
+  writeFileSync('output/test15-css-override.pdf', pdf15);
+  console.log('  Saved output/test15-css-override.pdf\n');
+
+  console.log('=== Test 16: External CSS with IDs ===');
+  const generatorIdCSS = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+    css: `
+      #header { color: #333333; font-size: 24px; font-weight: bold; }
+      #footer { color: #999999; font-size: 10px; }
+    `,
+  });
+  const pdf16 = await generatorIdCSS.generate(`
+    <div id="header">En-tête du document</div>
+    <p>Contenu principal</p>
+    <div id="footer">Pied de page</div>
+  `);
+  console.log('  Buffer size: ' + pdf16.length + ' bytes');
+  writeFileSync('output/test16-css-ids.pdf', pdf16);
+  console.log('  Saved output/test16-css-ids.pdf\n');
+
+  console.log('=== Test 17: External CSS with per-call option ===');
+  const generatorNoCSS = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+  });
+  const pdf17 = await generatorNoCSS.generate(`
+    <h1>Titre</h1>
+    <p>Paragraphe</p>
+  `, {
+    css: `
+      h1 { color: #cc0000; font-size: 26px; }
+      p { color: #006600; font-size: 16px; }
+    `,
+  });
+  console.log('  Buffer size: ' + pdf17.length + ' bytes');
+  writeFileSync('output/test17-css-per-call.pdf', pdf17);
+  console.log('  Saved output/test17-css-per-call.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 
