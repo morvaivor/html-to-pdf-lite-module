@@ -352,14 +352,35 @@ function getCellText(element) {
   return element.children
     .map(c => {
       if (c.type === 'text') return c.data;
-      if (c.type === 'tag') return c.children.map(gc => gc.type === 'text' ? gc.data : '').join('');
+      if (c.type === 'tag' && c.name !== 'table') return c.children.map(gc => gc.type === 'text' ? gc.data : '').join('');
       return '';
     })
     .join('')
     .trim();
 }
 
-function renderTable(doc, element, parentStyle, options) {
+function getCellNestedTables(element) {
+  const tables = [];
+  element.children.forEach(child => {
+    if (child.type === 'tag' && child.name === 'table') {
+      tables.push(child);
+    }
+  });
+  return tables;
+}
+
+function getCellNonTableChildren(element) {
+  const children = [];
+  element.children.forEach(child => {
+    if (child.type === 'tag' && child.name === 'table') {
+      return;
+    }
+    children.push(child);
+  });
+  return children;
+}
+
+async function renderTable(doc, element, parentStyle, options) {
   const leftMargin = options.margin?.left ?? 20;
   const rightMargin = options.margin?.right ?? 20;
   const topMargin = options.margin?.top ?? 20;
@@ -406,7 +427,9 @@ function renderTable(doc, element, parentStyle, options) {
 
   const colWidth = contentWidth / maxCols;
 
-  const cellData = [];
+  const borderWidth = defaultBorder ? defaultBorderWidth : 0;
+  const borderColor = defaultBorder ? defaultBorderColor : undefined;
+
   for (const row of allRows) {
     const rowData = [];
     for (const cell of row.children) {
@@ -418,13 +441,48 @@ function renderTable(doc, element, parentStyle, options) {
           bold: cell.name === 'th' || parseInlineStyle(cell).bold || parentStyle.bold,
         };
 
-        const text = getCellText(cell);
         const padding = cellStyle.padding ?? defaultPadding;
         const fontFamily = resolveFontFamily(cellStyle.fontFamily, cellStyle.bold, cellStyle.italic);
         const fontSize = cellStyle.fontSize;
 
-        const textHeight = measureTextHeight(doc, text, fontFamily, fontSize, colWidth - padding * 2);
-        const cellHeight = textHeight + padding * 2;
+        const text = getCellText(cell);
+        const textHeight = text ? measureTextHeight(doc, text, fontFamily, fontSize, colWidth - padding * 2) : 0;
+
+        const nestedTables = getCellNestedTables(cell);
+        let nestedHeight = 0;
+        for (const nt of nestedTables) {
+          const ntRows = [];
+          nt.children.forEach(child => {
+            if (child.name === 'thead' || child.name === 'tbody' || child.name === 'tfoot') {
+              child.children.forEach(gc => {
+                if (gc.type === 'tag' && gc.name === 'tr') ntRows.push(gc);
+              });
+            } else if (child.name === 'tr') {
+              ntRows.push(child);
+            }
+          });
+          const ntStyle = parseInlineStyle(nt);
+          const ntPadding = ntStyle.padding ?? defaultPadding;
+          const ntBorderWidth = ntStyle.border ? (ntStyle.borderWidth ?? 1) : 0;
+          let ntH = 0;
+          for (const ntRow of ntRows) {
+            let rh = 0;
+            for (const ntCell of ntRow.children) {
+              if (ntCell.type === 'tag' && (ntCell.name === 'td' || ntCell.name === 'th')) {
+                const ncStyle = parseInlineStyle(ntCell);
+                const ncFontSize = ncStyle.fontSize ?? fontSize;
+                const ncText = getCellText(ntCell);
+                const ncPh = ncStyle.padding ?? ntPadding;
+                const ncFf = resolveFontFamily(ncStyle.fontFamily, ncStyle.bold || ntCell.name === 'th', ncStyle.italic);
+                rh = Math.max(rh, ncText ? measureTextHeight(doc, ncText, ncFf, ncFontSize, colWidth - ncPh * 2) : 0);
+              }
+            }
+            ntH += rh + (ntPadding * 2) + ntBorderWidth;
+          }
+          nestedHeight += ntH;
+        }
+
+        const cellHeight = Math.max(textHeight, fontSize) + padding * 2 + nestedHeight;
 
         rowData.push({
           text,
@@ -434,19 +492,14 @@ function renderTable(doc, element, parentStyle, options) {
           fontFamily,
           height: cellHeight,
           colspan: parseInt(cell.attribs.colspan || '1', 10),
+          nestedTables,
+          nonTableChildren: getCellNonTableChildren(cell),
+          rawCell: cell,
         });
       }
     }
-    cellData.push(rowData);
-  }
 
-  const borderWidth = defaultBorder ? defaultBorderWidth : 0;
-  const borderColor = defaultBorder ? defaultBorderColor : undefined;
-
-  let rowIdx = 0;
-  while (rowIdx < cellData.length) {
-    const row = cellData[rowIdx];
-    const maxCellHeight = Math.max(...row.map(c => c.height));
+    const maxCellHeight = Math.max(...rowData.map(c => c.height));
     const rowHeight = maxCellHeight + (borderWidth > 0 ? borderWidth : 0);
 
     if (doc.y + rowHeight > pageBottom) {
@@ -461,7 +514,7 @@ function renderTable(doc, element, parentStyle, options) {
     const y = doc.y;
     let colX = leftMargin;
 
-    for (const cell of row) {
+    for (const cell of rowData) {
       const cellWidth = colWidth * cell.colspan;
       const cellY = y;
 
@@ -482,30 +535,28 @@ function renderTable(doc, element, parentStyle, options) {
          .fontSize(cell.fontSize)
          .fillColor(cell.style.color);
 
-      const textY = cellY + cell.padding + cell.fontSize;
       const textX = colX + cell.padding;
+      const textY = cellY + cell.padding + cell.fontSize;
+      const textWidth = cellWidth - cell.padding * 2;
 
-      if (cell.style.textAlign === 'center') {
-        doc.text(cell.text, textX, textY, {
-          width: cellWidth - cell.padding * 2,
-          align: 'center',
-        });
-      } else if (cell.style.textAlign === 'right') {
-        doc.text(cell.text, textX, textY, {
-          width: cellWidth - cell.padding * 2,
-          align: 'right',
-        });
-      } else {
-        doc.text(cell.text, textX, textY, {
-          width: cellWidth - cell.padding * 2,
-        });
+      if (cell.text) {
+        if (cell.style.textAlign === 'center') {
+          doc.text(cell.text, textX, textY, { width: textWidth, align: 'center' });
+        } else if (cell.style.textAlign === 'right') {
+          doc.text(cell.text, textX, textY, { width: textWidth, align: 'right' });
+        } else {
+          doc.text(cell.text, textX, textY, { width: textWidth });
+        }
+      }
+
+      for (const nt of cell.nestedTables) {
+        await renderElement(doc, nt, cell.style, options);
       }
 
       colX += cellWidth;
     }
 
     doc.y = y + maxCellHeight + (borderWidth > 0 ? borderWidth : 0);
-    rowIdx++;
   }
 }
 
@@ -530,7 +581,7 @@ async function renderElement(doc, element, parentStyle, options) {
   }
 
   if (tagName === 'table') {
-    renderTable(doc, element, parentStyle, options);
+    await renderTable(doc, element, parentStyle, options);
     return;
   }
 

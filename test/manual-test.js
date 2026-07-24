@@ -468,6 +468,67 @@ async function runTests() {
   await savePdf('output/test34-image-text-mixed.pdf', pdf34);
   console.log('  Saved output/test34-image-text-mixed.pdf\n');
 
+  console.log('=== Test 35: Nested tables (5 levels) ===');
+  const pdf35 = await generator.generate(`
+    <table style="border: 1px solid #000000; padding: 2px;">
+      <tr>
+        <th style="border: 1px solid #000000; padding: 2px;">Niveau 1 - Col A</th>
+        <th style="border: 1px solid #000000; padding: 2px;">Niveau 1 - Col B</th>
+      </tr>
+      <tr>
+        <td style="border: 1px solid #000000; padding: 2px;">
+          <table style="border: 1px solid #009900; padding: 2px;">
+            <tr>
+              <th style="border: 1px solid #009900; padding: 2px;">Niveau 2 - A1</th>
+              <th style="border: 1px solid #009900; padding: 2px;">Niveau 2 - A2</th>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #009900; padding: 2px;">
+                <table style="border: 1px solid #0000cc; padding: 2px;">
+                  <tr>
+                    <th style="border: 1px solid #0000cc; padding: 2px;">Niveau 3 - X</th>
+                    <th style="border: 1px solid #0000cc; padding: 2px;">Niveau 3 - Y</th>
+                  </tr>
+                  <tr>
+                    <td style="border: 1px solid #0000cc; padding: 2px;">
+                      <table style="border: 1px solid #cc0000; padding: 2px;">
+                        <tr>
+                          <th style="border: 1px solid #cc0000; padding: 2px;">Niveau 4 - P</th>
+                          <th style="border: 1px solid #cc0000; padding: 2px;">Niveau 4 - Q</th>
+                        </tr>
+                        <tr>
+                          <td style="border: 1px solid #cc0000; padding: 2px;">
+                            <table style="border: 1px solid #9900cc; padding: 2px;">
+                              <tr>
+                                <th style="border: 1px solid #9900cc; padding: 2px;">Niveau 5 - 1</th>
+                                <th style="border: 1px solid #9900cc; padding: 2px;">Niveau 5 - 2</th>
+                              </tr>
+                              <tr>
+                                <td style="border: 1px solid #9900cc; padding: 2px;">Donnée finale</td>
+                                <td style="border: 1px solid #9900cc; padding: 2px;">Valeur 2</td>
+                              </tr>
+                            </table>
+                          </td>
+                          <td style="border: 1px solid #cc0000; padding: 2px;">Cellule Q</td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td style="border: 1px solid #0000cc; padding: 2px;">Cellule Y</td>
+                  </tr>
+                </table>
+              </td>
+              <td style="border: 1px solid #009900; padding: 2px;">Cellule A2</td>
+            </tr>
+          </table>
+        </td>
+        <td style="border: 1px solid #000000; padding: 2px;">Cellule B simple</td>
+      </tr>
+    </table>
+  `);
+  console.log('  Buffer size: ' + pdf35.length + ' bytes');
+  await savePdf('output/test35-nested-tables.pdf', pdf35);
+  console.log('  Saved output/test35-nested-tables.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 
