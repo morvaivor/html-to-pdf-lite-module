@@ -200,7 +200,7 @@ function renderList(doc, element, parentStyle, options, depth) {
     const itemFontSize = itemStyle.fontSize;
 
     const bullet = isOrdered ? `${itemIndex + 1}.` : '•';
-    const bulletText = doc.font(fontFamily).fontSize(itemFontSize).widthOfString(bullet);
+    const bulletTextWidth = doc.font(fontFamily).fontSize(itemFontSize).widthOfString(bullet);
 
     const listContentWidth = contentWidth - indent - bulletWidth;
 
@@ -224,20 +224,12 @@ function renderList(doc, element, parentStyle, options, depth) {
       .trim();
 
     const textHeight = text
-      ? measureTextHeight(doc, text, fontFamily, itemFontSize, listContentWidth) + itemSpacing
+      ? measureTextHeight(doc, text, fontFamily, itemFontSize, listContentWidth)
       : 0;
 
-    const nestedHeight = nestedLists.reduce((sum, nl) => {
-      const tempItems = [];
-      nl.children.forEach(child => {
-        if (child.type === 'tag' && child.name === 'li') tempItems.push(child);
-      });
-      return sum + tempItems.length * (itemFontSize + itemSpacing);
-    }, 0);
+    const lineHeight = Math.max(textHeight, itemFontSize) + itemSpacing;
 
-    const itemHeight = Math.max(textHeight, itemFontSize) + nestedHeight;
-
-    if (doc.y + itemHeight > pageBottom) {
+    if (doc.y + lineHeight > pageBottom) {
       doc.addPage({
         size: options.format || 'A4',
         layout: options.orientation || 'portrait',
@@ -246,31 +238,25 @@ function renderList(doc, element, parentStyle, options, depth) {
       doc.x = leftMargin;
     }
 
-    const x = leftMargin + indent;
-    const y = doc.y;
-
     doc.font(fontFamily)
        .fontSize(itemFontSize)
        .fillColor(itemStyle.color);
 
-    doc.text(bullet, x, y, {
-      width: bulletWidth,
+    doc.x = leftMargin + indent;
+
+    const fullText = text ? bullet + text : bullet;
+
+    doc.text(fullText, {
+      width: contentWidth - indent,
+      lineGap: itemFontSize * 0.25,
     });
 
-    if (text) {
-      doc.text(text, x + bulletWidth, y, {
-        width: listContentWidth,
-        lineGap: itemFontSize * 0.25,
-      });
-    }
-
-    doc.y = y + Math.max(textHeight, itemFontSize);
+    doc.y += itemSpacing;
 
     for (const nestedList of nestedLists) {
       renderList(doc, nestedList, itemStyle, options, depth + 1);
     }
 
-    doc.y += itemSpacing;
     itemIndex++;
   }
 }
