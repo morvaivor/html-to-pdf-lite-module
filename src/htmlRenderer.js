@@ -1,5 +1,7 @@
 import * as cheerio from 'cheerio';
 import PDFDocument from 'pdfkit';
+import { readFileSync } from 'fs';
+import { join, resolve } from 'path';
 import { applyCssToElements } from './cssParser.js';
 
 const DEFAULT_STYLE = {
@@ -143,14 +145,99 @@ function renderText(doc, text, style, options) {
   });
 }
 
-function processChildren(doc, children, style, options) {
+async function processChildren(doc, children, style, options) {
   for (const child of children) {
     if (child.type === 'tag') {
-      renderElement(doc, child, style, options);
+      await renderElement(doc, child, style, options);
     } else if (child.type === 'text' && child.data?.trim()) {
       renderText(doc, child.data.trim(), style, options);
     }
   }
+}
+
+async function loadImage(src) {
+  if (src.startsWith('data:')) {
+    const match = src.match(/base64,(.*)/);
+    if (match) {
+      return Buffer.from(match[1], 'base64');
+    }
+  }
+
+  if (src.startsWith('http://') || src.startsWith('https://')) {
+    const response = await fetch(src);
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  const fullPath = resolve(src);
+  if (fullPath.startsWith(process.cwd())) {
+    return readFileSync(fullPath);
+  }
+
+  return readFileSync(src);
+}
+
+function renderImage(doc, element, parentStyle, options) {
+  const leftMargin = options.margin?.left ?? 20;
+  const rightMargin = options.margin?.right ?? 20;
+  const topMargin = options.margin?.top ?? 20;
+  const bottomMargin = options.margin?.bottom ?? 20;
+  const footerHeight = options._footerHeight ?? 0;
+  const headerHeight = options._headerHeight ?? 0;
+  const contentWidth = doc.page.width - leftMargin - rightMargin;
+  const pageBottom = doc.page.height - bottomMargin - footerHeight;
+
+  const attribs = element.attribs || {};
+  const src = attribs.src || '';
+  const imgWidth = parseInt(attribs.width) || 0;
+  const imgHeight = parseInt(attribs.height) || 0;
+
+  const spacing = 8;
+
+  if (!src) {
+    return Promise.resolve();
+  }
+
+  return loadImage(src).then(imgBuffer => {
+    const img = doc.openImage(imgBuffer);
+
+    let renderWidth = imgWidth || img.width;
+    let renderHeight = imgHeight || img.height;
+
+    if (imgHeight && imgWidth) {
+      renderWidth = imgWidth;
+      renderHeight = imgHeight;
+    } else if (imgWidth) {
+      const ratio = imgWidth / img.width;
+      renderHeight = img.height * ratio;
+    } else if (imgHeight) {
+      const ratio = imgHeight / img.height;
+      renderWidth = img.width * ratio;
+    }
+
+    if (renderWidth > contentWidth) {
+      const ratio = contentWidth / renderWidth;
+      renderWidth = contentWidth;
+      renderHeight = renderHeight * ratio;
+    }
+
+    if (doc.y + renderHeight + spacing > pageBottom) {
+      doc.addPage({
+        size: options.format || 'A4',
+        layout: options.orientation || 'portrait',
+      });
+      doc.y = topMargin + headerHeight;
+      doc.x = leftMargin;
+    }
+
+    doc.image(img, doc.x, doc.y, {
+      width: renderWidth,
+      height: renderHeight,
+    });
+
+    doc.y += renderHeight + spacing;
+    doc.x = leftMargin;
+  });
 }
 
 function getListText(element) {
@@ -422,7 +509,7 @@ function renderTable(doc, element, parentStyle, options) {
   }
 }
 
-function renderElement(doc, element, parentStyle, options) {
+async function renderElement(doc, element, parentStyle, options) {
   const tagName = element.name || 'span';
   const inlineStyle = parseInlineStyle(element);
 
@@ -434,6 +521,11 @@ function renderElement(doc, element, parentStyle, options) {
 
   if (tagName === 'br') {
     doc.text('', doc.x, doc.y);
+    return;
+  }
+
+  if (tagName === 'img') {
+    await renderImage(doc, element, parentStyle, options);
     return;
   }
 
@@ -459,9 +551,9 @@ function renderElement(doc, element, parentStyle, options) {
       }
     }
 
-    processChildren(doc, element.children, style, options);
+    await processChildren(doc, element.children, style, options);
   } else {
-    processChildren(doc, element.children, style, options);
+    await processChildren(doc, element.children, style, options);
   }
 }
 
@@ -509,7 +601,7 @@ function renderHeaderFooterContent(doc, html, x, y, width, align) {
   });
 }
 
-function countPages(html, options) {
+async function countPages(html, options) {
   const $ = cheerio.load(html);
 
   if (options.css) {
@@ -551,7 +643,7 @@ function countPages(html, options) {
 
   for (const child of body.children().toArray()) {
     if (child.type === 'tag') {
-      renderElement(doc, child, rootStyle, options);
+      await renderElement(doc, child, rootStyle, options);
     } else if (child.type === 'text' && child.data?.trim()) {
       renderText(doc, child.data.trim(), rootStyle, options);
     }
@@ -560,7 +652,7 @@ function countPages(html, options) {
   return pageCount.value;
 }
 
-function renderHtmlToPdf(html, options = {}) {
+async function renderHtmlToPdf(html, options = {}) {
   if (!html || typeof html !== 'string') {
     throw new Error('HTML content must be a non-empty string');
   }
@@ -584,7 +676,7 @@ function renderHtmlToPdf(html, options = {}) {
     _footerHeight: footerHeight,
   };
 
-  const totalPages = countPages(html, renderOptions);
+  const totalPages = await countPages(html, renderOptions);
 
   const doc = new PDFDocument({
     autoFirstPage: false,
@@ -642,7 +734,7 @@ function renderHtmlToPdf(html, options = {}) {
 
   for (const child of body.children().toArray()) {
     if (child.type === 'tag') {
-      renderElement(doc, child, rootStyle, renderOptions);
+      await renderElement(doc, child, rootStyle, renderOptions);
     } else if (child.type === 'text' && child.data?.trim()) {
       renderText(doc, child.data.trim(), rootStyle, renderOptions);
     }

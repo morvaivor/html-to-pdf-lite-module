@@ -429,6 +429,45 @@ async function runTests() {
   await savePdf('output/test28-list-pagination.pdf', pdf28);
   console.log('  Saved output/test28-list-pagination.pdf\n');
 
+  const testImg = './output/test-image.png';
+  const smallImg = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
+
+  console.log('=== Test 29: Image from file ===');
+  const pdf29 = await generator.generate(`<p>Before image</p><img src="${testImg}" /><p>After image</p>`);
+  console.log('  Buffer size: ' + pdf29.length + ' bytes');
+  await savePdf('output/test29-image-file.pdf', pdf29);
+  console.log('  Saved output/test29-image-file.pdf\n');
+
+  console.log('=== Test 30: Image with width/height ===');
+  const pdf30 = await generator.generate(`<img src="${testImg}" width="200" height="200" />`);
+  console.log('  Buffer size: ' + pdf30.length + ' bytes');
+  await savePdf('output/test30-image-sizes.pdf', pdf30);
+  console.log('  Saved output/test30-image-sizes.pdf\n');
+
+  console.log('=== Test 31: Image width only (auto height) ===');
+  const pdf31 = await generator.generate(`<img src="${testImg}" width="300" />`);
+  console.log('  Buffer size: ' + pdf31.length + ' bytes');
+  await savePdf('output/test31-image-width-only.pdf', pdf31);
+  console.log('  Saved output/test31-image-width-only.pdf\n');
+
+  console.log('=== Test 32: Image larger than page width ===');
+  const pdf32 = await generator.generate(`<img src="${testImg}" width="1000" />`);
+  console.log('  Buffer size: ' + pdf32.length + ' bytes');
+  await savePdf('output/test32-image-overflow.pdf', pdf32);
+  console.log('  Saved output/test32-image-overflow.pdf\n');
+
+  console.log('=== Test 33: Image with data URI (small) ===');
+  const pdf33 = await generator.generate(`<p>Small inline image:</p><img src="${smallImg}" width="50" height="50" /><p>Done</p>`);
+  console.log('  Buffer size: ' + pdf33.length + ' bytes');
+  await savePdf('output/test33-image-data-uri.pdf', pdf33);
+  console.log('  Saved output/test33-image-data-uri.pdf\n');
+
+  console.log('=== Test 34: Image with text mixed ===');
+  const pdf34 = await generator.generate(`<h1>Report</h1><p>Introduction with image.</p><img src="${testImg}" width="150" height="150" /><p>Conclusion.</p>`);
+  console.log('  Buffer size: ' + pdf34.length + ' bytes');
+  await savePdf('output/test34-image-text-mixed.pdf', pdf34);
+  console.log('  Saved output/test34-image-text-mixed.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 
