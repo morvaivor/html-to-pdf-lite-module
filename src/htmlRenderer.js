@@ -153,6 +153,128 @@ function processChildren(doc, children, style, options) {
   }
 }
 
+function getListText(element) {
+  return element.children
+    .map(c => {
+      if (c.type === 'text') return c.data;
+      if (c.type === 'tag' && c.name !== 'ul' && c.name !== 'ol') return getListText(c);
+      return '';
+    })
+    .join('')
+    .trim();
+}
+
+function renderList(doc, element, parentStyle, options, depth) {
+  const leftMargin = options.margin?.left ?? 20;
+  const rightMargin = options.margin?.right ?? 20;
+  const topMargin = options.margin?.top ?? 20;
+  const bottomMargin = options.margin?.bottom ?? 20;
+  const footerHeight = options._footerHeight ?? 0;
+  const headerHeight = options._headerHeight ?? 0;
+  const contentWidth = doc.page.width - leftMargin - rightMargin;
+  const pageBottom = doc.page.height - bottomMargin - footerHeight;
+
+  const isOrdered = element.name === 'ol';
+  const indent = depth * 20;
+  const bulletWidth = isOrdered ? 20 : 10;
+  const itemSpacing = 4;
+  const fontSize = FONT_SIZES.li || 12;
+
+  let itemIndex = 0;
+
+  const items = [];
+  element.children.forEach(child => {
+    if (child.type === 'tag' && child.name === 'li') {
+      items.push(child);
+    }
+  });
+
+  for (const item of items) {
+    const itemStyle = {
+      ...parentStyle,
+      ...parseInlineStyle(item),
+      fontSize: parseInlineStyle(item).fontSize ?? fontSize,
+    };
+
+    const fontFamily = resolveFontFamily(itemStyle.fontFamily, itemStyle.bold, itemStyle.italic);
+    const itemFontSize = itemStyle.fontSize;
+
+    const bullet = isOrdered ? `${itemIndex + 1}.` : '•';
+    const bulletText = doc.font(fontFamily).fontSize(itemFontSize).widthOfString(bullet);
+
+    const listContentWidth = contentWidth - indent - bulletWidth;
+
+    const nestedLists = [];
+    const textChildren = [];
+    item.children.forEach(child => {
+      if (child.type === 'tag' && (child.name === 'ul' || child.name === 'ol')) {
+        nestedLists.push(child);
+      } else {
+        textChildren.push(child);
+      }
+    });
+
+    const text = textChildren
+      .map(c => {
+        if (c.type === 'text') return c.data;
+        if (c.type === 'tag') return c.children.map(gc => gc.type === 'text' ? gc.data : '').join('');
+        return '';
+      })
+      .join('')
+      .trim();
+
+    const textHeight = text
+      ? measureTextHeight(doc, text, fontFamily, itemFontSize, listContentWidth) + itemSpacing
+      : 0;
+
+    const nestedHeight = nestedLists.reduce((sum, nl) => {
+      const tempItems = [];
+      nl.children.forEach(child => {
+        if (child.type === 'tag' && child.name === 'li') tempItems.push(child);
+      });
+      return sum + tempItems.length * (itemFontSize + itemSpacing);
+    }, 0);
+
+    const itemHeight = Math.max(textHeight, itemFontSize) + nestedHeight;
+
+    if (doc.y + itemHeight > pageBottom) {
+      doc.addPage({
+        size: options.format || 'A4',
+        layout: options.orientation || 'portrait',
+      });
+      doc.y = topMargin + headerHeight;
+      doc.x = leftMargin;
+    }
+
+    const x = leftMargin + indent;
+    const y = doc.y;
+
+    doc.font(fontFamily)
+       .fontSize(itemFontSize)
+       .fillColor(itemStyle.color);
+
+    doc.text(bullet, x, y, {
+      width: bulletWidth,
+    });
+
+    if (text) {
+      doc.text(text, x + bulletWidth, y, {
+        width: listContentWidth,
+        lineGap: itemFontSize * 0.25,
+      });
+    }
+
+    doc.y = y + Math.max(textHeight, itemFontSize);
+
+    for (const nestedList of nestedLists) {
+      renderList(doc, nestedList, itemStyle, options, depth + 1);
+    }
+
+    doc.y += itemSpacing;
+    itemIndex++;
+  }
+}
+
 function getCellText(element) {
   return element.children
     .map(c => {
@@ -334,8 +456,13 @@ function renderElement(doc, element, parentStyle, options) {
     return;
   }
 
+  if (tagName === 'ul' || tagName === 'ol') {
+    renderList(doc, element, parentStyle, options, 0);
+    return;
+  }
+
   if (BLOCK_ELEMENTS.has(tagName) && tagName !== 'span' && tagName !== 'a') {
-    if (tagName !== 'br' && tagName !== 'tr' && tagName !== 'thead' && tagName !== 'tbody') {
+    if (tagName !== 'br' && tagName !== 'tr' && tagName !== 'thead' && tagName !== 'tbody' && tagName !== 'li') {
       const textOnlyContent = element.children
         .filter(c => c.type === 'text')
         .map(c => c.data)

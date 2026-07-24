@@ -340,6 +340,95 @@ async function runTests() {
   await savePdf('output/test22-single-page-hf.pdf', pdf22);
   console.log('  Saved output/test22-single-page-hf.pdf\n');
 
+  console.log('\n=== Test 23: Unordered list ===');
+  const pdf23 = await generator.generate(`
+    <ul>
+      <li>Premier élément</li>
+      <li>Deuxième élément</li>
+      <li>Troisième élément</li>
+    </ul>
+  `);
+  console.log('  Buffer size: ' + pdf23.length + ' bytes');
+  await savePdf('output/test23-ul.pdf', pdf23);
+  console.log('  Saved output/test23-ul.pdf\n');
+
+  console.log('=== Test 24: Ordered list ===');
+  const pdf24 = await generator.generate(`
+    <ol>
+      <li>Premier</li>
+      <li>Deuxième</li>
+      <li>Troisième</li>
+      <li>Quatrième</li>
+    </ol>
+  `);
+  console.log('  Buffer size: ' + pdf24.length + ' bytes');
+  await savePdf('output/test24-ol.pdf', pdf24);
+  console.log('  Saved output/test24-ol.pdf\n');
+
+  console.log('=== Test 25: Nested lists ===');
+  const pdf25 = await generator.generate(`
+    <ul>
+      <li>Fruits
+        <ul>
+          <li>Pomme</li>
+          <li>Banane</li>
+        </ul>
+      </li>
+      <li>Légumes
+        <ul>
+          <li>Carotte</li>
+          <li>Tomate</li>
+        </ul>
+      </li>
+    </ul>
+  `);
+  console.log('  Buffer size: ' + pdf25.length + ' bytes');
+  await savePdf('output/test25-nested-list.pdf', pdf25);
+  console.log('  Saved output/test25-nested-list.pdf\n');
+
+  console.log('=== Test 26: List with CSS styling ===');
+  const pdf26 = await generator.generate(`
+    <ul>
+      <li style="color: #ff0000;">Rouge</li>
+      <li style="font-weight: bold; font-size: 14px;">Gras et grand</li>
+      <li style="font-style: italic;">Italique</li>
+    </ul>
+  `);
+  console.log('  Buffer size: ' + pdf26.length + ' bytes');
+  await savePdf('output/test26-list-css.pdf', pdf26);
+  console.log('  Saved output/test26-list-css.pdf\n');
+
+  console.log('=== Test 27: Mixed content with lists ===');
+  const pdf27 = await generator.generate(`
+    <h1>Mon Document</h1>
+    <p>Introduction au document.</p>
+    <h2>Liste des points</h2>
+    <ul>
+      <li>Premier point</li>
+      <li>Deuxième point</li>
+      <li>Troisième point</li>
+    </ul>
+    <p>Conclusion du document.</p>
+    <ol>
+      <li>Étape 1</li>
+      <li>Étape 2</li>
+    </ol>
+  `);
+  console.log('  Buffer size: ' + pdf27.length + ' bytes');
+  await savePdf('output/test27-mixed-list.pdf', pdf27);
+  console.log('  Saved output/test27-mixed-list.pdf\n');
+
+  console.log('=== Test 28: List with long items (pagination) ===');
+  let list28 = '<ul>';
+  for (let i = 0; i < 50; i++) {
+    list28 += '<li>Élement ' + i + ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt.</li>';
+  }
+  list28 += '</ul>';
+  const pdf28 = await generator.generate(list28);
+  console.log('  Buffer size: ' + pdf28.length + ' bytes');
+  await savePdf('output/test28-list-pagination.pdf', pdf28);
+  console.log('  Saved output/test28-list-pagination.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 
