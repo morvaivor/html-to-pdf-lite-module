@@ -14,7 +14,14 @@ let fileIdx = 0;
 async function savePdf(path, buffer) {
   const newPath = path.replace('.pdf', `_${++fileIdx}.pdf`);
   await sleep(100);
-  writeFileSync(newPath, buffer);
+  try {
+    writeFileSync(newPath, buffer);
+  } catch {
+    const fallbackPath = path.replace('.pdf', `_${Date.now()}.pdf`);
+    writeFileSync(fallbackPath, buffer);
+    console.log('  (fallback) Saved ' + fallbackPath);
+    return fallbackPath;
+  }
   return newPath;
 }
 
@@ -615,6 +622,48 @@ async function runTests() {
   console.log('  Buffer size: ' + pdf39.length + ' bytes');
   await savePdf('output/test39-page-global-config.pdf', pdf39);
   console.log('  Saved output/test39-page-global-config.pdf\n');
+
+  console.log('=== Test 40: @page all 7 zones at once ===');
+  const css40 = `
+    @page {
+      @top-left {
+        content: "Gauche-Haut";
+        font-size: 8px;
+        color: #ff0000;
+      }
+      @top-center {
+        content: "Centre-Haut";
+        font-size: 8px;
+        color: #00aa00;
+      }
+      @top-right {
+        content: "Droite-Haut";
+        font-size: 8px;
+        color: #0000ff;
+      }
+      @bottom-left {
+        content: "Gauche-Bas";
+        font-size: 8px;
+        color: #ff6600;
+      }
+      @bottom-center {
+        content: "Centre-Bas Page " counter(page);
+        font-size: 8px;
+        color: #aa00aa;
+      }
+      @bottom-right {
+        content: "Droite-Bas";
+        font-size: 8px;
+        color: #00aaaa;
+      }
+    }
+  `;
+  let content40 = '<h1>Tout les zones</h1>';
+  for (let i = 0; i < 30; i++) content40 += `<p>Ligne ${i + 1} pour pagination.</p>`;
+  const pdf40 = await generator.generate(content40, { css: css40 });
+  console.log('  Buffer size: ' + pdf40.length + ' bytes');
+  await savePdf('output/test40-page-all-zones.pdf', pdf40);
+  console.log('  Saved output/test40-page-all-zones.pdf\n');
 
   console.log('\n=== All tests passed ===');
 }

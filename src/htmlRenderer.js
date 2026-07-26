@@ -599,6 +599,7 @@ async function renderElement(doc, element, parentStyle, options) {
 
       if (textOnlyContent && element.children.length === 1) {
         renderText(doc, textOnlyContent, style, options);
+        return;
       }
     }
 

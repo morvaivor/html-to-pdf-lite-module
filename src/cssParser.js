@@ -1,10 +1,25 @@
 function stripPageBlocks(css) {
   let result = css;
-  let pageMatch;
-  const pageRegex = /@page\s*\{([\s\S]*?)\}/g;
-  while ((pageMatch = pageRegex.exec(css)) !== null) {
-    result = result.substring(0, pageMatch.index) + result.substring(pageMatch.index + pageMatch[0].length);
+
+  while (true) {
+    const idx = result.indexOf('@page');
+    if (idx === -1) break;
+
+    const braceStart = result.indexOf('{', idx);
+    if (braceStart === -1) break;
+
+    let depth = 0;
+    let blockEnd = -1;
+    for (let i = braceStart; i < result.length; i++) {
+      if (result[i] === '{') depth++;
+      if (result[i] === '}') depth--;
+      if (depth === 0) { blockEnd = i; break; }
+    }
+    if (blockEnd === -1) break;
+
+    result = result.substring(0, idx) + result.substring(blockEnd + 1);
   }
+
   return result;
 }
 
@@ -138,14 +153,31 @@ const PAGE_ZONES = [
   '@bottom-left', '@bottom-center', '@bottom-right',
 ];
 
+function extractPageBlock(css) {
+  const idx = css.indexOf('@page');
+  if (idx === -1) return null;
+
+  const braceStart = css.indexOf('{', idx);
+  if (braceStart === -1) return null;
+
+  let depth = 0;
+  let blockEnd = -1;
+  for (let i = braceStart; i < css.length; i++) {
+    if (css[i] === '{') depth++;
+    if (css[i] === '}') depth--;
+    if (depth === 0) { blockEnd = i; break; }
+  }
+  if (blockEnd === -1) return null;
+
+  return css.substring(braceStart + 1, blockEnd);
+}
+
 function parsePageRule(css) {
   if (!css || typeof css !== 'string') return null;
 
-  const pageRegex = /@page\s*\{([\s\S]*?)\}/g;
-  const match = pageRegex.exec(css);
-  if (!match) return null;
+  const pageBody = extractPageBlock(css);
+  if (!pageBody) return null;
 
-  const pageBody = match[1];
   const zones = {};
 
   for (const zone of PAGE_ZONES) {
