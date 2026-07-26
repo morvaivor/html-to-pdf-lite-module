@@ -1,11 +1,23 @@
+function stripPageBlocks(css) {
+  let result = css;
+  let pageMatch;
+  const pageRegex = /@page\s*\{([\s\S]*?)\}/g;
+  while ((pageMatch = pageRegex.exec(css)) !== null) {
+    result = result.substring(0, pageMatch.index) + result.substring(pageMatch.index + pageMatch[0].length);
+  }
+  return result;
+}
+
 function parseCssRules(css) {
   if (!css || typeof css !== 'string') return [];
+
+  const cssWithoutPage = stripPageBlocks(css);
 
   const rules = [];
   const ruleRegex = /([^{}]+)\{([^}]*)\}/g;
   let match;
 
-  while ((match = ruleRegex.exec(css)) !== null) {
+  while ((match = ruleRegex.exec(cssWithoutPage)) !== null) {
     const selector = match[1].trim();
     const declarations = match[2].trim();
 
@@ -121,4 +133,47 @@ function applyCssToElements($, css) {
   }
 }
 
-export { parseCssRules, elementMatchesSelector, applyCssToElements };
+const PAGE_ZONES = [
+  '@top-left', '@top-center', '@top-right',
+  '@bottom-left', '@bottom-center', '@bottom-right',
+];
+
+function parsePageRule(css) {
+  if (!css || typeof css !== 'string') return null;
+
+  const pageRegex = /@page\s*\{([\s\S]*?)\}/g;
+  const match = pageRegex.exec(css);
+  if (!match) return null;
+
+  const pageBody = match[1];
+  const zones = {};
+
+  for (const zone of PAGE_ZONES) {
+    const zoneRegex = new RegExp(`${zone}\\s*\\{([^}]*)\\}`, 'i');
+    const zoneMatch = zoneRegex.exec(pageBody);
+    if (zoneMatch) {
+      const declarations = zoneMatch[1].trim();
+      const properties = {};
+      const decls = declarations.split(';');
+      for (const decl of decls) {
+        const parts = decl.split(':').map(s => s.trim());
+        if (parts.length >= 2) {
+          const prop = parts[0].trim();
+          const value = parts.slice(1).join(':').trim();
+          if (prop && value) {
+            properties[prop] = value;
+          }
+        }
+      }
+      if (Object.keys(properties).length > 0) {
+        zones[zone.replace('@', '')] = properties;
+      }
+    }
+  }
+
+  if (Object.keys(zones).length === 0) return null;
+
+  return zones;
+}
+
+export { parseCssRules, elementMatchesSelector, applyCssToElements, parsePageRule };

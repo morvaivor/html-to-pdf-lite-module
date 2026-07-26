@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import PDFDocument from 'pdfkit';
 import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
-import { applyCssToElements } from './cssParser.js';
+import { applyCssToElements, parsePageRule } from './cssParser.js';
 
 const DEFAULT_STYLE = {
   color: '#000000',
@@ -608,6 +608,36 @@ async function renderElement(doc, element, parentStyle, options) {
   }
 }
 
+function resolvePageZoneContent(zoneProps, currentPage, totalPages) {
+  const content = zoneProps.content;
+  if (!content) return '';
+
+  let resolved = content.replace(/^["']|["']$/g, '');
+  resolved = resolved.replace(/counter\s*\(\s*page\s*\)/g, String(currentPage));
+  resolved = resolved.replace(/counter\s*\(\s*num-pages\s*\)/g, String(totalPages));
+  return resolved;
+}
+
+function renderPageZone(doc, zoneProps, x, y, width, align, currentPage, totalPages) {
+  const content = resolvePageZoneContent(zoneProps, currentPage, totalPages);
+  if (!content) return;
+
+  const fontSize = parseInt(zoneProps['font-size']?.replace('px', ''), 10) || 12;
+  const color = zoneProps.color || '#000000';
+  const fontFamily = zoneProps['font-family']?.split(',')[0].replace(/['"]/g, '').trim() || 'Helvetica';
+  const bold = zoneProps['font-weight'] === 'bold' || parseInt(zoneProps['font-weight'], 10) >= 700;
+  const italic = zoneProps['font-style'] === 'italic';
+
+  const resolvedFont = resolveFontFamily(fontFamily, bold, italic);
+  doc.font(resolvedFont).fontSize(fontSize).fillColor(color);
+
+  const textOpts = { width: width };
+  if (align === 'center') textOpts.align = 'center';
+  else if (align === 'right') textOpts.align = 'right';
+
+  doc.text(content, x, y, textOpts);
+}
+
 function renderHeaderFooterContent(doc, html, x, y, width, align) {
   if (!html) return;
 
@@ -716,8 +746,11 @@ async function renderHtmlToPdf(html, options = {}) {
 
   const body = $('body').length > 0 ? $('body') : $(html);
 
-  const hasHeader = !!options.header;
-  const hasFooter = !!options.footer;
+  const pageZones = options.css ? parsePageRule(options.css) : null;
+  const hasPageHeader = pageZones && (pageZones['top-left'] || pageZones['top-center'] || pageZones['top-right']);
+  const hasPageFooter = pageZones && (pageZones['bottom-left'] || pageZones['bottom-center'] || pageZones['bottom-right']);
+  const hasHeader = !!options.header || hasPageHeader;
+  const hasFooter = !!options.footer || hasPageFooter;
   const headerHeight = hasHeader ? 20 : 0;
   const footerHeight = hasFooter ? 20 : 0;
 
@@ -725,6 +758,7 @@ async function renderHtmlToPdf(html, options = {}) {
     ...options,
     _headerHeight: headerHeight,
     _footerHeight: footerHeight,
+    _pageZones: pageZones,
   };
 
   const totalPages = await countPages(html, renderOptions);
@@ -757,13 +791,39 @@ async function renderHtmlToPdf(html, options = {}) {
     const savedY = doc.y;
     const savedX = doc.x;
 
-    if (hasHeader) {
+    if (options.header) {
       const headerY = topMargin;
       const headerHtml = options.header.replace('{page}', currentPage).replace('{totalPages}', totalPages);
       renderHeaderFooterContent(doc, headerHtml, leftMargin, headerY, cw, 'left');
     }
 
-    if (hasFooter) {
+    if (pageZones) {
+      const halfCw = cw / 2;
+
+      if (pageZones['top-left']) {
+        renderPageZone(doc, pageZones['top-left'], leftMargin, topMargin, halfCw, 'left', currentPage, totalPages);
+      }
+      if (pageZones['top-center']) {
+        renderPageZone(doc, pageZones['top-center'], leftMargin + halfCw * 0.15, topMargin, halfCw, 'center', currentPage, totalPages);
+      }
+      if (pageZones['top-right']) {
+        renderPageZone(doc, pageZones['top-right'], leftMargin + halfCw, topMargin, halfCw, 'right', currentPage, totalPages);
+      }
+
+      const footerY = doc.page.height - footerHeight;
+
+      if (pageZones['bottom-left']) {
+        renderPageZone(doc, pageZones['bottom-left'], leftMargin, footerY, halfCw, 'left', currentPage, totalPages);
+      }
+      if (pageZones['bottom-center']) {
+        renderPageZone(doc, pageZones['bottom-center'], leftMargin + halfCw * 0.15, footerY, halfCw, 'center', currentPage, totalPages);
+      }
+      if (pageZones['bottom-right']) {
+        renderPageZone(doc, pageZones['bottom-right'], leftMargin + halfCw, footerY, halfCw, 'right', currentPage, totalPages);
+      }
+    }
+
+    if (options.footer) {
       const footerY = doc.page.height - footerHeight;
       const footerHtml = options.footer.replace('{page}', currentPage).replace('{totalPages}', totalPages);
       renderHeaderFooterContent(doc, footerHtml, leftMargin, footerY, cw, 'left');

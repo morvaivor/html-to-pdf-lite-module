@@ -529,6 +529,93 @@ async function runTests() {
   await savePdf('output/test35-nested-tables.pdf', pdf35);
   console.log('  Saved output/test35-nested-tables.pdf\n');
 
+  console.log('=== Test 36: @page bottom-center with counter(page) ===');
+  const css36 = `
+    @page {
+      @bottom-center {
+        content: "Page " counter(page);
+        font-size: 10px;
+        color: #666666;
+      }
+    }
+  `;
+  let content36 = '<h1>Rapport</h1>';
+  for (let i = 0; i < 50; i++) content36 += `<p>Ligne ${i + 1} pour tester la pagination.</p>`;
+  const pdf36 = await generator.generate(content36, { css: css36 });
+  console.log('  Buffer size: ' + pdf36.length + ' bytes');
+  await savePdf('output/test36-page-footer.pdf', pdf36);
+  console.log('  Saved output/test36-page-footer.pdf\n');
+
+  console.log('=== Test 37: @page with multiple zones ===');
+  const css37 = `
+    @page {
+      @top-left {
+        content: "Mon Rapport";
+        font-size: 10px;
+        color: #333333;
+      }
+      @top-right {
+        content: "Confidentiel";
+        font-size: 8px;
+        color: #999999;
+      }
+      @bottom-center {
+        content: "Page " counter(page) " sur " counter(num-pages);
+        font-size: 10px;
+        color: #666666;
+      }
+    }
+  `;
+  let content37 = '<h1>Analyse</h1>';
+  for (let i = 0; i < 40; i++) content37 += `<p>Section ${i + 1} avec du contenu détaillé.</p>`;
+  const pdf37 = await generator.generate(content37, { css: css37 });
+  console.log('  Buffer size: ' + pdf37.length + ' bytes');
+  await savePdf('output/test37-page-zones.pdf', pdf37);
+  console.log('  Saved output/test37-page-zones.pdf\n');
+
+  console.log('=== Test 38: @page with CSS rules mixed ===');
+  const css38 = `
+    h1 { color: #1a1a2e; font-size: 24px; }
+    p { font-size: 12px; color: #333; }
+
+    @page {
+      @top-center {
+        content: "Titre du document";
+        font-size: 10px;
+      }
+      @bottom-right {
+        content: "Page " counter(page);
+        font-size: 9px;
+        color: #999999;
+      }
+    }
+  `;
+  const content38 = '<h1>Document</h1><p>Contenu principal avec style CSS et zones de page.</p>';
+  const pdf38 = await generator.generate(content38, { css: css38 });
+  console.log('  Buffer size: ' + pdf38.length + ' bytes');
+  await savePdf('output/test38-page-mixed-css.pdf', pdf38);
+  console.log('  Saved output/test38-page-mixed-css.pdf\n');
+
+  console.log('=== Test 39: @page via global config ===');
+  const generator39 = createPdfGenerator({
+    defaultFormat: 'A4',
+    defaultOrientation: 'portrait',
+    defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
+    css: `
+      @page {
+        @bottom-center {
+          content: "Global Footer";
+          font-size: 8px;
+        }
+      }
+    `,
+  });
+  const content39 = '<h1>Config globale</h1><p>Le pied de page est défini dans la configuration.</p>';
+  const pdf39 = await generator39.generate(content39);
+  console.log('  Buffer size: ' + pdf39.length + ' bytes');
+  await savePdf('output/test39-page-global-config.pdf', pdf39);
+  console.log('  Saved output/test39-page-global-config.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 
