@@ -665,6 +665,48 @@ async function runTests() {
   await savePdf('output/test40-page-all-zones.pdf', pdf40);
   console.log('  Saved output/test40-page-all-zones.pdf\n');
 
+  console.log('=== Test 41: @page all 7 zones, multi-page content ===');
+  const css41 = `
+    @page {
+      @top-left {
+        content: "Gauche-Haut";
+        font-size: 8px;
+        color: #ff0000;
+      }
+      @top-center {
+        content: "Centre-Haut";
+        font-size: 8px;
+        color: #00aa00;
+      }
+      @top-right {
+        content: "Droite-Haut";
+        font-size: 8px;
+        color: #0000ff;
+      }
+      @bottom-left {
+        content: "Gauche-Bas";
+        font-size: 8px;
+        color: #ff6600;
+      }
+      @bottom-center {
+        content: "Centre-Bas Page " counter(page) " sur " counter(num-pages);
+        font-size: 8px;
+        color: #aa00aa;
+      }
+      @bottom-right {
+        content: "Droite-Bas";
+        font-size: 8px;
+        color: #00aaaa;
+      }
+    }
+  `;
+  let content41 = '<h1>Tout les zones - Multi-pages</h1>';
+  for (let i = 0; i < 70; i++) content41 += `<p>Ligne ${i + 1} pour tester les zones sur plusieurs pages.</p>`;
+  const pdf41 = await generator.generate(content41, { css: css41 });
+  console.log('  Buffer size: ' + pdf41.length + ' bytes');
+  await savePdf('output/test41-page-all-zones-multipage.pdf', pdf41);
+  console.log('  Saved output/test41-page-all-zones-multipage.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 

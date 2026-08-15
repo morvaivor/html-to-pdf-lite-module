@@ -134,6 +134,7 @@ function renderText(doc, text, style, options) {
     doc.addPage({
       size: options.format || 'A4',
       layout: options.orientation || 'portrait',
+      margin: 0,
     });
     doc.y = topMargin + headerHeight;
     doc.x = leftMargin;
@@ -225,6 +226,7 @@ function renderImage(doc, element, parentStyle, options) {
       doc.addPage({
         size: options.format || 'A4',
         layout: options.orientation || 'portrait',
+        margin: 0,
       });
       doc.y = topMargin + headerHeight;
       doc.x = leftMargin;
@@ -320,6 +322,7 @@ function renderList(doc, element, parentStyle, options, depth) {
       doc.addPage({
         size: options.format || 'A4',
         layout: options.orientation || 'portrait',
+        margin: 0,
       });
       doc.y = topMargin + headerHeight;
       doc.x = leftMargin;
@@ -331,7 +334,7 @@ function renderList(doc, element, parentStyle, options, depth) {
 
     doc.x = leftMargin + indent;
 
-    const fullText = text ? bullet + text : bullet;
+    const fullText = text ? bullet + ' ' + text : bullet;
 
     doc.text(fullText, {
       width: contentWidth - indent,
@@ -506,6 +509,7 @@ async function renderTable(doc, element, parentStyle, options) {
       doc.addPage({
         size: options.format || 'A4',
         layout: options.orientation || 'portrait',
+        margin: 0,
       });
       doc.y = topMargin + headerHeight;
       doc.x = leftMargin;
@@ -613,9 +617,11 @@ function resolvePageZoneContent(zoneProps, currentPage, totalPages) {
   const content = zoneProps.content;
   if (!content) return '';
 
-  let resolved = content.replace(/^["']|["']$/g, '');
+  let resolved = content;
   resolved = resolved.replace(/counter\s*\(\s*page\s*\)/g, String(currentPage));
   resolved = resolved.replace(/counter\s*\(\s*num-pages\s*\)/g, String(totalPages));
+  resolved = resolved.replace(/["']/g, '');
+  resolved = resolved.replace(/\s+/g, ' ').trim();
   return resolved;
 }
 
@@ -630,6 +636,11 @@ function renderPageZone(doc, zoneProps, x, y, width, align, currentPage, totalPa
   const italic = zoneProps['font-style'] === 'italic';
 
   const resolvedFont = resolveFontFamily(fontFamily, bold, italic);
+  const savedX = doc.x;
+  const savedY = doc.y;
+
+  doc.x = x;
+  doc.y = y;
   doc.font(resolvedFont).fontSize(fontSize).fillColor(color);
 
   const textOpts = { width: width };
@@ -637,10 +648,18 @@ function renderPageZone(doc, zoneProps, x, y, width, align, currentPage, totalPa
   else if (align === 'right') textOpts.align = 'right';
 
   doc.text(content, x, y, textOpts);
+
+  doc.x = savedX;
+  doc.y = savedY;
 }
 
 function renderHeaderFooterContent(doc, html, x, y, width, align) {
   if (!html) return;
+
+  const savedX = doc.x;
+  const savedY = doc.y;
+
+  doc.save();
 
   const $ = cheerio.load(html);
   const body = $('body').length > 0 ? $('body') : $(html);
@@ -656,6 +675,8 @@ function renderHeaderFooterContent(doc, html, x, y, width, align) {
       };
 
       const fontFamily = resolveFontFamily(style.fontFamily, style.bold, style.italic);
+      doc.x = x;
+      doc.y = y;
       doc.font(fontFamily)
          .fontSize(style.fontSize)
          .fillColor(style.color);
@@ -674,6 +695,8 @@ function renderHeaderFooterContent(doc, html, x, y, width, align) {
         doc.text(textContent, x, y, textOpts);
       }
     } else if (child.type === 'text' && child.data?.trim()) {
+      doc.x = x;
+      doc.y = y;
       doc.font('Helvetica').fontSize(12).fillColor('#000000');
       const textOpts = { width: width };
       if (align === 'center') textOpts.align = 'center';
@@ -681,6 +704,10 @@ function renderHeaderFooterContent(doc, html, x, y, width, align) {
       doc.text(child.data.trim(), x, y, textOpts);
     }
   });
+
+  doc.restore();
+  doc.x = savedX;
+  doc.y = savedY;
 }
 
 async function countPages(html, options) {
@@ -708,6 +735,7 @@ async function countPages(html, options) {
   doc.addPage({
     size: options.format || 'A4',
     layout: options.orientation || 'portrait',
+    margin: 0,
   });
 
   doc.x = leftMargin;
@@ -716,8 +744,8 @@ async function countPages(html, options) {
   const pageCount = { value: 1 };
 
   const originalAddPage = doc.addPage.bind(doc);
-  doc.addPage = function(opts) {
-    originalAddPage(opts);
+  doc.addPage = function(opts = {}) {
+    originalAddPage({ ...opts, margin: 0 });
     pageCount.value++;
   };
 
@@ -784,19 +812,15 @@ async function renderHtmlToPdf(html, options = {}) {
   let currentPage = 0;
 
   const originalAddPage = doc.addPage.bind(doc);
-  doc.addPage = function(opts) {
-    originalAddPage(opts);
+  doc.addPage = function(opts = {}) {
+    originalAddPage({ ...opts, margin: 0 });
     currentPage++;
 
     const cw = doc.page.width - leftMargin - rightMargin;
     const savedY = doc.y;
     const savedX = doc.x;
-
-    if (options.header) {
-      const headerY = topMargin;
-      const headerHtml = options.header.replace('{page}', currentPage).replace('{totalPages}', totalPages);
-      renderHeaderFooterContent(doc, headerHtml, leftMargin, headerY, cw, 'left');
-    }
+    const pageHeight = doc.page.height;
+    const footerY = pageHeight - bottomMargin - footerHeight;
 
     if (pageZones) {
       const halfCw = cw / 2;
@@ -811,8 +835,6 @@ async function renderHtmlToPdf(html, options = {}) {
         renderPageZone(doc, pageZones['top-right'], leftMargin + halfCw, topMargin, halfCw, 'right', currentPage, totalPages);
       }
 
-      const footerY = doc.page.height - footerHeight;
-
       if (pageZones['bottom-left']) {
         renderPageZone(doc, pageZones['bottom-left'], leftMargin, footerY, halfCw, 'left', currentPage, totalPages);
       }
@@ -824,8 +846,12 @@ async function renderHtmlToPdf(html, options = {}) {
       }
     }
 
-    if (options.footer) {
-      const footerY = doc.page.height - footerHeight;
+    if (options.header && !pageZones) {
+      const headerHtml = options.header.replace('{page}', currentPage).replace('{totalPages}', totalPages);
+      renderHeaderFooterContent(doc, headerHtml, leftMargin, topMargin, cw, 'left');
+    }
+
+    if (options.footer && !pageZones) {
       const footerHtml = options.footer.replace('{page}', currentPage).replace('{totalPages}', totalPages);
       renderHeaderFooterContent(doc, footerHtml, leftMargin, footerY, cw, 'left');
     }
@@ -837,6 +863,7 @@ async function renderHtmlToPdf(html, options = {}) {
   doc.addPage({
     size: options.format || 'A4',
     layout: options.orientation || 'portrait',
+    margin: 0,
   });
 
   doc.x = leftMargin;
