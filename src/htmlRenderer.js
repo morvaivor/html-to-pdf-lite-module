@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import PDFDocument from 'pdfkit';
 import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
-import { applyCssToElements, parsePageRule } from './cssParser.js';
+import { applyCssToElements, parsePageRule, parseFontFaces } from './cssParser.js';
 
 const DEFAULT_STYLE = {
   color: '#000000',
@@ -87,6 +87,57 @@ function parseInlineStyle(element) {
   return style;
 }
 
+let registeredFontAliases = new Set();
+
+async function registerFontFaces(doc, css, fontBufferCache) {
+  const faces = parseFontFaces(css);
+  if (faces.length === 0) {
+    registeredFontAliases = new Set();
+    return;
+  }
+
+  registeredFontAliases = new Set();
+  const aliasesByFamily = new Map();
+
+  for (const face of faces) {
+    let buffer = fontBufferCache.get(face.url);
+    if (!buffer) {
+      if (face.url.startsWith('data:')) {
+        buffer = Buffer.from(face.url.split(',')[1], 'base64');
+      } else {
+        let response;
+        try {
+          response = await fetch(face.url);
+        } catch {
+          throw new Error(`Failed to load font from ${face.url}`);
+        }
+        if (!response.ok) {
+          throw new Error(`Failed to load font from ${face.url} (HTTP ${response.status})`);
+        }
+        buffer = Buffer.from(await response.arrayBuffer());
+      }
+      fontBufferCache.set(face.url, buffer);
+    }
+
+    let suffix = '';
+    if (face.bold) suffix += '-Bold';
+    if (face.italic) suffix += '-Italic';
+    const alias = face.family + suffix;
+    doc.registerFont(alias, buffer);
+    registeredFontAliases.add(alias);
+
+    if (!aliasesByFamily.has(face.family)) aliasesByFamily.set(face.family, []);
+    aliasesByFamily.get(face.family).push({ alias, buffer });
+  }
+
+  for (const [family, aliases] of aliasesByFamily) {
+    if (!aliases.some(a => a.alias === family)) {
+      doc.registerFont(family, aliases[0].buffer);
+      registeredFontAliases.add(family);
+    }
+  }
+}
+
 function resolveFontFamily(fontFamily, bold, italic) {
   const base = fontFamily || DEFAULT_STYLE.fontFamily;
   const suffixes = [];
@@ -98,7 +149,17 @@ function resolveFontFamily(fontFamily, bold, italic) {
       suffixes.push('-Italic');
     }
   }
-  return suffixes.length > 0 ? `${base}${suffixes.join('')}` : base;
+  let name = suffixes.length > 0 ? `${base}${suffixes.join('')}` : base;
+  if (registeredFontAliases.size > 0 && !registeredFontAliases.has(name)) {
+    let best = null;
+    for (const registered of registeredFontAliases) {
+      if (registered.startsWith(base) && (best === null || registered.length > best.length)) {
+        best = registered;
+      }
+    }
+    if (best) name = best;
+  }
+  return name;
 }
 
 function measureTextHeight(doc, text, fontFamily, fontSize, maxWidth) {
@@ -818,6 +879,8 @@ async function countPages(html, options) {
     margin: 0,
   });
 
+  await registerFontFaces(doc, options.css, options._fontBufferCache);
+
   const topMargin = options.margin?.top ?? 20;
   const bottomMargin = options.margin?.bottom ?? 20;
   const leftMargin = options.margin?.left ?? 20;
@@ -882,6 +945,8 @@ async function renderHtmlToPdf(html, options = {}) {
     _pageZones: pageZones,
   };
 
+   renderOptions._fontBufferCache = new Map();
+
   const totalPages = await countPages(html, renderOptions);
 
   const doc = new PDFDocument({
@@ -890,6 +955,8 @@ async function renderHtmlToPdf(html, options = {}) {
     layout: options.orientation || 'portrait',
     margin: 0,
   });
+
+  await registerFontFaces(doc, options.css, renderOptions._fontBufferCache);
 
   doc.setMaxListeners(0);
 

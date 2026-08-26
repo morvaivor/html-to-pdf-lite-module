@@ -1,5 +1,5 @@
 import { createPdfGenerator } from '../src/index.js';
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, readFileSync, mkdirSync } from 'fs';
 
 const generator = createPdfGenerator({
   defaultFormat: 'A4',
@@ -719,6 +719,56 @@ async function runTests() {
   console.log('  Buffer size: ' + pdf42.length + ' bytes');
   await savePdf('output/test42-table-rowspan.pdf', pdf42);
   console.log('  Saved output/test42-table-rowspan.pdf\n');
+
+  console.log('=== Test 43: @font-face via localhost URL ===');
+  const http = await import('http');
+  const { readFileSync } = await import('fs');
+  const server = http.createServer((req, res) => {
+    const file = decodeURIComponent(req.url.replace(/^\//, ''));
+    try {
+      res.writeHead(200, { 'Content-Type': 'font/ttf' });
+      res.end(readFileSync(`test/fixtures/fonts/${file}`));
+    } catch {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const css43 = `
+    @font-face { font-family: 'Arvo'; src: url('http://127.0.0.1:${port}/Arvo-Regular.ttf'); font-weight: normal; font-style: normal; }
+    @font-face { font-family: 'Arvo'; src: url('http://127.0.0.1:${port}/Arvo-Bold.ttf'); font-weight: bold; font-style: normal; }
+    @font-face { font-family: 'Arvo'; src: url('http://127.0.0.1:${port}/Arvo-Italic.ttf'); font-weight: normal; font-style: italic; }
+    @font-face { font-family: 'Arvo'; src: url('http://127.0.0.1:${port}/Arvo-BoldItalic.ttf'); font-weight: bold; font-style: italic; }
+  `;
+  const content43 = `
+    <h1 style="font-family: Arvo;">Police Arvo</h1>
+    <p style="font-family: Arvo;">Texte normal en Arvo.</p>
+    <p style="font-family: Arvo; font-weight: bold;">Texte bold en Arvo.</p>
+    <p style="font-family: Arvo; font-style: italic;">Texte italic en Arvo.</p>
+    <p style="font-family: Arvo; font-weight: bold; font-style: italic;">Texte bold italic en Arvo.</p>
+  `;
+  const pdf43 = await generator.generate(content43, { css: css43 });
+  const raw43 = pdf43.toString('latin1');
+  const arvo43 = (raw43.match(/Arvo/g) || []).length;
+  console.log('  Arvo embedded references: ' + arvo43);
+  if (arvo43 === 0) throw new Error('Arvo font was not embedded in the PDF');
+  server.close();
+  await savePdf('output/test43-font-face-localhost.pdf', pdf43);
+  console.log('  Saved output/test43-font-face-localhost.pdf\n');
+
+  console.log('=== Test 44: @font-face via data URI ===');
+  const arvoBase64 = readFileSync('test/fixtures/fonts/Arvo-Regular.ttf').toString('base64');
+  const css44 = `
+    @font-face { font-family: 'ArvoData'; src: url(data:font/ttf;base64,${arvoBase64}); }
+  `;
+  const content44 = '<p style="font-family: ArvoData; font-size: 14px;">Texte en Arvo via data URI.</p>';
+  const pdf44 = await generator.generate(content44, { css: css44 });
+  const arvo44 = (pdf44.toString('latin1').match(/ArvoData|Arvo/g) || []).length;
+  console.log('  ArvoData embedded references: ' + arvo44);
+  if (arvo44 === 0) throw new Error('ArvoData font was not embedded in the PDF');
+  await savePdf('output/test44-font-face-data-uri.pdf', pdf44);
+  console.log('  Saved output/test44-font-face-data-uri.pdf\n');
 
   console.log('\n=== All tests passed ===');
 }

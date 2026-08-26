@@ -9,6 +9,7 @@ Moteur minimal HTML → PDF en Node.js. Utilise **pdfkit** (pur JS) + **cheerio*
 | Balises : `<h1>`-`<h6>`, `<p>`, `<div>`, `<span>`, `<br>`, `<a>` | ✅ |
 | CSS inline : `color`, `font-size`, `font-weight`, `font-style`, `font-family`, `text-align`, `border`, `padding`, `background-color` | ✅ |
 | CSS externe (chaîne CSS) | ✅ |
+| Polices personnalisées via `@font-face` (TTF/OTF, `url()` http(s) ou data URI, bold/italic) | ✅ |
 | Zones de page `@page` (6 zones, `counter(page)`, `counter(num-pages)`) | ✅ |
 | Pagination automatique | ✅ |
 | Options : format (A4, Letter...), orientation, marges | ✅ |
@@ -117,6 +118,21 @@ const pdf = await generator.generate(html, {
 Propriétés CSS supportées : `color`, `background-color`, `font-size`, `font-weight`, `font-style`, `font-family`, `text-align`, `border`, `border-color`, `border-width`, `padding`.
 
 > Les styles inline (`style="..."`) ont la priorité sur le CSS externe.
+
+## Polices personnalisées (`@font-face`)
+
+Les polices TTF/OTF sont embarquées dans le PDF et se définissent via `@font-face` dans le CSS :
+
+```css
+@font-face { font-family: 'Arvo'; src: url('http://localhost:3000/fonts/Arvo-Regular.ttf'); font-weight: normal; font-style: normal; }
+@font-face { font-family: 'Arvo'; src: url('http://localhost:3000/fonts/Arvo-Bold.ttf'); font-weight: bold; font-style: normal; }
+@font-face { font-family: 'Arvo'; src: url('http://localhost:3000/fonts/Arvo-Italic.ttf'); font-weight: normal; font-style: italic; }
+@font-face { font-family: 'Arvo'; src: url('http://localhost:3000/fonts/Arvo-BoldItalic.ttf'); font-weight: bold; font-style: italic; }
+```
+
+- `src: url(...)` — URL http(s) (ex. un serveur local) ou data URI (`data:font/ttf;base64,...`)
+- `font-weight` / `font-style` — déclarent les variantes bold/italic de la famille (fallback sur la face la plus proche si une variante est manquante)
+- Usage : `font-family: Arvo` dans le CSS externe ou le style inline
 
 ## Tableaux
 
@@ -273,7 +289,7 @@ Les compteurs `counter(page)` et `counter(num-pages)` sont résolus par page. Le
 npm test
 ```
 
-42 tests couvrant : headings, paragraphes, CSS inline, pagination, options, tableaux (simple, thead/tbody, bordures, colspan, rowspan, CSS, contenu imbriqué, 5 niveaux), CSS externe (chaîne, classes, IDs, override, par appel), en-tête/pied de page (global, par appel, multi-pages), listes (ul, ol, imbriquées, CSS, pagination), images (fichier, dimensions, data URI, overflow, URL), zones `@page` (6 zones, `counter(page)`, multi-pages).
+44 tests couvrant : headings, paragraphes, CSS inline, pagination, options, tableaux (simple, thead/tbody, bordures, colspan, rowspan, CSS, contenu imbriqué, 5 niveaux), CSS externe (chaîne, classes, IDs, override, par appel), en-tête/pied de page (global, par appel, multi-pages), listes (ul, ol, imbriquées, CSS, pagination), images (fichier, dimensions, data URI, overflow, URL), zones `@page` (6 zones, `counter(page)`, multi-pages), polices `@font-face` (URL http(s), data URI, variantes bold/italic).
 
 ## Dépendances
 
@@ -283,7 +299,6 @@ npm test
 ## Prochaines itérations
 
 1. **CSS avancé** : `line-height`, `letter-spacing`, `text-decoration`, `margin`
-2. **Support des polices** : charger des polices TTF/OTF personnalisées
-3. **Media queries**
-4. **Encapsulation CSS** : `float`, `display`, `position`
-5. **Formes** : `<hr>`, `<blockquote>`, `<pre>`, `<code>`
+2. **Media queries**
+3. **Encapsulation CSS** : `float`, `display`, `position`
+4. **Formes** : `<hr>`, `<blockquote>`, `<pre>`, `<code>`

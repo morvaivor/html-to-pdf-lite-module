@@ -23,10 +23,62 @@ function stripPageBlocks(css) {
   return result;
 }
 
+function stripFontFaceBlocks(css) {
+  let result = css;
+
+  while (true) {
+    const idx = result.indexOf('@font-face');
+    if (idx === -1) break;
+
+    const braceStart = result.indexOf('{', idx);
+    if (braceStart === -1) break;
+
+    let depth = 0;
+    let blockEnd = -1;
+    for (let i = braceStart; i < result.length; i++) {
+      if (result[i] === '{') depth++;
+      if (result[i] === '}') depth--;
+      if (depth === 0) { blockEnd = i; break; }
+    }
+    if (blockEnd === -1) break;
+
+    result = result.substring(0, idx) + result.substring(blockEnd + 1);
+  }
+
+  return result;
+}
+
+function parseFontFaces(css) {
+  if (!css || typeof css !== 'string') return [];
+
+  const faces = [];
+  const regex = /@font-face\s*\{([^}]*)\}/g;
+  let match;
+
+  while ((match = regex.exec(css)) !== null) {
+    const block = match[1];
+    const family = block.match(/font-family\s*:\s*([^;]+)/)?.[1]?.replace(/['"]/g, '').trim();
+    const urlMatch = block.match(/src\s*:\s*url\(\s*['"]?([^'")]+)['"]?\s*\)/);
+    const weight = block.match(/font-weight\s*:\s*([^;]+)/)?.[1]?.trim() || 'normal';
+    const fontStyle = block.match(/font-style\s*:\s*([^;]+)/)?.[1]?.trim() || 'normal';
+
+    if (!family || !urlMatch) continue;
+
+    faces.push({
+      family,
+      url: urlMatch[1].trim(),
+      bold: weight === 'bold' || parseInt(weight, 10) >= 700,
+      italic: fontStyle === 'italic',
+    });
+  }
+
+  return faces;
+}
+
 function parseCssRules(css) {
   if (!css || typeof css !== 'string') return [];
 
-  const cssWithoutPage = stripPageBlocks(css);
+  const cssWithoutPage = stripFontFaceBlocks(stripPageBlocks(css));
 
   const rules = [];
   const ruleRegex = /([^{}]+)\{([^}]*)\}/g;
@@ -208,4 +260,4 @@ function parsePageRule(css) {
   return zones;
 }
 
-export { parseCssRules, elementMatchesSelector, applyCssToElements, parsePageRule };
+export { parseCssRules, elementMatchesSelector, applyCssToElements, parsePageRule, parseFontFaces, stripFontFaceBlocks };
