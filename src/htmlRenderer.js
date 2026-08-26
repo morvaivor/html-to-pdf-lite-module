@@ -433,10 +433,35 @@ async function renderTable(doc, element, parentStyle, options) {
   const borderWidth = defaultBorder ? defaultBorderWidth : 0;
   const borderColor = defaultBorder ? defaultBorderColor : undefined;
 
-  for (const row of allRows) {
-    const rowData = [];
-    for (const cell of row.children) {
-      if (cell.type === 'tag' && (cell.name === 'td' || cell.name === 'th')) {
+  {
+    const rowCells = [];
+    allRows.forEach(row => {
+      const cells = [];
+      row.children.forEach(cell => {
+        if (cell.type === 'tag' && (cell.name === 'td' || cell.name === 'th')) {
+          cells.push(cell);
+        }
+      });
+      rowCells.push(cells);
+    });
+
+    allRows.forEach((row, rowIdx) => {
+      const data = new Array(maxCols).fill(null);
+      if (rowIdx > 0) {
+        for (let col = 0; col < maxCols; col++) {
+          const prevCell = rowCells[rowIdx - 1][col];
+          if (prevCell && prevCell.startRow < rowIdx && prevCell.startRow + prevCell.rowspan > rowIdx) {
+            data[col] = prevCell;
+          }
+        }
+      }
+      let col = 0;
+      for (const cell of rowCells[rowIdx]) {
+        while (col < maxCols && data[col] !== null) col++;
+        if (col >= maxCols) break;
+        const colspan = Math.min(parseInt(cell.attribs.colspan || '1', 10), maxCols - col);
+        const rowspan = Math.max(1, Math.min(parseInt(cell.attribs.rowspan || '1', 10), allRows.length - rowIdx));
+
         const cellStyle = {
           ...parentStyle,
           ...parseInlineStyle(cell),
@@ -487,80 +512,147 @@ async function renderTable(doc, element, parentStyle, options) {
 
         const cellHeight = Math.max(textHeight, fontSize) + padding * 2 + nestedHeight;
 
-        rowData.push({
+        data[col] = {
           text,
           style: cellStyle,
           padding,
           fontSize,
           fontFamily,
           height: cellHeight,
-          colspan: parseInt(cell.attribs.colspan || '1', 10),
+          colspan,
+          rowspan,
           nestedTables,
           nonTableChildren: getCellNonTableChildren(cell),
           rawCell: cell,
+          startRow: rowIdx,
+          startCol: col,
+        };
+
+        for (let r = 0; r < colspan; r++) {
+          data[col + r] = data[col];
+        }
+        col += colspan;
+      }
+      rowCells[rowIdx] = data;
+    });
+
+    const rowHeights = allRows.map((_, rowIdx) => {
+      let h = 0;
+      for (let col = 0; col < maxCols; col++) {
+        const cell = rowCells[rowIdx][col];
+        if (cell && cell.startRow === rowIdx) {
+          h = Math.max(h, cell.height / cell.rowspan);
+        }
+      }
+      return h + (borderWidth > 0 ? borderWidth : 0);
+    });
+
+    const blocks = [];
+    {
+      let prevStart = 0;
+      let blockEnd = 0;
+      for (let r = 0; r < allRows.length; r++) {
+        blockEnd = Math.max(blockEnd, r);
+        for (let col = 0; col < maxCols; col++) {
+          const cell = rowCells[r][col];
+          if (cell && cell.startRow === r) {
+            blockEnd = Math.max(blockEnd, r + cell.rowspan - 1);
+          }
+        }
+        if (r === blockEnd) {
+          blocks.push({ start: prevStart, end: r });
+          prevStart = r + 1;
+        }
+      }
+      if (prevStart <= blocks[blocks.length - 1].end) {
+        blocks.push({ start: prevStart, end: allRows.length - 1 });
+      }
+    }
+
+    for (const block of blocks) {
+      const blockHeight = rowHeights.slice(block.start, block.end + 1).reduce((a, b) => a + b, 0);
+      if (doc.y + blockHeight > pageBottom) {
+        doc.addPage({
+          size: options.format || 'A4',
+          layout: options.orientation || 'portrait',
+          margin: 0,
         });
-      }
-    }
-
-    const maxCellHeight = Math.max(...rowData.map(c => c.height));
-    const rowHeight = maxCellHeight + (borderWidth > 0 ? borderWidth : 0);
-
-    if (doc.y + rowHeight > pageBottom) {
-      doc.addPage({
-        size: options.format || 'A4',
-        layout: options.orientation || 'portrait',
-        margin: 0,
-      });
-      doc.y = topMargin + headerHeight;
-      doc.x = leftMargin;
-    }
-
-    const y = doc.y;
-    let colX = leftMargin;
-
-    for (const cell of rowData) {
-      const cellWidth = colWidth * cell.colspan;
-      const cellY = y;
-
-      if (cell.style.backgroundColor) {
-        doc.fillColor(cell.style.backgroundColor)
-          .rect(colX, cellY, cellWidth, maxCellHeight)
-          .fill();
+        doc.y = topMargin + headerHeight;
+        doc.x = leftMargin;
       }
 
-      if (borderWidth > 0) {
-        doc.strokeColor(borderColor)
-          .lineWidth(borderWidth)
-          .rect(colX, cellY, cellWidth, maxCellHeight)
-          .stroke();
+      const blockY = doc.y;
+      const rowTop = new Array(allRows.length).fill(0);
+      let offset = 0;
+      for (let r = block.start; r <= block.end; r++) {
+        rowTop[r] = blockY + offset;
+        offset += rowHeights[r];
       }
 
-      doc.font(cell.fontFamily)
-         .fontSize(cell.fontSize)
-         .fillColor(cell.style.color);
+      for (let r = block.start; r <= block.end; r++) {
+        let col = 0;
+        while (col < maxCols) {
+          const cell = rowCells[r][col];
+          if (cell && cell.startRow === r) {
+            const cellWidth = colWidth * cell.colspan;
+            const cellX = leftMargin + cell.startCol * colWidth;
+            const cellY = rowTop[r];
+            const endRow = Math.min(r + cell.rowspan - 1, allRows.length - 1);
+            const cellH = rowTop[endRow] + rowHeights[endRow] - cellY;
 
-      const textX = colX + cell.padding;
-      const textY = cellY + cell.padding + cell.fontSize;
-      const textWidth = cellWidth - cell.padding * 2;
+            if (cell.style.backgroundColor) {
+              doc.fillColor(cell.style.backgroundColor)
+                .rect(cellX, cellY, cellWidth, cellH)
+                .fill();
+            }
 
-      if (cell.text) {
-        if (cell.style.textAlign === 'center') {
-          doc.text(cell.text, textX, textY, { width: textWidth, align: 'center' });
-        } else if (cell.style.textAlign === 'right') {
-          doc.text(cell.text, textX, textY, { width: textWidth, align: 'right' });
-        } else {
-          doc.text(cell.text, textX, textY, { width: textWidth });
+            if (borderWidth > 0) {
+              doc.strokeColor(borderColor)
+                .lineWidth(borderWidth)
+                .rect(cellX, cellY, cellWidth, cellH)
+                .stroke();
+            }
+
+            doc.font(cell.fontFamily)
+               .fontSize(cell.fontSize)
+               .fillColor(cell.style.color);
+
+            const textX = cellX + cell.padding;
+            const textY = cellY + cell.padding + cell.fontSize;
+            const textWidth = cellWidth - cell.padding * 2;
+            const textH = cell.text ? measureTextHeight(doc, cell.text, cell.fontFamily, cell.fontSize, textWidth) : 0;
+
+            if (cell.text && textH + cell.padding <= cellH) {
+              if (cell.style.textAlign === 'center') {
+                doc.text(cell.text, textX, textY, { width: textWidth, align: 'center' });
+              } else if (cell.style.textAlign === 'right') {
+                doc.text(cell.text, textX, textY, { width: textWidth, align: 'right' });
+              } else {
+                doc.text(cell.text, textX, textY, { width: textWidth });
+              }
+            }
+
+            if (cell.nestedTables.length > 0) {
+              const savedX = doc.x;
+              const savedY = doc.y;
+              doc.x = cellX;
+              doc.y = cellY + cell.padding;
+              for (const nt of cell.nestedTables) {
+                await renderElement(doc, nt, cell.style, options);
+              }
+              doc.x = savedX;
+              doc.y = savedY;
+            }
+
+            col += cell.colspan;
+          } else {
+            col++;
+          }
         }
       }
 
-      for (const nt of cell.nestedTables) {
-        await renderElement(doc, nt, cell.style, options);
-      }
-
-      colX += cellWidth;
+      doc.y = rowTop[block.end] + rowHeights[block.end];
     }
-
-    doc.y = y + maxCellHeight + (borderWidth > 0 ? borderWidth : 0);
   }
 }
 

@@ -707,6 +707,19 @@ async function runTests() {
   await savePdf('output/test41-page-all-zones-multipage.pdf', pdf41);
   console.log('  Saved output/test41-page-all-zones-multipage.pdf\n');
 
+  console.log('=== Test 42: Table with rowspan ===');
+  const pdf42 = await generator.generate(`
+    <table style="border: 1px solid #000000">
+      <tr><th rowspan="3">Groupe</th><th>Catégorie</th><th>Valeur</th></tr>
+      <tr><td>Produits</td><td>100</td></tr>
+      <tr><td>Services</td><td>200</td></tr>
+      <tr><td colspan="2">Total</td><td>300</td></tr>
+    </table>
+  `);
+  console.log('  Buffer size: ' + pdf42.length + ' bytes');
+  await savePdf('output/test42-table-rowspan.pdf', pdf42);
+  console.log('  Saved output/test42-table-rowspan.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 

@@ -15,6 +15,7 @@ Moteur minimal HTML → PDF en Node.js. Utilise **pdfkit** (pur JS) + **cheerio*
 | Tableaux (`<table>`, `<thead>`, `<tbody>`, `<tr>`, `<td>`, `<th>`) | ✅ |
 | Bordures et padding sur tableaux | ✅ |
 | `colspan` | ✅ |
+| `rowspan` | ✅ |
 | Tableaux imbriqués (jusqu'à 5 niveaux) | ✅ |
 | Listes (`<ul>`, `<ol>`, `<li>` avec indentation) | ✅ |
 | Listes imbriquées | ✅ |
@@ -144,6 +145,26 @@ Les bordures et le padding se définissent en CSS inline sur le `<table>` (héri
 </table>
 ```
 
+`rowspan` est aussi supporté pour fusionner des cellules verticalement :
+
+```html
+<table style="border: 1px solid #000000; padding: 5px;">
+  <tr>
+    <th rowspan="2" style="border: 1px solid #000000; padding: 4px;">Groupe</th>
+    <th style="border: 1px solid #000000; padding: 4px;">Catégorie</th>
+    <th style="border: 1px solid #000000; padding: 4px;">Valeur</th>
+  </tr>
+  <tr>
+    <td style="border: 1px solid #000000; padding: 4px;">Produits</td>
+    <td style="border: 1px solid #000000; padding: 4px;">100</td>
+  </tr>
+  <tr>
+    <td colspan="2" style="border: 1px solid #000000; padding: 4px;">Total</td>
+    <td style="border: 1px solid #000000; padding: 4px;">300</td>
+  </tr>
+</table>
+```
+
 ### Tableaux imbriqués
 
 Jusqu'à 5 niveaux de `<table>` imbriqués sont supportés :
@@ -252,7 +273,7 @@ Les compteurs `counter(page)` et `counter(num-pages)` sont résolus par page. Le
 npm test
 ```
 
-41 tests couvrant : headings, paragraphes, CSS inline, pagination, options, tableaux (simple, thead/tbody, bordures, colspan, CSS, contenu imbriqué, 5 niveaux), CSS externe (chaîne, classes, IDs, override, par appel), en-tête/pied de page (global, par appel, multi-pages), listes (ul, ol, imbriquées, CSS, pagination), images (fichier, dimensions, data URI, overflow, URL), zones `@page` (6 zones, `counter(page)`, multi-pages).
+42 tests couvrant : headings, paragraphes, CSS inline, pagination, options, tableaux (simple, thead/tbody, bordures, colspan, rowspan, CSS, contenu imbriqué, 5 niveaux), CSS externe (chaîne, classes, IDs, override, par appel), en-tête/pied de page (global, par appel, multi-pages), listes (ul, ol, imbriquées, CSS, pagination), images (fichier, dimensions, data URI, overflow, URL), zones `@page` (6 zones, `counter(page)`, multi-pages).
 
 ## Dépendances
 
@@ -261,9 +282,8 @@ npm test
 
 ## Prochaines itérations
 
-1. **`rowspan`** pour tableaux
-2. **CSS avancé** : `line-height`, `letter-spacing`, `text-decoration`, `margin`
-3. **Support des polices** : charger des polices TTF/OTF personnalisées
-4. **Media queries**
-5. **Encapsulation CSS** : `float`, `display`, `position`
-6. **Formes** : `<hr>`, `<blockquote>`, `<pre>`, `<code>`
+1. **CSS avancé** : `line-height`, `letter-spacing`, `text-decoration`, `margin`
+2. **Support des polices** : charger des polices TTF/OTF personnalisées
+3. **Media queries**
+4. **Encapsulation CSS** : `float`, `display`, `position`
+5. **Formes** : `<hr>`, `<blockquote>`, `<pre>`, `<code>`
