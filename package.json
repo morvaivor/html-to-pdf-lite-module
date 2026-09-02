@@ -5,7 +5,11 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "test": "node test/manual-test.js"
+    "test": "node test/manual-test.js",
+    "test:coverage": "node --experimental-test-coverage --test test/optimizations.test.mjs test/workerPool.test.mjs",
+    "lint": "oxlint src",
+    "benchmark": "node bench/benchmark.js",
+    "test:soak": "node --expose-gc bench/soak-test.js"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
@@ -14,6 +18,7 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "jest": "^30.5.1",
+    "oxlint": "^1.81.0",
     "ts-jest": "^29.4.12",
     "typescript": "^5.9.3"
   }

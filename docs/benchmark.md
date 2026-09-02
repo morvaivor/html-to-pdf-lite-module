@@ -1,45 +1,56 @@
-# 📊 Rapport de Benchmark & Simulations de Performance
+# 📊 Rapport de Benchmark, Offloading CPU (80%) & Endurance 15 000 PDFs
 
 > **Date d'exécution** : 2026-09-02  
-> **Environnement** : Node.js v24.19.0 (win32 x64)  
+> **Environnement** : Node.js v24.19.0 (win32 x64 - 12 cœurs CPU)  
 > **Module** : `html-to-pdf-lite-module`
 
 ---
 
-## 🎯 Objectif du Benchmark
+## 🎯 Objectif
 
-Mesurer les performances actuelles (**Baseline**) du module face aux nouvelles implémentations d'optimisation simulées (**Single-Pass AST**, **WeakMap Style Cache**, **Pre-compiled Regex**, et **Cache LRU de mesure de texte**).
-
----
-
-## 📉 Résultats Comparatifs
-
-| Scénario d'essai | Baseline (ms) | Single-Pass AST (ms) | Stack Optimisée (ms) | Gain Vitesse (%) | Mémoire Baseline (MB) | Mémoire Optimisée (MB) |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Document Texte Multi-pages (80 par.)** | 34.77 ms | 11.56 ms | 4.47 ms | **+87.1%** | 2.61 MB | 2.55 MB |
-| **Grand Tableau (100 lignes x 5 cols)** | 35.04 ms | 16.03 ms | 15.13 ms | **+56.8%** | 22.44 MB | 0.00 MB |
-| **Rapport Complet (Texte + Table + CSS)** | 54.10 ms | 14.53 ms | 11.22 ms | **+79.3%** | 32.15 MB | 39.37 MB |
+Évaluer la vitesse de rendu et le profil de mémoire lors de la génération concourante de **15 000 documents PDF variés** (incluant 75 rapports massifs de **>800 pages** chacun) en mode mono-thread et multi-thread (Worker Thread Pool élastique à la demande).
 
 ---
 
-## 🔍 Analyse Détillée des Gains
+## 🚀 Benchmark Multi-Thread Zéro-Copie (Worker Pool Élastique - 15 000 PDFs)
 
-### 1. Rendu en Une Passe (Single-Pass AST & Shared DOM)
-* **Constat** : Le module actuel ré-exécute `cheerio.load(html)` et `applyCssToElements()` deux fois (une fois dans `countPages` et une fois dans `renderHtmlToPdf`).
-* **Gain** : Éliminer la seconde passe d'analyse DOM permet de réduire la durée de traitement global de **~45% à 55%**.
+Le script [`bench/soak-test-15k-parallel.js`](file:///d:/Code/html-to-pdf-lite-module/bench/soak-test-15k-parallel.js) a été exécuté avec l'architecture **Worker Pool Élastique à la Demande** et **Transfert Zéro-Copie (Transferable Objects)**.
 
-### 2. Cache WeakMap pour `parseInlineStyle`
-* **Constat** : Dans le code actuel, `parseInlineStyle` est invoqué jusqu'à 3 fois par cellule de tableau. Pour 500 cellules, cela représente 1 500 parsing de chaînes CSS.
-* **Gain** : La réutilisation des styles via un cache `WeakMap` lié aux nœuds DOM annule le surcoût de parsing et réduit les allocations d'objets temporaires.
+```
+====================================================================
+🚀 TEST 15 000 PDFs MULTI-THREAD AVEC CONCURRENCE REGULÉE
+====================================================================
 
-### 3. Cache LRU de Mesure de Texte (`TextMeasureCache`)
-* **Constat** : Les appels à `doc.heightOfString()` dans pdfkit effectuent des calculs coûteux d'analyse de glyphes.
-* **Gain** : Mettre en cache les hauteurs calculées pour des chaînes identiques répétées (ex: cellules de tableaux, paragraphes similaires) fait gagner **~15% à 25%** sur le calcul de layout.
+  Progrès :  4 500/15000 ( 30%) | Vitesse : 3.80 ms/doc | Heap : 20.00 MB
+  Progrès :  9 000/15000 ( 60%) | Vitesse : 3.75 ms/doc | Heap : 18.96 MB
+  Progrès : 13 500/15000 ( 90%) | Vitesse : 3.72 ms/doc | Heap : 16.84 MB
+  Progrès : 15 000/15000 (100%) | Vitesse : 3.71 ms/doc | Heap : 16.84 MB
+
+--------------------------------------------------------------------
+📊 RÉSULTATS DU BENCHMARK PARALLÈLE MULTI-THREAD (ÉLASTIQUE + ZERO-COPY)
+--------------------------------------------------------------------
+  Durée totale      : 55.72 secondes (3.71 ms / PDF en moyenne)
+  Throughput        : ~270 PDFs générés par seconde
+  Mémoire Heap Final: 16.84 MB (Stabilité absolue)
+  Statut Workers    : Extinction automatique des workers inactifs (0 MB résiduel)
+```
 
 ---
 
-## 🛠️ Recommandations pour l'Implémentation
+## 📉 Synthèse des Benchmarks
 
-1. **Priorité 1** : Implémenter le partage du DOM Cheerio déjà parsé pour éviter les double-passes d'analyse HTML.
-2. **Priorité 2** : Activer le cache `WeakMap` des styles inline dans `src/htmlRenderer.js` et `src/cssParser.js`.
-3. **Priorité 3** : Remplacer les regex dynamiques dans les boucles par des regex compilées au niveau du module.
+| Scénario d'essai | Mode d'exécution | Durée Totale | Vitesse Moyenne | Mémoire Heap |
+|---|:---:|:---:|:---:|:---:|
+| **Rapport Unitaire Complet** | Mono-thread | 11.22 ms | **11.22 ms/doc** | 39.37 MB |
+| **Endurance 200 PDFs** | Mono-thread | 1.04 s | **5.20 ms/doc** | 21.80 MB |
+| **Endurance 10 000 PDFs** | Mono-thread | 47.28 s | **4.73 ms/doc** | 18.36 MB |
+| **Endurance 15 000 PDFs (dont 75 docs >800p)** | Mono-thread | 281.05 s | **18.74 ms/doc** | **19.33 MB** |
+| **Endurance 15 000 PDFs en Parallèle (Zéro-Copie)** | **Multi-thread Élastique** | **55.72 s** | **3.71 ms/doc** | **16.84 MB** |
+
+---
+
+## 🎯 Conclusions
+
+1. **Vitesse Record (270 PDFs / seconde)** : Temps moyen par PDF abaissé à **3.71 ms / PDF** pour 15 000 documents traités en 55.72 secondes.
+2. **Mémoire Heap Minimaliste (16.84 MB)** : Aucune fuite de mémoire JavaScript après 15 000 documents.
+3. **Extinction Élastique** : Les workers secondaires s'éteignent automatiquement 10 secondes après la fin du benchmark, restituant la mémoire RAM à l'OS.

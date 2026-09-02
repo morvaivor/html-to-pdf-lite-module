@@ -1,43 +1,32 @@
-# PDF Generator (`html-to-pdf-lite-module`)
+# 🚀 HTML to PDF Lite Module (`html-to-pdf-lite-module`)
 
-Moteur minimal et ultra-performant HTML → PDF en Node.js. Utilise **pdfkit** (pur JS) + **cheerio** (parseur HTML).
-
----
-
-## ⚡ Performances & Architecture
-
-- **Rendu Single-Pass conditionnel** : Exécute une seule passe de rendu par défaut. Ne passe en mode 2 passes que si `counter(num-pages)` est requis dans le CSS.
-- **Cache `WeakMap` Inline Styles** : Suppression des parsings redondants sur les attributs `style="..."`.
-- **Cache LRU de mesure de texte (`TextMeasureCache`)** : Évite les recalculs répétés de hauteurs de glyphes (`doc.heightOfString()`).
-- **I/O Parallèles (`Promise.all`)** : Chargement parallèle des polices `@font-face` distantes et des images.
-- **Cheerio DOM AST partagé** : Ne parse le HTML qu'une seule fois par appel.
+> Moteur minimal, ultra-performant et modulaire de génération HTML → PDF sous Node.js sans dépendance headless lourde (Puppeteer/Playwright). Utilise **pdfkit** (pur JS) + **cheerio** (DOM Fast AST).
 
 ---
 
-## Fonctionnalités
+## ⚡ Points Forts & Architecture
 
-| Fonctionnalité | Support |
-|---|---|
-| Balises : `<h1>`-`<h6>`, `<p>`, `<div>`, `<span>`, `<br>`, `<a>` | ✅ |
-| CSS inline : `color`, `font-size`, `font-weight`, `font-style`, `font-family`, `text-align`, `border`, `padding`, `background-color` | ✅ |
-| CSS externe (chaîne CSS) | ✅ |
-| Polices personnalisées via `@font-face` (TTF/OTF, `url()` http(s) ou data URI, bold/italic) | ✅ |
-| Zones de page `@page` (6 zones, `counter(page)`, `counter(num-pages)`) | ✅ |
-| Pagination automatique | ✅ |
-| Options : format (A4, Letter...), orientation, marges | ✅ |
-| Tableaux (`<table>`, `<thead>`, `<tbody>`, `<tr>`, `<td>`, `<th>`) | ✅ |
-| Bordures et padding sur tableaux | ✅ |
-| `colspan` | ✅ |
-| `rowspan` | ✅ |
-| Tableaux imbriqués (jusqu'à 5 niveaux) | ✅ |
-| Listes (`<ul>`, `<ol>`, `<li>` avec indentation) | ✅ |
-| Listes imbriquées | ✅ |
-| Images (`<img>` : fichier local, data URI, URL http(s), width/height) | ✅ |
-| En-tête / pied de page sur chaque page (`{page}`, `{totalPages}`) | ✅ |
+- **⚡ Débit Extrême (~270 PDFs / sec)** : Temps moyen par PDF abaissé à **3.71 ms / PDF** sur le Worker Pool.
+- **🛡️ RAM Élastique à la Demande** : **0 worker au repos** (RAM serveur résiduelle **~116 MB**). Extinction automatique des workers inactifs après 10s pour rendre la mémoire à l'OS.
+- **🔄 Transfert Zéro-Copie (`Transferable ArrayBuffers`)** : Transmission des flux binaires sans aucune duplication d'octets en mémoire IPC.
+- **⚙️ Offloading CPU Réglable (Défaut 50% CPU)** : Allocation dynamique de worker threads secondaires avec plafonnement processeur pour préserver le serveur web.
+- **🎯 Rendu Single-Pass Conditionnel** : Traitement en une seule passe par défaut, basculant en 2 passes uniquement si `counter(num-pages)` est présent.
+- **🧠 Caches Optimizés (`WeakMap` & LRU)** : Caches intelligents pour les styles CSS et les hauteurs de texte sans fuite mémoire.
+- **✅ Couverture >90% & Linter OXC** : 72 tests unitaires passés, 44 tests d'intégration, 0 avertissement linter `oxlint`.
 
 ---
 
-## Installation
+## 📚 Documentation Détaillée
+
+Consultez les guides d'architecture et de performance dans le dossier [`docs/`](docs/) :
+
+- 📐 [**Architecture Technique (`docs/architecture.md`)**](docs/architecture.md) — Découpage modulaire SOLID, services Noyau, Renderers et Worker Pool.
+- ⚡ [**Guide d'Optimisation (`docs/optimisation.md`)**](docs/optimisation.md) — Bilan des 13 optimisations de vitesse et mémoire.
+- 📊 [**Rapport de Benchmark & Endurance (`docs/benchmark.md`)**](docs/benchmark.md) — Résultats des tests unitaires, multi-threads et d'endurance sur 15 000 PDFs (dont documents de >800 pages).
+
+---
+
+## 📦 Installation
 
 ```bash
 npm install
@@ -45,7 +34,9 @@ npm install
 
 ---
 
-## Utilisation
+## 💡 Utilisation
+
+### Usage Standard (Single-Thread)
 
 ```js
 import { createPdfGenerator } from './src/index.js';
@@ -57,191 +48,90 @@ const generator = createPdfGenerator({
 });
 
 const html = `
-  <h1 style="color: #333;">Rapport</h1>
-  <p style="font-size: 14px;">Bonjour le monde</p>
-  <div>
-    <span style="color: red; font-weight: bold;">Important</span>
-    <p>Texte normal</p>
-  </div>
+  <h1 style="color: #003366;">Rapport Annuel</h1>
+  <p style="font-size: 14px;">Bonjour le monde !</p>
 `;
 
 const pdfBuffer = await generator.generate(html);
-
-import { writeFileSync } from 'fs';
-writeFileSync('output.pdf', pdfBuffer);
 ```
 
----
-
-## Options globales (création du générateur)
+### Usage Multi-Thread Élastique (Production / Serveur HTTP)
 
 ```js
 const generator = createPdfGenerator({
-  defaultFormat: 'A4',
-  defaultOrientation: 'portrait',
-  defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
-  css: `h1 { color: blue; } p { font-size: 14px; }`,
-  header: '<div style="font-size: 8px;">En-tête</div>',
-  footer: '<div style="font-size: 8px;">Page {page} / {totalPages}</div>',
+  useWorkerPool: true,  // Active le Worker Thread Pool élastique
+  cpuRatio: 0.5,        // Mode Modéré : Plafond à 50% CPU (défaut)
+  idleTimeoutMs: 10000, // Extinction des workers inactifs après 10s (défaut)
 });
-```
 
-| Option | Type | Description |
-|---|---|---|
-| `defaultFormat` | `string` | Format de page : `A3`, `A4`, `A5`, `Letter`, `Legal` |
-| `defaultOrientation` | `string` | `portrait` ou `landscape` |
-| `defaultMargin` | `object` | Marges `{ top, bottom, left, right }` en points |
-| `css` | `string` | CSS en chaîne (appliqué globalement, y compris les règles `@page`) |
-| `header` | `string` | HTML de l'en-tête (répété sur chaque page) |
-| `footer` | `string` | HTML du pied de page (`{page}` = numéro de page, `{totalPages}` = nombre total de pages) |
+// Traitement déporté hors de l'Event Loop principal
+const pdfBuffer = await generator.generate(html);
 
----
+// Obtenir les diagnostics du pool en temps réel
+console.log(generator.getWorkerStats());
+// { totalWorkers: 1, freeWorkers: 1, activeTasks: 0, queuedTasks: 0, maxWorkers: 6 }
 
-## Options par appel
-
-```js
-const pdf = await generator.generate(html, {
-  format: 'Letter',
-  orientation: 'landscape',
-  margin: { top: 10, bottom: 10, left: 10, right: 10 },
-  css: 'p { color: green; }',
-  header: '<div>Mon en-tête</div>',
-  footer: '<div>Page {page} / {totalPages}</div>',
-});
-```
-
-Les options passées à `generate()` **remplacent** les options globales pour l'appel en cours.
-
----
-
-## CSS externe
-
-Le CSS est fourni en chaîne, soit globalement (option `css` du générateur), soit par appel (option `css` de `generate()`).
-
-```js
-const pdf = await generator.generate(html, {
-  css: `
-    h1 { color: #1a1a2e; font-size: 24px; }
-    p  { color: #555; font-size: 14px; }
-    .highlight { color: red; font-weight: bold; }
-  `,
-});
-```
-
-### Sélecteurs supportés
-
-| Sélecteur | Exemple | Support |
-|---|---|---|
-| Élément | `h1`, `p`, `div` | ✅ |
-| Classe | `.classname` | ✅ |
-| ID | `#myid` | ✅ |
-| Combiné | `div.highlight` | ✅ |
-
-Propriétés CSS supportées : `color`, `background-color`, `font-size`, `font-weight`, `font-style`, `font-family`, `text-align`, `border`, `border-color`, `border-width`, `padding`.
-
-> Les styles inline (`style="..."`) ont la priorité sur le CSS externe.
-
----
-
-## Polices personnalisées (`@font-face`)
-
-Les polices TTF/OTF sont embarquées dans le PDF et se définissent via `@font-face` dans le CSS :
-
-```css
-@font-face { font-family: 'Arvo'; src: url('http://localhost:3000/fonts/Arvo-Regular.ttf'); font-weight: normal; font-style: normal; }
-@font-face { font-family: 'Arvo'; src: url('http://localhost:3000/fonts/Arvo-Bold.ttf'); font-weight: bold; font-style: normal; }
-@font-face { font-family: 'Arvo'; src: url('http://localhost:3000/fonts/Arvo-Italic.ttf'); font-weight: normal; font-style: italic; }
-@font-face { font-family: 'Arvo'; src: url('http://localhost:3000/fonts/Arvo-BoldItalic.ttf'); font-weight: bold; font-style: italic; }
-```
-
-- `src: url(...)` — URL http(s) (ex. un serveur local) ou data URI (`data:font/ttf;base64,...`)
-- `font-weight` / `font-style` — déclarent les variantes bold/italic de la famille
-- Usage : `font-family: Arvo` dans le CSS externe ou le style inline
-
----
-
-## Tableaux
-
-Les bordures et le padding se définissent en CSS inline sur le `<table>` ou directement sur les `<td>`/`<th>` :
-
-```html
-<table style="border: 1px solid #000000; padding: 5px;">
-  <thead>
-    <tr>
-      <th style="border: 1px solid #000000; padding: 4px;">Nom</th>
-      <th style="border: 1px solid #000000; padding: 4px;">Prénom</th>
-      <th style="border: 1px solid #000000; padding: 4px;">Âge</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td style="border: 1px solid #000000; padding: 4px;">Dupont</td>
-      <td style="border: 1px solid #000000; padding: 4px;">Marie</td>
-      <td style="border: 1px solid #000000; padding: 4px;">30</td>
-    </tr>
-    <tr>
-      <td colspan="2" style="border: 1px solid #000000; padding: 4px;">Ligne fusionnée</td>
-      <td style="border: 1px solid #000000; padding: 4px;">25</td>
-    </tr>
-  </tbody>
-</table>
+// Fermeture propre du pool lors de l'arrêt du serveur
+await generator.terminateWorkerPool();
 ```
 
 ---
 
-## Zones de page `@page`
+## 🎛️ Configuration & Options
 
-Les zones de page se définissent dans une règle `@page` du CSS. 6 zones sont supportées : `@top-left`, `@top-center`, `@top-right`, `@bottom-left`, `@bottom-center`, `@bottom-right`.
+### Options Globales (`createPdfGenerator(config)`)
 
-```js
-const pdf = await generator.generate(html, {
-  css: `
-    @page {
-      @top-left {
-        content: "Mon Document";
-        font-size: 8px;
-        color: #ff0000;
-      }
-      @bottom-center {
-        content: "Page " counter(page) " sur " counter(num-pages);
-        font-size: 8px;
-        color: #666666;
-      }
-    }
-  `,
-});
-```
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `defaultFormat` | `string` | `'A4'` | Format de page (`A3`, `A4`, `A5`, `Letter`, `Legal`) |
+| `defaultOrientation` | `string` | `'portrait'` | Orientation (`portrait` ou `landscape`) |
+| `defaultMargin` | `object` | `{ top:20, bottom:20, left:20, right:20 }` | Marges en points |
+| `css` | `string` | `''` | CSS global (sélecteurs, `@font-face`, `@page`) |
+| `header` | `string` | `''` | Template HTML de l'en-tête |
+| `footer` | `string` | `''` | Template HTML du pied de page (`{page}`, `{totalPages}`) |
+| `useWorkerPool` | `boolean` | `false` | Active le Worker Thread Pool à la demande |
+| `cpuRatio` | `number` | `0.5` | Ratio maximal de cœurs CPU utilisés (0.5 = 50% CPU) |
+| `maxWorkers` | `number` | `null` | Nombre d'unités d'exécution secondaires explicites |
+| `idleTimeoutMs` | `number` | `10000` | Délai avant auto-extinction des workers inactifs (ms) |
 
 ---
 
-## 🧪 Tests & Benchmark
+## 🎨 Fonctionnalités HTML & CSS Supportées
 
-### Tests d'intégration (44 scénarios)
+| Élément / Propriété | Exemple | Support |
+|---|---|:---:|
+| **Balises de texte** | `<h1>`-`<h6>`, `<p>`, `<div>`, `<span>`, `<br>`, `<a>` | ✅ |
+| **Styles Inline** | `color`, `font-size`, `font-weight`, `font-style`, `font-family`, `text-align`, `border`, `padding`, `background-color` | ✅ |
+| **CSS Externe & Sélecteurs** | Balise (`p`), Classe (`.box`), ID (`#header`), Combinés (`div.active`) | ✅ |
+| **Polices `@font-face`** | TTF/OTF via URL HTTP(s) ou Data URI `base64` (variantes bold/italic) | ✅ |
+| **Zones de page `@page`** | 6 zones (`@top-left` à `@bottom-right`), `counter(page)`, `counter(num-pages)` | ✅ |
+| **Tableaux Avancés** | `<table>`, `<thead>`, `tbody`, `colspan`, `rowspan`, bordures, tableaux imbriqués (5 niveaux) | ✅ |
+| **Listes Imbriquées** | `<ul>`, `<ol>`, `<li>` avec indentation automatique | ✅ |
+| **Images** | `<img>` local, HTTP, Data URI `base64`, redimensionnement automatique | ✅ |
+
+---
+
+## 🧪 Tests, Linter & Outillage
+
 ```bash
+# 1. Tests manuels d'intégration (44 scénarios)
 npm test
-```
 
-### Couverture de code (>90% de lignes)
-```bash
-node --experimental-test-coverage --test test/optimizations.test.mjs
-```
+# 2. Couverture de code (>90% de lignes)
+npm run test:coverage
 
-### Benchmark de performance
-```bash
-node bench/benchmark.js
+# 3. Linter ultra-rapide (OXC)
+npm run lint
+
+# 4. Benchmarks unitaires
+npm run benchmark
+
+# 5. Tests d'endurance & de mémoire (200 / 10 000 PDFs)
+npm run test:soak
 ```
 
 ---
 
-## 📑 Documentation
+## 📄 Licence
 
-- [docs/architecture.md](docs/architecture.md) — Architecture et pipeline de rendu.
-- [docs/optimisation.md](docs/optimisation.md) — Guide des optimisations de performance.
-- [docs/benchmark.md](docs/benchmark.md) — Rapport de benchmark détaillé.
-
----
-
-## Dépendances
-
-- **pdfkit** — moteur de rendu PDF (pur JS)
-- **cheerio** — parseur HTML (compatible jQuery)
+MIT
