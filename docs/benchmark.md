@@ -16,9 +16,9 @@ Mesurer les performances actuelles (**Baseline**) du module face aux nouvelles i
 
 | Scénario d'essai | Baseline (ms) | Single-Pass AST (ms) | Stack Optimisée (ms) | Gain Vitesse (%) | Mémoire Baseline (MB) | Mémoire Optimisée (MB) |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Document Texte Multi-pages (80 par.)** | 60.64 ms | 10.30 ms | 4.64 ms | **+92.4%** | 6.90 MB | 2.29 MB |
-| **Grand Tableau (100 lignes x 5 cols)** | 74.35 ms | 16.49 ms | 17.54 ms | **+76.4%** | 29.31 MB | 0.00 MB |
-| **Rapport Complet (Texte + Table + CSS)** | 70.31 ms | 13.48 ms | 12.33 ms | **+82.5%** | 61.22 MB | 0.00 MB |
+| **Document Texte Multi-pages (80 par.)** | 34.77 ms | 11.56 ms | 4.47 ms | **+87.1%** | 2.61 MB | 2.55 MB |
+| **Grand Tableau (100 lignes x 5 cols)** | 35.04 ms | 16.03 ms | 15.13 ms | **+56.8%** | 22.44 MB | 0.00 MB |
+| **Rapport Complet (Texte + Table + CSS)** | 54.10 ms | 14.53 ms | 11.22 ms | **+79.3%** | 32.15 MB | 39.37 MB |
 
 ---
 

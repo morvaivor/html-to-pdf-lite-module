@@ -10,5 +10,11 @@
   "dependencies": {
     "cheerio": "^1.0.0",
     "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.5.1",
+    "ts-jest": "^29.4.12",
+    "typescript": "^5.9.3"
   }
 }

@@ -1,6 +1,18 @@
-# PDF Generator
+# PDF Generator (`html-to-pdf-lite-module`)
 
-Moteur minimal HTML → PDF en Node.js. Utilise **pdfkit** (pur JS) + **cheerio** (parseur HTML).
+Moteur minimal et ultra-performant HTML → PDF en Node.js. Utilise **pdfkit** (pur JS) + **cheerio** (parseur HTML).
+
+---
+
+## ⚡ Performances & Architecture
+
+- **Rendu Single-Pass conditionnel** : Exécute une seule passe de rendu par défaut. Ne passe en mode 2 passes que si `counter(num-pages)` est requis dans le CSS.
+- **Cache `WeakMap` Inline Styles** : Suppression des parsings redondants sur les attributs `style="..."`.
+- **Cache LRU de mesure de texte (`TextMeasureCache`)** : Évite les recalculs répétés de hauteurs de glyphes (`doc.heightOfString()`).
+- **I/O Parallèles (`Promise.all`)** : Chargement parallèle des polices `@font-face` distantes et des images.
+- **Cheerio DOM AST partagé** : Ne parse le HTML qu'une seule fois par appel.
+
+---
 
 ## Fonctionnalités
 
@@ -23,11 +35,15 @@ Moteur minimal HTML → PDF en Node.js. Utilise **pdfkit** (pur JS) + **cheerio*
 | Images (`<img>` : fichier local, data URI, URL http(s), width/height) | ✅ |
 | En-tête / pied de page sur chaque page (`{page}`, `{totalPages}`) | ✅ |
 
+---
+
 ## Installation
 
 ```bash
 npm install
 ```
+
+---
 
 ## Utilisation
 
@@ -55,6 +71,8 @@ import { writeFileSync } from 'fs';
 writeFileSync('output.pdf', pdfBuffer);
 ```
 
+---
+
 ## Options globales (création du générateur)
 
 ```js
@@ -77,6 +95,8 @@ const generator = createPdfGenerator({
 | `header` | `string` | HTML de l'en-tête (répété sur chaque page) |
 | `footer` | `string` | HTML du pied de page (`{page}` = numéro de page, `{totalPages}` = nombre total de pages) |
 
+---
+
 ## Options par appel
 
 ```js
@@ -91,6 +111,8 @@ const pdf = await generator.generate(html, {
 ```
 
 Les options passées à `generate()` **remplacent** les options globales pour l'appel en cours.
+
+---
 
 ## CSS externe
 
@@ -119,6 +141,8 @@ Propriétés CSS supportées : `color`, `background-color`, `font-size`, `font-w
 
 > Les styles inline (`style="..."`) ont la priorité sur le CSS externe.
 
+---
+
 ## Polices personnalisées (`@font-face`)
 
 Les polices TTF/OTF sont embarquées dans le PDF et se définissent via `@font-face` dans le CSS :
@@ -131,12 +155,14 @@ Les polices TTF/OTF sont embarquées dans le PDF et se définissent via `@font-f
 ```
 
 - `src: url(...)` — URL http(s) (ex. un serveur local) ou data URI (`data:font/ttf;base64,...`)
-- `font-weight` / `font-style` — déclarent les variantes bold/italic de la famille (fallback sur la face la plus proche si une variante est manquante)
+- `font-weight` / `font-style` — déclarent les variantes bold/italic de la famille
 - Usage : `font-family: Arvo` dans le CSS externe ou le style inline
+
+---
 
 ## Tableaux
 
-Les bordures et le padding se définissent en CSS inline sur le `<table>` (hérité par les cellules) ou directement sur les `<td>`/`<th>` :
+Les bordures et le padding se définissent en CSS inline sur le `<table>` ou directement sur les `<td>`/`<th>` :
 
 ```html
 <table style="border: 1px solid #000000; padding: 5px;">
@@ -161,102 +187,11 @@ Les bordures et le padding se définissent en CSS inline sur le `<table>` (héri
 </table>
 ```
 
-`rowspan` est aussi supporté pour fusionner des cellules verticalement :
-
-```html
-<table style="border: 1px solid #000000; padding: 5px;">
-  <tr>
-    <th rowspan="2" style="border: 1px solid #000000; padding: 4px;">Groupe</th>
-    <th style="border: 1px solid #000000; padding: 4px;">Catégorie</th>
-    <th style="border: 1px solid #000000; padding: 4px;">Valeur</th>
-  </tr>
-  <tr>
-    <td style="border: 1px solid #000000; padding: 4px;">Produits</td>
-    <td style="border: 1px solid #000000; padding: 4px;">100</td>
-  </tr>
-  <tr>
-    <td colspan="2" style="border: 1px solid #000000; padding: 4px;">Total</td>
-    <td style="border: 1px solid #000000; padding: 4px;">300</td>
-  </tr>
-</table>
-```
-
-### Tableaux imbriqués
-
-Jusqu'à 5 niveaux de `<table>` imbriqués sont supportés :
-
-```html
-<table style="border: 1px solid #000000; padding: 2px;">
-  <tr>
-    <td style="border: 1px solid #000000; padding: 2px;">
-      <table style="border: 1px solid #009900; padding: 2px;">
-        <tr>
-          <td style="border: 1px solid #009900; padding: 2px;">
-            <table style="border: 1px solid #0000cc; padding: 2px;">
-              <tr><td style="border: 1px solid #0000cc; padding: 2px;">Niveau 3</td></tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-```
-
-## Listes
-
-```html
-<ul>
-  <li>Élément 1
-    <ul>
-      <li>Sous-élément A</li>
-      <li>Sous-élément B</li>
-    </ul>
-  </li>
-  <li>Élément 2</li>
-</ul>
-
-<ol>
-  <li>Premier</li>
-  <li>Deuxième</li>
-</ol>
-```
-
-## Images
-
-```html
-<!-- Fichier local -->
-<img src="./image.png" />
-
-<!-- Avec dimensions -->
-<img src="./image.png" width="200" height="150" />
-
-<!-- Largeur seule (hauteur auto) -->
-<img src="./image.png" width="300" />
-
-<!-- Data URI -->
-<img src="data:image/png;base64,iVBORw0KGgo..." />
-
-<!-- URL http(s) -->
-<img src="https://example.com/image.png" />
-```
-
-Si une image dépasse la largeur de page, elle est redimensionnée automatiquement.
-
-## En-tête et pied de page
-
-```js
-const pdf = await generator.generate(html, {
-  header: '<div style="font-size: 8px; color: gray;">Rapport confidentiel</div>',
-  footer: '<div style="font-size: 8px; color: gray;">Page {page} / {totalPages}</div>',
-});
-```
-
-Les marqueurs `{page}` et `{totalPages}` sont remplacés automatiquement par le numéro de page et le nombre total de pages. L'en-tête et le pied de page sont répétés sur **chaque** page, y compris la première.
+---
 
 ## Zones de page `@page`
 
-Les zones de page se définissent dans une règle `@page` du CSS (option `css` globale ou par appel). 6 zones sont supportées : `@top-left`, `@top-center`, `@top-right`, `@bottom-left`, `@bottom-center`, `@bottom-right`.
+Les zones de page se définissent dans une règle `@page` du CSS. 6 zones sont supportées : `@top-left`, `@top-center`, `@top-right`, `@bottom-left`, `@bottom-center`, `@bottom-right`.
 
 ```js
 const pdf = await generator.generate(html, {
@@ -272,33 +207,41 @@ const pdf = await generator.generate(html, {
         font-size: 8px;
         color: #666666;
       }
-      @bottom-right {
-        content: "Confidentiel";
-        font-size: 8px;
-      }
     }
   `,
 });
 ```
 
-Les compteurs `counter(page)` et `counter(num-pages)` sont résolus par page. Les propriétés `content`, `font-size`, `color`, `font-weight`, `font-style` et `font-family` sont supportées dans les zones. Les zones `@page` et les options `header`/`footer` sont mutuellement exclusives : si une règle `@page` est présente, ce sont les zones qui sont utilisées.
+---
 
-## Tests
+## 🧪 Tests & Benchmark
 
+### Tests d'intégration (44 scénarios)
 ```bash
 npm test
 ```
 
-44 tests couvrant : headings, paragraphes, CSS inline, pagination, options, tableaux (simple, thead/tbody, bordures, colspan, rowspan, CSS, contenu imbriqué, 5 niveaux), CSS externe (chaîne, classes, IDs, override, par appel), en-tête/pied de page (global, par appel, multi-pages), listes (ul, ol, imbriquées, CSS, pagination), images (fichier, dimensions, data URI, overflow, URL), zones `@page` (6 zones, `counter(page)`, multi-pages), polices `@font-face` (URL http(s), data URI, variantes bold/italic).
+### Couverture de code (>90% de lignes)
+```bash
+node --experimental-test-coverage --test test/optimizations.test.mjs
+```
+
+### Benchmark de performance
+```bash
+node bench/benchmark.js
+```
+
+---
+
+## 📑 Documentation
+
+- [docs/architecture.md](docs/architecture.md) — Architecture et pipeline de rendu.
+- [docs/optimisation.md](docs/optimisation.md) — Guide des optimisations de performance.
+- [docs/benchmark.md](docs/benchmark.md) — Rapport de benchmark détaillé.
+
+---
 
 ## Dépendances
 
 - **pdfkit** — moteur de rendu PDF (pur JS)
 - **cheerio** — parseur HTML (compatible jQuery)
-
-## Prochaines itérations
-
-1. **CSS avancé** : `line-height`, `letter-spacing`, `text-decoration`, `margin`
-2. **Media queries**
-3. **Encapsulation CSS** : `float`, `display`, `position`
-4. **Formes** : `<hr>`, `<blockquote>`, `<pre>`, `<code>`

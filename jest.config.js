@@ -10,8 +10,9 @@ export default {
       'ts-jest',
       {
         useESM: true,
+        diagnostics: false,
       },
     ],
   },
-  testMatch: ['**/test/**/*.test.ts'],
+  testMatch: ['**/test/**/*.test.ts', '**/test/**/*.test.mjs'],
 };
