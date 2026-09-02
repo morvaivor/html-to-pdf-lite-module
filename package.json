@@ -5,7 +5,9 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "test": "node test/manual-test.js"
+    "test": "node test/manual-test.js",
+    "bench": "node bench/benchmark.js",
+    "audit": "npm audit --audit-level=high"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
