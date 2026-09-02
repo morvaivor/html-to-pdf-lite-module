@@ -438,6 +438,8 @@ async function runTests() {
 
   const testImg = './output/test-image.png';
   const smallImg = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
+  mkdirSync('output', { recursive: true });
+  writeFileSync(testImg, Buffer.from(smallImg.split(',')[1], 'base64'));
 
   console.log('=== Test 29: Image from file ===');
   const pdf29 = await generator.generate(`<p>Before image</p><img src="${testImg}" /><p>After image</p>`);
