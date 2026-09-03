@@ -1,3 +1,26 @@
+// --- Pre-compiled regex constants (compiled once at module load) ---
+const FONT_FACE_REGEX = /@font-face\s*\{([^}]*)\}/g;
+const RULE_REGEX = /([^{}]+)\{([^}]*)\}/g;
+const FONT_FAMILY_REGEX = /font-family\s*:\s*([^;]+)/;
+const FONT_SRC_REGEX = /src\s*:\s*url\(\s*['"]?([^'")\s]+)['"]?\s*\)/;
+const FONT_WEIGHT_REGEX = /font-weight\s*:\s*([^;]+)/;
+const FONT_STYLE_REGEX = /font-style\s*:\s*([^;]+)/;
+const WHITESPACE_REGEX = /\s+/;
+const ATTR_SELECTOR_REGEX = /\[.*?\]/g;
+const PSEUDO_SELECTOR_REGEX = /:.*?(?=[ ,{]|$)/g;
+const QUOTE_REGEX = /['"]/g;
+
+const PAGE_ZONES = [
+  '@top-left', '@top-center', '@top-right',
+  '@bottom-left', '@bottom-center', '@bottom-right',
+];
+
+// Pre-compiled zone regex map (built once at module load)
+const PAGE_ZONE_REGEXES = {};
+for (const zone of PAGE_ZONES) {
+  PAGE_ZONE_REGEXES[zone] = new RegExp(`${zone}\\s*\\{([^}]*)\\}`, 'i');
+}
+
 function stripPageBlocks(css) {
   let result = css;
 
@@ -52,15 +75,15 @@ function parseFontFaces(css) {
   if (!css || typeof css !== 'string') return [];
 
   const faces = [];
-  const regex = /@font-face\s*\{([^}]*)\}/g;
+  FONT_FACE_REGEX.lastIndex = 0;
   let match;
 
-  while ((match = regex.exec(css)) !== null) {
+  while ((match = FONT_FACE_REGEX.exec(css)) !== null) {
     const block = match[1];
-    const family = block.match(/font-family\s*:\s*([^;]+)/)?.[1]?.replace(/['"]/g, '').trim();
-    const urlMatch = block.match(/src\s*:\s*url\(\s*['"]?([^'")]+)['"]?\s*\)/);
-    const weight = block.match(/font-weight\s*:\s*([^;]+)/)?.[1]?.trim() || 'normal';
-    const fontStyle = block.match(/font-style\s*:\s*([^;]+)/)?.[1]?.trim() || 'normal';
+    const family = block.match(FONT_FAMILY_REGEX)?.[1]?.replace(QUOTE_REGEX, '').trim();
+    const urlMatch = block.match(FONT_SRC_REGEX);
+    const weight = block.match(FONT_WEIGHT_REGEX)?.[1]?.trim() || 'normal';
+    const fontStyle = block.match(FONT_STYLE_REGEX)?.[1]?.trim() || 'normal';
 
     if (!family || !urlMatch) continue;
 
@@ -81,23 +104,22 @@ function parseCssRules(css) {
   const cssWithoutPage = stripFontFaceBlocks(stripPageBlocks(css));
 
   const rules = [];
-  const ruleRegex = /([^{}]+)\{([^}]*)\}/g;
+  RULE_REGEX.lastIndex = 0;
   let match;
 
-  while ((match = ruleRegex.exec(cssWithoutPage)) !== null) {
+  while ((match = RULE_REGEX.exec(cssWithoutPage)) !== null) {
     const selector = match[1].trim();
     const declarations = match[2].trim();
 
     const properties = {};
     const decls = declarations.split(';');
     for (const decl of decls) {
-      const parts = decl.split(':').map(s => s.trim());
-      if (parts.length >= 2) {
-        const prop = parts[0].trim();
-        const value = parts.slice(1).join(':').trim();
-        if (prop && value) {
-          properties[prop] = value;
-        }
+      const colonIdx = decl.indexOf(':');
+      if (colonIdx === -1) continue;
+      const prop = decl.substring(0, colonIdx).trim();
+      const value = decl.substring(colonIdx + 1).trim();
+      if (prop && value) {
+        properties[prop] = value;
       }
     }
 
@@ -111,7 +133,7 @@ function parseCssRules(css) {
 
 function elementMatchesSelector(element, selector) {
   const tagName = element.name || '';
-  const classes = (element.attribs.class || '').split(/\s+/).filter(Boolean);
+  const classes = (element.attribs.class || '').split(WHITESPACE_REGEX).filter(Boolean);
   const id = element.attribs.id || '';
 
   const selectors = selector.split(',').map(s => s.trim());
@@ -123,7 +145,7 @@ function elementMatchesSelector(element, selector) {
     let classMatches = [];
     let idMatch = '';
 
-    const tokens = parts.trim().split(/\s+/);
+    const tokens = parts.trim().split(WHITESPACE_REGEX);
     for (const token of tokens) {
       if (token.startsWith('#')) {
         idMatch = token.slice(1);
@@ -136,9 +158,11 @@ function elementMatchesSelector(element, selector) {
 
     if (tagMatch && tagMatch.toLowerCase() !== tagName.toLowerCase()) continue;
     if (idMatch && idMatch !== id) continue;
+    let classMatch = true;
     for (const cls of classMatches) {
-      if (!classes.includes(cls)) continue;
+      if (!classes.includes(cls)) { classMatch = false; break; }
     }
+    if (!classMatch) continue;
     return true;
   }
 
@@ -153,27 +177,28 @@ function applyCssToElements($, css) {
   for (const rule of rules) {
     const selector = rule.selector;
 
+    // Hoist: serialize the style string ONCE per rule, not per element
+    const newStyle = Object.entries(rule.properties)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('; ');
+
+    if (!newStyle) continue;
+
     try {
       const elements = $(selector);
       elements.each((_index, element) => {
         if (element.type === 'tag') {
           const existingStyle = element.attribs.style || '';
-          const newStyle = Object.entries(rule.properties)
-            .map(([key, value]) => `${key}: ${value}`)
-            .join('; ');
-
-          if (newStyle) {
-            element.attribs.style = existingStyle
-              ? newStyle + '; ' + existingStyle
-              : newStyle;
-          }
+          element.attribs.style = existingStyle
+            ? newStyle + '; ' + existingStyle
+            : newStyle;
         }
       });
     } catch {
       try {
         const cleanSelector = selector
-          .replace(/\[.*?\]/g, '')
-          .replace(/:.*?(?=[ ,{]|$)/g, '')
+          .replace(ATTR_SELECTOR_REGEX, '')
+          .replace(PSEUDO_SELECTOR_REGEX, '')
           .trim();
 
         if (cleanSelector) {
@@ -181,15 +206,9 @@ function applyCssToElements($, css) {
           elements.each((_index, element) => {
             if (element.type === 'tag') {
               const existingStyle = element.attribs.style || '';
-              const newStyle = Object.entries(rule.properties)
-                .map(([key, value]) => `${key}: ${value}`)
-                .join('; ');
-
-              if (newStyle) {
-                element.attribs.style = existingStyle
-                  ? newStyle + '; ' + existingStyle
-                  : newStyle;
-              }
+              element.attribs.style = existingStyle
+                ? newStyle + '; ' + existingStyle
+                : newStyle;
             }
           });
         }
@@ -199,11 +218,6 @@ function applyCssToElements($, css) {
     }
   }
 }
-
-const PAGE_ZONES = [
-  '@top-left', '@top-center', '@top-right',
-  '@bottom-left', '@bottom-center', '@bottom-right',
-];
 
 function extractPageBlock(css) {
   const idx = css.indexOf('@page');
@@ -233,20 +247,19 @@ function parsePageRule(css) {
   const zones = {};
 
   for (const zone of PAGE_ZONES) {
-    const zoneRegex = new RegExp(`${zone}\\s*\\{([^}]*)\\}`, 'i');
+    const zoneRegex = PAGE_ZONE_REGEXES[zone];
     const zoneMatch = zoneRegex.exec(pageBody);
     if (zoneMatch) {
       const declarations = zoneMatch[1].trim();
       const properties = {};
       const decls = declarations.split(';');
       for (const decl of decls) {
-        const parts = decl.split(':').map(s => s.trim());
-        if (parts.length >= 2) {
-          const prop = parts[0].trim();
-          const value = parts.slice(1).join(':').trim();
-          if (prop && value) {
-            properties[prop] = value;
-          }
+        const colonIdx = decl.indexOf(':');
+        if (colonIdx === -1) continue;
+        const prop = decl.substring(0, colonIdx).trim();
+        const value = decl.substring(colonIdx + 1).trim();
+        if (prop && value) {
+          properties[prop] = value;
         }
       }
       if (Object.keys(properties).length > 0) {
