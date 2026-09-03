@@ -29,6 +29,10 @@ for (const zone of PAGE_ZONES) {
   PAGE_ZONE_REGEXES[zone] = new RegExp(`${zone}\\s*\\{([^}]*)\\}`, 'i');
 }
 
+/**
+ * Supprime les blocs @page du CSS pour le parsing des règles normales.
+ * Utilise un compteur de profondeur d'accolades équilibrées pour éviter les ReDoS regex.
+ */
 export function stripPageBlocks(css: string): string {
   let result = css;
 
@@ -39,13 +43,14 @@ export function stripPageBlocks(css: string): string {
     const braceStart = result.indexOf('{', idx);
     if (braceStart === -1) break;
 
+    // Compte la profondeur imbriquée d'accolades pour identifier la fin exacte du bloc
     let depth = 0;
     let blockEnd = -1;
-    for (let i = braceStart; i < result.length; i++) {
-      if (result[i] === '{') depth++;
-      if (result[i] === '}') depth--;
+    for (let charIndex = braceStart; charIndex < result.length; charIndex++) {
+      if (result[charIndex] === '{') depth++;
+      if (result[charIndex] === '}') depth--;
       if (depth === 0) {
-        blockEnd = i;
+        blockEnd = charIndex;
         break;
       }
     }
@@ -69,11 +74,11 @@ export function stripFontFaceBlocks(css: string): string {
 
     let depth = 0;
     let blockEnd = -1;
-    for (let i = braceStart; i < result.length; i++) {
-      if (result[i] === '{') depth++;
-      if (result[i] === '}') depth--;
+    for (let charIndex = braceStart; charIndex < result.length; charIndex++) {
+      if (result[charIndex] === '{') depth++;
+      if (result[charIndex] === '}') depth--;
       if (depth === 0) {
-        blockEnd = i;
+        blockEnd = charIndex;
         break;
       }
     }
@@ -240,11 +245,11 @@ export function extractPageBlock(css: string): string | null {
 
   let depth = 0;
   let blockEnd = -1;
-  for (let i = braceStart; i < css.length; i++) {
-    if (css[i] === '{') depth++;
-    if (css[i] === '}') depth--;
+  for (let charIndex = braceStart; charIndex < css.length; charIndex++) {
+    if (css[charIndex] === '{') depth++;
+    if (css[charIndex] === '}') depth--;
     if (depth === 0) {
-      blockEnd = i;
+      blockEnd = charIndex;
       break;
     }
   }

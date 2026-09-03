@@ -25,8 +25,8 @@ export function renderList(
   let itemIndex = 0;
 
   const items: Element[] = [];
-  for (let i = 0; i < element.children.length; i++) {
-    const child = element.children[i];
+  for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
+    const child = element.children[childIndex];
     if (child && child.type === 'tag' && (child as Element).name === 'li') {
       items.push(child as Element);
     }
@@ -50,8 +50,8 @@ export function renderList(
 
     const nestedLists: Element[] = [];
     const textChildren: ChildNode[] = [];
-    for (let i = 0; i < item.children.length; i++) {
-      const child = item.children[i];
+    for (let childIndex = 0; childIndex < item.children.length; childIndex++) {
+      const child = item.children[childIndex];
       if (!child) continue;
       if (child.type === 'tag' && ((child as Element).name === 'ul' || (child as Element).name === 'ol')) {
         nestedLists.push(child as Element);
@@ -61,17 +61,17 @@ export function renderList(
     }
 
     let text = '';
-    for (let i = 0; i < textChildren.length; i++) {
-      const c = textChildren[i];
-      if (!c) continue;
-      if (c.type === 'text') {
-        text += (c as any).data ?? '';
-      } else if (c.type === 'tag') {
-        const grandChildren = (c as Element).children;
-        for (let j = 0; j < grandChildren.length; j++) {
-          const gc = grandChildren[j];
-          if (gc && gc.type === 'text') {
-            text += (gc as any).data ?? '';
+    for (let childIndex = 0; childIndex < textChildren.length; childIndex++) {
+      const currentChild = textChildren[childIndex];
+      if (!currentChild) continue;
+      if (currentChild.type === 'text') {
+        text += (currentChild as any).data ?? '';
+      } else if (currentChild.type === 'tag') {
+        const grandChildren = (currentChild as Element).children;
+        for (let grandChildIndex = 0; grandChildIndex < grandChildren.length; grandChildIndex++) {
+          const grandChild = grandChildren[grandChildIndex];
+          if (grandChild && grandChild.type === 'text') {
+            text += (grandChild as any).data ?? '';
           }
         }
       }

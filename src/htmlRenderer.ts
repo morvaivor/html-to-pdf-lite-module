@@ -116,6 +116,8 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
 
   let currentPage = 0;
 
+  // Intercepte doc.addPage() pour injecter dynamiquement les en-têtes,
+  // pieds de page et zones CSS @page sur chaque nouvelle page créée
   const originalAddPage = doc.addPage.bind(doc);
   doc.addPage = function (opts: any = {}) {
     originalAddPage({ ...opts, margin: 0 });

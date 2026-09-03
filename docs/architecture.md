@@ -19,7 +19,7 @@ src/
 ├── renderers/
 │   ├── registry.ts              # Strategy Pattern : Element Handler Registry
 │   ├── textRenderer.ts          # Rendu des paragraphes et nœuds de texte
-│   ├── tableRenderer.ts         # Rendu des tableaux, grilles, colspan, rowspan
+│   ├── tableRenderer.ts         # Moteur de tableau (matrice 2D, colspan/rowspan, pagination atomique)
 │   ├── listRenderer.ts          # Rendu des listes ul, ol, li
 │   ├── imageRenderer.ts         # Rendu sécurisé des images (local cwd, HTTP, base64)
 │   └── headerFooterRenderer.ts  # Rendu des zones @page et templates header/footer
@@ -27,6 +27,24 @@ src/
     ├── pdfWorker.ts             # Handler exécuté sur les Worker Threads secondaires (Zero-Copy)
     └── workerPool.ts            # Gestionnaire du pool élastique à la demande (Dynamic Scale Up/Down)
 ```
+
+---
+
+## 🔬 Algorithmes Clés & Modules Complexes
+
+### 1. Rendu des Tableaux (`renderers/tableRenderer.ts`)
+Le moteur de tableau résout un problème géométrique complexe :
+- **Matrice 2D virtuelle (`gridCells`)** : chaque ligne calcule la première colonne libre disponible en propageant les cellules des lignes supérieures qui ont un `rowspan` actif.
+- **Pagination Atomique (`blocks`)** : regroupe les lignes reliées par des `rowspan` en "blocs insécables". Si le bloc dépasse l'espace restant sur la page courante (`doc.y + blockHeight > layout.pageBottom`), un saut de page est effectué avant d'entamer le bloc, évitant de couper une cellule multi-lignes en deux.
+- **Tableaux Imbriqués Récursifs** : calcule récursivement la hauteur des sous-tableaux imbriqués pour ajuster la hauteur totale de la cellule parente.
+
+### 2. Pipeline de Rendu & Monkey-Patching (`htmlRenderer.ts`)
+- **Single-Pass AST & Shared DOM** : l'arbre Cheerio n'est parsé qu'une fois.
+- **Hook Réactif `doc.addPage()`** : la méthode native de PDFKit est interceptée pour injecter automatiquement sur chaque page générée les en-têtes, pieds de page, ainsi que les 6 zones `@page` du CSS (`@top-left`, `@bottom-center`, etc.).
+- **Passage Conditionnel en 2 Passes** : si et seulement si `counter(num-pages)` est détecté dans le CSS, une passe préliminaire rapide sans écriture buffer (`countPages`) est exécutée pour connaître le nombre total de pages à l'avance.
+
+### 3. Analyse CSS sans Risque ReDoS (`cssParser.ts`)
+- **Compteur de Profondeur d'Accolades (`depth`)** : l'extraction des blocs `@page` et `@font-face` s'effectue par comptage itératif d'accolades équilibrées plutôt que par des expressions régulières avec quantification imbriquée, éliminant tout risque de blocage ReDoS.
 
 ---
 
