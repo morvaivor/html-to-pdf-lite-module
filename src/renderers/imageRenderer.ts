@@ -1,43 +1,46 @@
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { decodeDataUri, fetchRemoteResource, readLocalFile } from '../core/networkSecurity.js';
+import type { TextStyle, RenderOptions } from '../types.js';
+import type { PageLayout } from '../core/PageLayout.js';
+import type { TextMeasureCache } from '../core/cacheManager.js';
+import type { Element } from 'domhandler';
 
-export async function loadImage(src, imageCache) {
+export async function loadImage(src: string, imageCache: Map<string, Buffer>): Promise<Buffer | undefined> {
   if (imageCache.has(src)) return imageCache.get(src);
 
-  let buffer;
+  let buffer: Buffer | undefined;
   if (src.startsWith('data:')) {
-    const match = src.match(/base64,(.*)/);
-    if (match) {
-      buffer = Buffer.from(match[1], 'base64');
-    }
+    buffer = decodeDataUri(src);
   } else if (src.startsWith('http://') || src.startsWith('https://')) {
-    const response = await fetch(src);
-    const arrayBuffer = await response.arrayBuffer();
-    buffer = Buffer.from(arrayBuffer);
+    buffer = await fetchRemoteResource(src);
   } else {
-    const fullPath = resolve(src);
-    if (fullPath.startsWith(process.cwd())) {
-      buffer = readFileSync(fullPath);
-    } else {
-      buffer = readFileSync(src);
-    }
+    buffer = readLocalFile(src);
   }
 
   if (buffer) imageCache.set(src, buffer);
   return buffer;
 }
 
-export function renderImage(doc, element, parentStyle, options, layout, textCache, fontAliasSet, imageCache) {
+export function renderImage(
+  doc: PDFKit.PDFDocument,
+  element: Element,
+  _parentStyle: TextStyle,
+  _options: RenderOptions,
+  layout: PageLayout,
+  _textCache: TextMeasureCache,
+  _fontAliasSet: Set<string>,
+  imageCache: Map<string, Buffer>,
+): Promise<void> {
   const attribs = element.attribs || {};
-  const src = attribs.src || '';
-  const imgWidth = parseInt(attribs.width, 10) || 0;
-  const imgHeight = parseInt(attribs.height, 10) || 0;
+  const src = attribs['src'] || '';
+  const imgWidth = parseInt(attribs['width'] ?? '', 10) || 0;
+  const imgHeight = parseInt(attribs['height'] ?? '', 10) || 0;
   const spacing = 8;
 
   if (!src) return Promise.resolve();
 
-  return loadImage(src, imageCache).then(imgBuffer => {
-    const img = doc.openImage(imgBuffer);
+  return loadImage(src, imageCache).then((imgBuffer) => {
+    if (!imgBuffer) return;
+    const img = (doc as any).openImage(imgBuffer);
 
     let renderWidth = imgWidth || img.width;
     let renderHeight = imgHeight || img.height;

@@ -1,9 +1,22 @@
 import { parseInlineStyle } from '../core/cacheManager.js';
 import { resolveFontFamily } from '../core/fontManager.js';
+import type { TextStyle, RenderOptions } from '../types.js';
+import type { PageLayout } from '../core/PageLayout.js';
+import type { TextMeasureCache } from '../core/cacheManager.js';
+import type { Element, ChildNode } from 'domhandler';
 
-const FONT_SIZES_LI = 12;
+const FONT_SIZES_LI: number = 12;
 
-export function renderList(doc, element, parentStyle, options, depth, layout, textCache, fontAliasSet) {
+export function renderList(
+  doc: PDFKit.PDFDocument,
+  element: Element,
+  parentStyle: TextStyle,
+  options: RenderOptions,
+  depth: number,
+  layout: PageLayout,
+  textCache: TextMeasureCache,
+  fontAliasSet: Set<string>,
+): void {
   const isOrdered = element.name === 'ol';
   const indent = depth * 20;
   const itemSpacing = 4;
@@ -11,15 +24,17 @@ export function renderList(doc, element, parentStyle, options, depth, layout, te
 
   let itemIndex = 0;
 
-  const items = [];
+  const items: Element[] = [];
   for (let i = 0; i < element.children.length; i++) {
     const child = element.children[i];
-    if (child.type === 'tag' && child.name === 'li') items.push(child);
+    if (child && child.type === 'tag' && (child as Element).name === 'li') {
+      items.push(child as Element);
+    }
   }
 
   for (const item of items) {
     const inlineStyle = parseInlineStyle(item);
-    const itemStyle = {
+    const itemStyle: TextStyle = {
       ...parentStyle,
       ...inlineStyle,
       fontSize: inlineStyle.fontSize ?? fontSize,
@@ -33,12 +48,13 @@ export function renderList(doc, element, parentStyle, options, depth, layout, te
 
     const listContentWidth = layout.contentWidth - indent - (isOrdered ? 20 : 10);
 
-    const nestedLists = [];
-    const textChildren = [];
+    const nestedLists: Element[] = [];
+    const textChildren: ChildNode[] = [];
     for (let i = 0; i < item.children.length; i++) {
       const child = item.children[i];
-      if (child.type === 'tag' && (child.name === 'ul' || child.name === 'ol')) {
-        nestedLists.push(child);
+      if (!child) continue;
+      if (child.type === 'tag' && ((child as Element).name === 'ul' || (child as Element).name === 'ol')) {
+        nestedLists.push(child as Element);
       } else {
         textChildren.push(child);
       }
@@ -47,23 +63,27 @@ export function renderList(doc, element, parentStyle, options, depth, layout, te
     let text = '';
     for (let i = 0; i < textChildren.length; i++) {
       const c = textChildren[i];
-      if (c.type === 'text') text += c.data;
-      else if (c.type === 'tag') {
-        for (let j = 0; j < c.children.length; j++) {
-          if (c.children[j].type === 'text') text += c.children[j].data;
+      if (!c) continue;
+      if (c.type === 'text') {
+        text += (c as any).data ?? '';
+      } else if (c.type === 'tag') {
+        const grandChildren = (c as Element).children;
+        for (let j = 0; j < grandChildren.length; j++) {
+          const gc = grandChildren[j];
+          if (gc && gc.type === 'text') {
+            text += (gc as any).data ?? '';
+          }
         }
       }
     }
     text = text.trim();
 
-    const textHeight = text
-      ? textCache.measure(doc, text, fontFamily, itemFontSize, listContentWidth)
-      : 0;
+    const textHeight = text ? textCache.measure(doc, text, fontFamily, itemFontSize, listContentWidth) : 0;
 
     const lineHeight = Math.max(textHeight, itemFontSize) + itemSpacing;
 
     if (doc.y + lineHeight > layout.pageBottom) {
-      doc.addPage({ size: options?.format || layout.format, layout: layout.orientation, margin: 0 });
+      doc.addPage({ size: options.format || layout.format, layout: layout.orientation, margin: 0 });
       doc.y = layout.contentTop;
       doc.x = layout.leftMargin;
     }

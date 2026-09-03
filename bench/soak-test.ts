@@ -8,7 +8,7 @@ function getHeapMB() {
 
 async function runSoakTest() {
   console.log('====================================================');
-  console.log('🔥 TEST D\'ENDURANCE ET DE LEAK MÉMOIRE (SOAK TEST)');
+  console.log("🔥 TEST D'ENDURANCE ET DE LEAK MÉMOIRE (SOAK TEST)");
   console.log('====================================================\n');
 
   const generator = createPdfGenerator();
@@ -48,11 +48,13 @@ async function runSoakTest() {
     const currentMem = getHeapMB();
     timings.push(avgTimePerDoc);
 
-    console.log(`  Lot ${(batch + 1).toString().padStart(2)}/${TOTAL_RUNS / BATCH_SIZE} | Temps moy/doc : ${avgTimePerDoc.toFixed(2)} ms | Mémoire Heap : ${currentMem.toFixed(2)} MB`);
+    console.log(
+      `  Lot ${(batch + 1).toString().padStart(2)}/${TOTAL_RUNS / BATCH_SIZE} | Temps moy/doc : ${avgTimePerDoc.toFixed(2)} ms | Mémoire Heap : ${currentMem.toFixed(2)} MB`,
+    );
   }
 
   console.log('\n----------------------------------------------------');
-  console.log('📊 RÉSULTATS DU TEST D\'ENDURANCE');
+  console.log("📊 RÉSULTATS DU TEST D'ENDURANCE");
   console.log('----------------------------------------------------');
   console.log(`  Premier lot (0-20)   : ${timings[0].toFixed(2)} ms/doc`);
   console.log(`  Dernier lot (180-200): ${timings[timings.length - 1].toFixed(2)} ms/doc`);
@@ -61,12 +63,18 @@ async function runSoakTest() {
   console.log(`  Dérive de vitesse   : ${driftPct >= 0 ? '+' : ''}${driftPct.toFixed(1)}%`);
 
   const endMem = getHeapMB();
-  console.log(`  Variation Mémoire   : ${startMem.toFixed(2)} MB ➔ ${endMem.toFixed(2)} MB (Delta : ${(endMem - startMem).toFixed(2)} MB)`);
+  console.log(
+    `  Variation Mémoire   : ${startMem.toFixed(2)} MB ➔ ${endMem.toFixed(2)} MB (Delta : ${(endMem - startMem).toFixed(2)} MB)`,
+  );
 
-  if (Math.abs(driftPct) < 20 && (endMem - startMem) < 15) {
+  // driftPct > 0 means slowdown; driftPct < 0 means speedup (JIT warming up)
+  const isSlowdown = driftPct > 20;
+  const isMemoryLeak = endMem - startMem > 15;
+
+  if (!isSlowdown && !isMemoryLeak) {
     console.log('\n✅ SUCCÈS : Aucune dégradation de performance ni fuite mémoire détectée sur 200 générations.');
   } else {
-    console.warn('\n⚠️ AVERTISSEMENT : Possible dérive constatée.');
+    console.warn('\n⚠️ AVERTISSEMENT : Possible dégradation constatée.');
   }
 }
 

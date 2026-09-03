@@ -1,4 +1,6 @@
-const DEFAULT_STYLE = {
+import type { TextStyle } from '../types.js';
+
+const DEFAULT_STYLE: TextStyle = {
   color: '#000000',
   fontSize: 12,
   bold: false,
@@ -10,12 +12,15 @@ const DEFAULT_STYLE = {
  * LRU Cache for PDFKit string height calculations.
  */
 export class TextMeasureCache {
-  constructor(maxSize = 512) {
-    this.cache = new Map();
+  cache: Map<string, number>;
+  maxSize: number;
+
+  constructor(maxSize: number = 512) {
+    this.cache = new Map<string, number>();
     this.maxSize = maxSize;
   }
 
-  measure(doc, text, fontFamily, fontSize, maxWidth) {
+  measure(doc: PDFKit.PDFDocument, text: string, fontFamily: string, fontSize: number, maxWidth: number): number {
     const key = `${fontFamily}|${fontSize}|${maxWidth}|${text.length > 80 ? text.substring(0, 80) + text.length : text}`;
     const cached = this.cache.get(key);
     if (cached !== undefined) return cached;
@@ -25,35 +30,37 @@ export class TextMeasureCache {
 
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
     }
     this.cache.set(key, height);
     return height;
   }
 
-  clear() {
+  clear(): void {
     this.cache.clear();
   }
 }
 
 // WeakMap inline style cache
-const _styleCache = new WeakMap();
+const _styleCache = new WeakMap<{ attribs?: { style?: string } }, Partial<TextStyle>>();
 
 /**
  * Parses inline CSS style attributes into an object, using a WeakMap cache.
  */
-export function parseInlineStyle(element) {
+export function parseInlineStyle(element: { attribs?: { style?: string } }): Partial<TextStyle> {
   const cached = _styleCache.get(element);
   if (cached !== undefined) return cached;
 
   const styleAttr = element.attribs?.style;
   if (!styleAttr) {
-    const empty = {};
+    const empty: Partial<TextStyle> = {};
     _styleCache.set(element, empty);
     return empty;
   }
 
-  const style = {};
+  const style: Partial<TextStyle> = {};
   const rules = styleAttr.split(';');
 
   for (const rule of rules) {
@@ -79,9 +86,11 @@ export function parseInlineStyle(element) {
       case 'font-style':
         style.italic = value === 'italic';
         break;
-      case 'font-family':
-        style.fontFamily = value.split(',')[0].replace(/['"]/g, '').trim();
+      case 'font-family': {
+        const family = value.split(',')[0];
+        style.fontFamily = family ? family.replace(/['"]/g, '').trim() : DEFAULT_STYLE.fontFamily;
         break;
+      }
       case 'border':
         style.border = value;
         break;
@@ -95,7 +104,7 @@ export function parseInlineStyle(element) {
         style.padding = parseInt(value.replace('px', ''), 10) || 0;
         break;
       case 'text-align':
-        style.textAlign = value;
+        style.textAlign = value as TextStyle['textAlign'];
         break;
     }
   }

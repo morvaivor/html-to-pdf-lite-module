@@ -50,7 +50,9 @@ async function runControlledParallel15kTest() {
   const workerCount = generator.getMaxWorkers();
   // Senior Optimization: Optimal concurrency queue = maxWorkers * 2 (prevents RSS memory spikes)
   const OPTIMAL_CONCURRENCY = workerCount * 2;
-  console.log(`📌 Worker Pool : ${workerCount} workers (80% CPU) | Concourrance régulée : ${OPTIMAL_CONCURRENCY} tâches max en RAM\n`);
+  console.log(
+    `📌 Worker Pool : ${workerCount} workers (80% CPU) | Concourrance régulée : ${OPTIMAL_CONCURRENCY} tâches max en RAM\n`,
+  );
 
   const TOTAL_RUNS = 15000;
   const startOverall = performance.now();
@@ -60,7 +62,7 @@ async function runControlledParallel15kTest() {
 
   for (let i = 0; i < TOTAL_RUNS; i += OPTIMAL_CONCURRENCY) {
     const tasks = [];
-    for (let j = 0; j < OPTIMAL_CONCURRENCY && (i + j) < TOTAL_RUNS; j++) {
+    for (let j = 0; j < OPTIMAL_CONCURRENCY && i + j < TOTAL_RUNS; j++) {
       const docId = i + j + 1;
       const isHeavy = docId % 250 === 0;
       const html = createHtmlDocument(docId, isHeavy);
@@ -77,7 +79,9 @@ async function runControlledParallel15kTest() {
     if (completed % 1500 === 0 || completed >= TOTAL_RUNS) {
       const mem = getMemoryStats();
       const percent = ((completed / TOTAL_RUNS) * 100).toFixed(0);
-      console.log(`  Progrès : ${completed.toString().padStart(5)}/${TOTAL_RUNS} (${percent.padStart(3)}%) | Heap : ${mem.heapMB} MB | Process RSS : ${mem.rssMB} MB`);
+      console.log(
+        `  Progrès : ${completed.toString().padStart(5)}/${TOTAL_RUNS} (${percent.padStart(3)}%) | Heap : ${mem.heapMB} MB | Process RSS : ${mem.rssMB} MB`,
+      );
     }
   }
 

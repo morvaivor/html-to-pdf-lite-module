@@ -1,25 +1,52 @@
 {
   "name": "pdf-generator",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Minimal HTML to PDF generator using pdfkit + cheerio",
-  "main": "src/index.js",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "MIGRATION.md"
+  ],
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "license": "MIT",
   "scripts": {
-    "test": "node test/manual-test.js",
-    "test:coverage": "node --experimental-test-coverage --test test/optimizations.test.mjs test/workerPool.test.mjs",
-    "lint": "oxlint src",
-    "benchmark": "node bench/benchmark.js",
-    "test:soak": "node --expose-gc bench/soak-test.js"
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt --write src test bench",
+    "format:check": "oxfmt --check src test bench",
+    "test": "tsx test/manual-test.ts",
+    "test:coverage": "node --import tsx --experimental-test-coverage --test test/optimizations.test.ts test/workerPool.test.ts",
+    "benchmark": "tsx bench/benchmark.ts",
+    "test:soak": "tsx --expose-gc bench/soak-test.ts",
+    "test:soak:parallel": "tsx bench/soak-test-15k-parallel.ts",
+    "test:soak:heavy": "tsx bench/soak-test-15k-heavy.ts",
+    "prepublishOnly": "npm run typecheck && npm run build"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
     "pdfkit": "^0.15.0"
   },
   "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "jest": "^30.5.1",
+    "@types/pdfkit": "^0.17.6",
+    "domhandler": "^6.0.1",
+    "oxfmt": "^0.66.0",
     "oxlint": "^1.81.0",
-    "ts-jest": "^29.4.12",
+    "tsdown": "^0.22.14",
+    "tsx": "^4.23.13",
     "typescript": "^5.9.3"
   }
 }

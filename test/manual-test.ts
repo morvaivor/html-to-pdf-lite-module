@@ -1,5 +1,6 @@
+process.env['NODE_ENV'] = 'test';
 import { createPdfGenerator } from '../src/index.js';
-import { writeFileSync, readFileSync, mkdirSync } from 'fs';
+import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 
 const generator = createPdfGenerator({
   defaultFormat: 'A4',
@@ -7,7 +8,9 @@ const generator = createPdfGenerator({
   defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
 });
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 let fileIdx = 0;
 
@@ -66,7 +69,10 @@ async function runTests() {
   console.log('=== Test 4: Pagination ===');
   let content = '<h1>Rapport Long</h1>';
   for (let i = 0; i < 50; i++) {
-    content += '<p>Paragraphe ' + i + ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>';
+    content +=
+      '<p>Paragraphe ' +
+      i +
+      ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>';
   }
   const pdf4 = await generator.generate(content);
   console.log('  Buffer size: ' + pdf4.length + ' bytes');
@@ -254,15 +260,18 @@ async function runTests() {
     defaultOrientation: 'portrait',
     defaultMargin: { top: 20, bottom: 20, left: 20, right: 20 },
   });
-  const pdf17 = await generatorNoCSS.generate(`
+  const pdf17 = await generatorNoCSS.generate(
+    `
     <h1>Titre</h1>
     <p>Paragraphe</p>
-  `, {
-    css: `
+  `,
+    {
+      css: `
       h1 { color: #cc0000; font-size: 26px; }
       p { color: #006600; font-size: 16px; }
     `,
-  });
+    },
+  );
   console.log('  Buffer size: ' + pdf17.length + ' bytes');
   writeFileSync('output/test17-css-per-call.pdf', pdf17);
   console.log('  Saved output/test17-css-per-call.pdf\n');
@@ -309,7 +318,8 @@ async function runTests() {
   });
   let content20 = '<h1>Rapport Complet</h1>';
   for (let i = 0; i < 40; i++) {
-    content20 += '<p>Paragraphe ' + i + ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam.</p>';
+    content20 +=
+      '<p>Paragraphe ' + i + ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam.</p>';
   }
   const pdf20 = await generatorBoth.generate(content20);
   console.log('  Buffer size: ' + pdf20.length + ' bytes');
@@ -428,7 +438,10 @@ async function runTests() {
   console.log('=== Test 28: List with long items (pagination) ===');
   let list28 = '<ul>';
   for (let i = 0; i < 50; i++) {
-    list28 += '<li>Élement ' + i + ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt.</li>';
+    list28 +=
+      '<li>Élement ' +
+      i +
+      ' - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt.</li>';
   }
   list28 += '</ul>';
   const pdf28 = await generator.generate(list28);
@@ -437,7 +450,8 @@ async function runTests() {
   console.log('  Saved output/test28-list-pagination.pdf\n');
 
   const testImg = './output/test-image.png';
-  const smallImg = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
+  const smallImg =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
   mkdirSync('output', { recursive: true });
   writeFileSync(testImg, Buffer.from(smallImg.split(',')[1], 'base64'));
 
@@ -466,13 +480,17 @@ async function runTests() {
   console.log('  Saved output/test32-image-overflow.pdf\n');
 
   console.log('=== Test 33: Image with data URI (small) ===');
-  const pdf33 = await generator.generate(`<p>Small inline image:</p><img src="${smallImg}" width="50" height="50" /><p>Done</p>`);
+  const pdf33 = await generator.generate(
+    `<p>Small inline image:</p><img src="${smallImg}" width="50" height="50" /><p>Done</p>`,
+  );
   console.log('  Buffer size: ' + pdf33.length + ' bytes');
   await savePdf('output/test33-image-data-uri.pdf', pdf33);
   console.log('  Saved output/test33-image-data-uri.pdf\n');
 
   console.log('=== Test 34: Image with text mixed ===');
-  const pdf34 = await generator.generate(`<h1>Report</h1><p>Introduction with image.</p><img src="${testImg}" width="150" height="150" /><p>Conclusion.</p>`);
+  const pdf34 = await generator.generate(
+    `<h1>Report</h1><p>Introduction with image.</p><img src="${testImg}" width="150" height="150" /><p>Conclusion.</p>`,
+  );
   console.log('  Buffer size: ' + pdf34.length + ' bytes');
   await savePdf('output/test34-image-text-mixed.pdf', pdf34);
   console.log('  Saved output/test34-image-text-mixed.pdf\n');
@@ -735,7 +753,7 @@ async function runTests() {
       res.end();
     }
   });
-  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const css43 = `
     @font-face { font-family: 'Arvo'; src: url('http://127.0.0.1:${port}/Arvo-Regular.ttf'); font-weight: normal; font-style: normal; }
@@ -775,7 +793,7 @@ async function runTests() {
   console.log('\n=== All tests passed ===');
 }
 
-runTests().catch(err => {
+runTests().catch((err) => {
   console.error('Test failed:', err);
   process.exit(1);
 });

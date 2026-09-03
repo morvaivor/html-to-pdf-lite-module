@@ -1,10 +1,11 @@
 import { Worker } from 'node:worker_threads';
 import { cpus, availableParallelism } from 'node:os';
+import type { WorkerPoolStats, WorkerTask, WorkerResponse, PdfGenerateOptions } from '../types.js';
 
 /**
  * Calculates max worker count based on CPU core ratio (default 50% for moderate mode).
  */
-export function calculateMaxWorkers(cpuRatio = 0.5, explicitMax = null) {
+export function calculateMaxWorkers(cpuRatio: number = 0.5, explicitMax: number | null = null): number {
   if (typeof explicitMax === 'number' && explicitMax > 0) {
     return Math.max(1, Math.floor(explicitMax));
   }
@@ -13,40 +14,51 @@ export function calculateMaxWorkers(cpuRatio = 0.5, explicitMax = null) {
   return Math.max(1, Math.floor(totalCores * ratio));
 }
 
+export interface WorkerPoolOptions {
+  cpuRatio?: number;
+  maxWorkers?: number | null;
+  idleTimeoutMs?: number;
+}
+
 /**
  * Dynamic On-Demand Elastic Worker Thread Pool.
  * Spawns workers dynamically on demand up to maxWorkers, and automatically
  * terminates idle workers after idleTimeoutMs to return memory to the OS.
  */
 export class WorkerPool {
-  constructor(options = {}) {
+  readonly maxWorkers: number;
+  private readonly idleTimeoutMs: number;
+  private readonly workerScript: URL;
+  private workers: Worker[] = [];
+  private freeWorkers: Worker[] = [];
+  private readonly idleTimers: Map<Worker, NodeJS.Timeout> = new Map();
+  private readonly taskQueue: WorkerTask[] = [];
+  private nextTaskId: number = 1;
+  private readonly activeTasks: Map<number, WorkerTask> = new Map();
+  private isTerminated: boolean = false;
+
+  constructor(options: WorkerPoolOptions = {}) {
     const cpuRatio = options.cpuRatio ?? 0.5; // Moderate mode default 50% CPU
     this.maxWorkers = calculateMaxWorkers(cpuRatio, options.maxWorkers);
-    this.idleTimeoutMs = options.idleTimeoutMs ?? 10000; // Auto-terminate idle workers after 10s
+    this.idleTimeoutMs = options.idleTimeoutMs ?? 10_000; // Auto-terminate idle workers after 10s
     this.workerScript = new URL('./pdfWorker.js', import.meta.url);
-    this.workers = [];
-    this.freeWorkers = [];
-    this.idleTimers = new Map();
-    this.taskQueue = [];
-    this.nextTaskId = 1;
-    this.activeTasks = new Map();
-    this.isTerminated = false;
     // Note: 0 workers created at startup to keep baseline RAM at ~116 MB
   }
 
-  createWorker() {
+  private createWorker(): Worker {
     const worker = new Worker(this.workerScript);
 
-    worker.on('message', ({ id, success, result, error }) => {
+    worker.on('message', (response: WorkerResponse) => {
       this.clearIdleTimer(worker);
+      const { id, success } = response;
       const task = this.activeTasks.get(id);
       if (task) {
         this.activeTasks.delete(id);
-        if (success) {
+        if (success && 'result' in response) {
           // Zero-Copy conversion from ArrayBuffer to Buffer
-          task.resolve(Buffer.from(result));
-        } else {
-          task.reject(new Error(error));
+          task.resolve(Buffer.from(response.result));
+        } else if (!success && 'error' in response) {
+          task.reject(new Error(response.error));
         }
       }
       this.freeWorkers.push(worker);
@@ -54,7 +66,7 @@ export class WorkerPool {
       this.processQueue();
     });
 
-    worker.on('error', (err) => {
+    worker.on('error', (err: Error) => {
       this.clearIdleTimer(worker);
       for (const [id, task] of this.activeTasks.entries()) {
         if (task.worker === worker) {
@@ -69,7 +81,7 @@ export class WorkerPool {
     return worker;
   }
 
-  setIdleTimer(worker) {
+  private setIdleTimer(worker: Worker): void {
     if (this.idleTimeoutMs <= 0) return;
     this.clearIdleTimer(worker);
 
@@ -83,7 +95,7 @@ export class WorkerPool {
     this.idleTimers.set(worker, timer);
   }
 
-  clearIdleTimer(worker) {
+  private clearIdleTimer(worker: Worker): void {
     const timer = this.idleTimers.get(worker);
     if (timer) {
       clearTimeout(timer);
@@ -91,7 +103,7 @@ export class WorkerPool {
     }
   }
 
-  removeWorker(worker) {
+  private removeWorker(worker: Worker): void {
     this.clearIdleTimer(worker);
     const idx = this.workers.indexOf(worker);
     if (idx !== -1) this.workers.splice(idx, 1);
@@ -100,7 +112,7 @@ export class WorkerPool {
     worker.terminate();
   }
 
-  processQueue() {
+  private processQueue(): void {
     if (this.isTerminated || this.taskQueue.length === 0) {
       return;
     }
@@ -114,6 +126,8 @@ export class WorkerPool {
 
     this.clearIdleTimer(worker);
     const task = this.taskQueue.shift();
+    if (!task) return;
+
     task.worker = worker;
     this.activeTasks.set(task.id, task);
 
@@ -124,19 +138,19 @@ export class WorkerPool {
     });
   }
 
-  runTask(html, options = {}) {
+  runTask(html: string, options: PdfGenerateOptions = {}): Promise<Buffer> {
     if (this.isTerminated) {
       return Promise.reject(new Error('WorkerPool is terminated'));
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<Buffer>((resolve, reject) => {
       const id = this.nextTaskId++;
       this.taskQueue.push({ id, html, options, resolve, reject });
       this.processQueue();
     });
   }
 
-  getStats() {
+  getStats(): WorkerPoolStats {
     return {
       totalWorkers: this.workers.length,
       freeWorkers: this.freeWorkers.length,
@@ -146,17 +160,21 @@ export class WorkerPool {
     };
   }
 
-  async terminate() {
+  async terminate(): Promise<void> {
     this.isTerminated = true;
-    this.taskQueue = [];
+    this.taskQueue.length = 0;
     for (const timer of this.idleTimers.values()) {
       clearTimeout(timer);
     }
     this.idleTimers.clear();
-    const terminations = this.workers.map(w => w.terminate());
+    const terminations = this.workers.map((w) => w.terminate());
     this.workers = [];
     this.freeWorkers = [];
     this.activeTasks.clear();
     await Promise.all(terminations);
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.terminate();
   }
 }

@@ -20,7 +20,7 @@ function createHtmlDocument(id, isHeavy800Pages = false) {
     `;
     // ~5,000 paragraphs to guarantee >800 PDF pages
     for (let p = 0; p < 4500; p++) {
-      html += `<p style="font-size: 12px; color: #${(p % 9)}3${(p % 5)}333;">Paragraphe ${p + 1}: Section de test d'endurance volumique. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>`;
+      html += `<p style="font-size: 12px; color: #${p % 9}3${p % 5}333;">Paragraphe ${p + 1}: Section de test d'endurance volumique. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>`;
       if (p % 100 === 0) {
         html += `
           <table style="border: 1px solid #333; padding: 4px;">
@@ -39,7 +39,7 @@ function createHtmlDocument(id, isHeavy800Pages = false) {
   // Standard varied document (1-15 pages)
   const paragraphCount = 10 + (id % 40);
   let html = `
-    <h1 style="color: #${(id % 8)}03366; font-size: 24px;">Facture / Document #${id}</h1>
+    <h1 style="color: #${id % 8}03366; font-size: 24px;">Facture / Document #${id}</h1>
     <p style="font-size: 13px;">Client ref: CLI-${id * 7} | Date: 2026-09-02</p>
     <div style="padding: 8px; border: 1px solid #ccc; background-color: #${id % 2 === 0 ? 'f9f9f9' : 'ffffff'};">
       <h2>Synthese #${id}</h2>
@@ -103,8 +103,10 @@ async function runSoakTest15kHeavy() {
     const mem = getMemoryStats();
     timings.push(avgTimePerDoc);
 
-    const percent = (((batch + 1) * BATCH_SIZE) / TOTAL_RUNS * 100).toFixed(0);
-    console.log(`  Lot ${(batch + 1).toString().padStart(2)}/15 (${percent.padStart(3)}%) | Temps moy/doc : ${avgTimePerDoc.toFixed(2)} ms | Heap : ${mem.heapMB} MB | RSS : ${mem.rssMB} MB`);
+    const percent = ((((batch + 1) * BATCH_SIZE) / TOTAL_RUNS) * 100).toFixed(0);
+    console.log(
+      `  Lot ${(batch + 1).toString().padStart(2)}/15 (${percent.padStart(3)}%) | Temps moy/doc : ${avgTimePerDoc.toFixed(2)} ms | Heap : ${mem.heapMB} MB | RSS : ${mem.rssMB} MB`,
+    );
   }
 
   const totalTimeSec = ((performance.now() - startOverall) / 1000).toFixed(2);
@@ -125,7 +127,9 @@ async function runSoakTest15kHeavy() {
     const avgHeavyMs = heavyTimings.reduce((a, b) => a + b.durationMs, 0) / heavyTimings.length;
     const lastHeavy = heavyTimings[heavyTimings.length - 1];
     console.log(`\n  📄 Analyse des ${heavyCount} documents massifs (>800 pages) :`);
-    console.log(`     - Temps moyen par doc 800+ p. : ${avgHeavyMs.toFixed(2)} ms (${(avgHeavyMs / 1000).toFixed(2)} s)`);
+    console.log(
+      `     - Temps moyen par doc 800+ p. : ${avgHeavyMs.toFixed(2)} ms (${(avgHeavyMs / 1000).toFixed(2)} s)`,
+    );
     console.log(`     - Taille binaire PDF générée  : ~${(lastHeavy.bytes / 1024 / 1024).toFixed(2)} MB par PDF 800p`);
   }
 

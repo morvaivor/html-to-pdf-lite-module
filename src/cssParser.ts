@@ -1,3 +1,7 @@
+import type { CheerioAPI } from 'cheerio';
+import type { Element } from 'domhandler';
+import type { CssRule, FontFace, PageZones, PageZoneProperties } from './types.js';
+
 // --- Pre-compiled regex constants (compiled once at module load) ---
 const FONT_FACE_REGEX = /@font-face\s*\{([^}]*)\}/g;
 const RULE_REGEX = /([^{}]+)\{([^}]*)\}/g;
@@ -11,17 +15,21 @@ const PSEUDO_SELECTOR_REGEX = /:.*?(?=[ ,{]|$)/g;
 const QUOTE_REGEX = /['"]/g;
 
 const PAGE_ZONES = [
-  '@top-left', '@top-center', '@top-right',
-  '@bottom-left', '@bottom-center', '@bottom-right',
-];
+  '@top-left',
+  '@top-center',
+  '@top-right',
+  '@bottom-left',
+  '@bottom-center',
+  '@bottom-right',
+] as const;
 
 // Pre-compiled zone regex map (built once at module load)
-const PAGE_ZONE_REGEXES = {};
+const PAGE_ZONE_REGEXES: Record<string, RegExp> = {};
 for (const zone of PAGE_ZONES) {
   PAGE_ZONE_REGEXES[zone] = new RegExp(`${zone}\\s*\\{([^}]*)\\}`, 'i');
 }
 
-function stripPageBlocks(css) {
+export function stripPageBlocks(css: string): string {
   let result = css;
 
   while (true) {
@@ -36,7 +44,10 @@ function stripPageBlocks(css) {
     for (let i = braceStart; i < result.length; i++) {
       if (result[i] === '{') depth++;
       if (result[i] === '}') depth--;
-      if (depth === 0) { blockEnd = i; break; }
+      if (depth === 0) {
+        blockEnd = i;
+        break;
+      }
     }
     if (blockEnd === -1) break;
 
@@ -46,7 +57,7 @@ function stripPageBlocks(css) {
   return result;
 }
 
-function stripFontFaceBlocks(css) {
+export function stripFontFaceBlocks(css: string): string {
   let result = css;
 
   while (true) {
@@ -61,7 +72,10 @@ function stripFontFaceBlocks(css) {
     for (let i = braceStart; i < result.length; i++) {
       if (result[i] === '{') depth++;
       if (result[i] === '}') depth--;
-      if (depth === 0) { blockEnd = i; break; }
+      if (depth === 0) {
+        blockEnd = i;
+        break;
+      }
     }
     if (blockEnd === -1) break;
 
@@ -71,21 +85,22 @@ function stripFontFaceBlocks(css) {
   return result;
 }
 
-function parseFontFaces(css) {
+export function parseFontFaces(css: string): FontFace[] {
   if (!css || typeof css !== 'string') return [];
 
-  const faces = [];
+  const faces: FontFace[] = [];
   FONT_FACE_REGEX.lastIndex = 0;
-  let match;
+  let match: RegExpExecArray | null;
 
   while ((match = FONT_FACE_REGEX.exec(css)) !== null) {
     const block = match[1];
+    if (!block) continue;
     const family = block.match(FONT_FAMILY_REGEX)?.[1]?.replace(QUOTE_REGEX, '').trim();
     const urlMatch = block.match(FONT_SRC_REGEX);
     const weight = block.match(FONT_WEIGHT_REGEX)?.[1]?.trim() || 'normal';
     const fontStyle = block.match(FONT_STYLE_REGEX)?.[1]?.trim() || 'normal';
 
-    if (!family || !urlMatch) continue;
+    if (!family || !urlMatch || !urlMatch[1]) continue;
 
     faces.push({
       family,
@@ -98,20 +113,21 @@ function parseFontFaces(css) {
   return faces;
 }
 
-function parseCssRules(css) {
+export function parseCssRules(css: string): CssRule[] {
   if (!css || typeof css !== 'string') return [];
 
   const cssWithoutPage = stripFontFaceBlocks(stripPageBlocks(css));
 
-  const rules = [];
+  const rules: CssRule[] = [];
   RULE_REGEX.lastIndex = 0;
-  let match;
+  let match: RegExpExecArray | null;
 
   while ((match = RULE_REGEX.exec(cssWithoutPage)) !== null) {
-    const selector = match[1].trim();
-    const declarations = match[2].trim();
+    const selector = match[1]?.trim();
+    const declarations = match[2]?.trim();
+    if (!selector || !declarations) continue;
 
-    const properties = {};
+    const properties: Record<string, string> = {};
     const decls = declarations.split(';');
     for (const decl of decls) {
       const colonIdx = decl.indexOf(':');
@@ -131,18 +147,18 @@ function parseCssRules(css) {
   return rules;
 }
 
-function elementMatchesSelector(element, selector) {
+export function elementMatchesSelector(element: Element, selector: string): boolean {
   const tagName = element.name || '';
-  const classes = (element.attribs.class || '').split(WHITESPACE_REGEX).filter(Boolean);
-  const id = element.attribs.id || '';
+  const classes = (element.attribs?.class || '').split(WHITESPACE_REGEX).filter(Boolean);
+  const id = element.attribs?.id || '';
 
-  const selectors = selector.split(',').map(s => s.trim());
+  const selectors = selector.split(',').map((s) => s.trim());
 
   for (const sel of selectors) {
-    let parts = sel.trim();
+    const parts = sel.trim();
 
     let tagMatch = '';
-    let classMatches = [];
+    const classMatches: string[] = [];
     let idMatch = '';
 
     const tokens = parts.trim().split(WHITESPACE_REGEX);
@@ -160,7 +176,10 @@ function elementMatchesSelector(element, selector) {
     if (idMatch && idMatch !== id) continue;
     let classMatch = true;
     for (const cls of classMatches) {
-      if (!classes.includes(cls)) { classMatch = false; break; }
+      if (!classes.includes(cls)) {
+        classMatch = false;
+        break;
+      }
     }
     if (!classMatch) continue;
     return true;
@@ -169,7 +188,7 @@ function elementMatchesSelector(element, selector) {
   return false;
 }
 
-function applyCssToElements($, css) {
+export function applyCssToElements($: CheerioAPI, css: string): void {
   if (!css || typeof css !== 'string') return;
 
   const rules = parseCssRules(css);
@@ -188,27 +207,20 @@ function applyCssToElements($, css) {
       const elements = $(selector);
       elements.each((_index, element) => {
         if (element.type === 'tag') {
-          const existingStyle = element.attribs.style || '';
-          element.attribs.style = existingStyle
-            ? newStyle + '; ' + existingStyle
-            : newStyle;
+          const existingStyle = element.attribs?.style || '';
+          element.attribs.style = existingStyle ? newStyle + '; ' + existingStyle : newStyle;
         }
       });
     } catch {
       try {
-        const cleanSelector = selector
-          .replace(ATTR_SELECTOR_REGEX, '')
-          .replace(PSEUDO_SELECTOR_REGEX, '')
-          .trim();
+        const cleanSelector = selector.replace(ATTR_SELECTOR_REGEX, '').replace(PSEUDO_SELECTOR_REGEX, '').trim();
 
         if (cleanSelector) {
           const elements = $(cleanSelector);
           elements.each((_index, element) => {
             if (element.type === 'tag') {
-              const existingStyle = element.attribs.style || '';
-              element.attribs.style = existingStyle
-                ? newStyle + '; ' + existingStyle
-                : newStyle;
+              const existingStyle = element.attribs?.style || '';
+              element.attribs.style = existingStyle ? newStyle + '; ' + existingStyle : newStyle;
             }
           });
         }
@@ -219,7 +231,7 @@ function applyCssToElements($, css) {
   }
 }
 
-function extractPageBlock(css) {
+export function extractPageBlock(css: string): string | null {
   const idx = css.indexOf('@page');
   if (idx === -1) return null;
 
@@ -231,27 +243,31 @@ function extractPageBlock(css) {
   for (let i = braceStart; i < css.length; i++) {
     if (css[i] === '{') depth++;
     if (css[i] === '}') depth--;
-    if (depth === 0) { blockEnd = i; break; }
+    if (depth === 0) {
+      blockEnd = i;
+      break;
+    }
   }
   if (blockEnd === -1) return null;
 
   return css.substring(braceStart + 1, blockEnd);
 }
 
-function parsePageRule(css) {
+export function parsePageRule(css: string): PageZones | null {
   if (!css || typeof css !== 'string') return null;
 
   const pageBody = extractPageBlock(css);
   if (!pageBody) return null;
 
-  const zones = {};
+  const zones: Partial<PageZones> = {};
 
   for (const zone of PAGE_ZONES) {
     const zoneRegex = PAGE_ZONE_REGEXES[zone];
+    if (!zoneRegex) continue;
     const zoneMatch = zoneRegex.exec(pageBody);
-    if (zoneMatch) {
+    if (zoneMatch && zoneMatch[1]) {
       const declarations = zoneMatch[1].trim();
-      const properties = {};
+      const properties: PageZoneProperties = {};
       const decls = declarations.split(';');
       for (const decl of decls) {
         const colonIdx = decl.indexOf(':');
@@ -263,14 +279,13 @@ function parsePageRule(css) {
         }
       }
       if (Object.keys(properties).length > 0) {
-        zones[zone.replace('@', '')] = properties;
+        // Remove '@' from zone name for key
+        zones[zone.replace('@', '') as keyof PageZones] = properties;
       }
     }
   }
 
   if (Object.keys(zones).length === 0) return null;
 
-  return zones;
+  return zones as PageZones;
 }
-
-export { parseCssRules, elementMatchesSelector, applyCssToElements, parsePageRule, parseFontFaces, stripFontFaceBlocks };

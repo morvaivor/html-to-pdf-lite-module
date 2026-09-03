@@ -1,43 +1,88 @@
 import { parseInlineStyle } from '../core/cacheManager.js';
 import { resolveFontFamily } from '../core/fontManager.js';
+import type { TextStyle, RenderOptions } from '../types.js';
+import type { PageLayout } from '../core/PageLayout.js';
+import type { TextMeasureCache } from '../core/cacheManager.js';
+import type { Element, ChildNode } from 'domhandler';
 
-const FONT_SIZES_TABLE = { td: 12, th: 12 };
+const FONT_SIZES_TABLE: Record<string, number> = { td: 12, th: 12 };
 
-function getCellText(element) {
+function getCellText(element: Element): string {
   let result = '';
   for (let i = 0; i < element.children.length; i++) {
     const c = element.children[i];
+    if (!c) continue;
     if (c.type === 'text') {
-      result += c.data;
-    } else if (c.type === 'tag' && c.name !== 'table') {
-      for (let j = 0; j < c.children.length; j++) {
-        if (c.children[j].type === 'text') result += c.children[j].data;
+      result += (c as any).data ?? '';
+    } else if (c.type === 'tag' && (c as Element).name !== 'table') {
+      const grandChildren = (c as Element).children;
+      for (let j = 0; j < grandChildren.length; j++) {
+        const gc = grandChildren[j];
+        if (gc && gc.type === 'text') result += (gc as any).data ?? '';
       }
     }
   }
   return result.trim();
 }
 
-function getCellNestedTables(element) {
-  const tables = [];
+function getCellNestedTables(element: Element): Element[] {
+  const tables: Element[] = [];
   for (let i = 0; i < element.children.length; i++) {
     const child = element.children[i];
-    if (child.type === 'tag' && child.name === 'table') tables.push(child);
+    if (child && child.type === 'tag' && (child as Element).name === 'table') {
+      tables.push(child as Element);
+    }
   }
   return tables;
 }
 
-function getCellNonTableChildren(element) {
-  const children = [];
+function getCellNonTableChildren(element: Element): ChildNode[] {
+  const children: ChildNode[] = [];
   for (let i = 0; i < element.children.length; i++) {
     const child = element.children[i];
-    if (child.type === 'tag' && child.name === 'table') continue;
+    if (!child) continue;
+    if (child.type === 'tag' && (child as Element).name === 'table') continue;
     children.push(child);
   }
   return children;
 }
 
-export async function renderTable(doc, element, parentStyle, options, layout, textCache, fontAliasSet, imageCache, renderElementFn) {
+interface CellData {
+  text: string;
+  style: TextStyle;
+  padding: number;
+  fontSize: number;
+  fontFamily: string;
+  height: number;
+  colspan: number;
+  rowspan: number;
+  nestedTables: Element[];
+  nonTableChildren: ChildNode[];
+  rawCell: Element;
+  startRow: number;
+  startCol: number;
+}
+
+export async function renderTable(
+  doc: PDFKit.PDFDocument,
+  element: Element,
+  parentStyle: TextStyle,
+  options: RenderOptions,
+  layout: PageLayout,
+  textCache: TextMeasureCache,
+  fontAliasSet: Set<string>,
+  imageCache: Map<string, Buffer>,
+  renderElementFn: (
+    doc: PDFKit.PDFDocument,
+    element: any,
+    parentStyle: TextStyle,
+    options: RenderOptions,
+    layout: PageLayout,
+    textCache: TextMeasureCache,
+    fontAliasSet: Set<string>,
+    imageCache: Map<string, Buffer>,
+  ) => Promise<void>,
+): Promise<void> {
   const tableStyle = parseInlineStyle(element);
 
   const defaultPadding = tableStyle.padding ?? 4;
@@ -45,17 +90,20 @@ export async function renderTable(doc, element, parentStyle, options, layout, te
   const defaultBorderColor = tableStyle.borderColor || '#000000';
   const defaultBorderWidth = tableStyle.borderWidth ?? 1;
 
-  const allRows = [];
+  const allRows: Element[] = [];
   for (let i = 0; i < element.children.length; i++) {
     const child = element.children[i];
-    if (child.type === 'tag') {
-      if (child.name === 'thead' || child.name === 'tbody' || child.name === 'tfoot') {
-        for (let j = 0; j < child.children.length; j++) {
-          const grandchild = child.children[j];
-          if (grandchild.type === 'tag' && grandchild.name === 'tr') allRows.push(grandchild);
+    if (child && child.type === 'tag') {
+      const el = child as Element;
+      if (el.name === 'thead' || el.name === 'tbody' || el.name === 'tfoot') {
+        for (let j = 0; j < el.children.length; j++) {
+          const grandchild = el.children[j];
+          if (grandchild && grandchild.type === 'tag' && (grandchild as Element).name === 'tr') {
+            allRows.push(grandchild as Element);
+          }
         }
-      } else if (child.name === 'tr') {
-        allRows.push(child);
+      } else if (el.name === 'tr') {
+        allRows.push(el);
       }
     }
   }
@@ -65,10 +113,12 @@ export async function renderTable(doc, element, parentStyle, options, layout, te
   let maxCols = 0;
   for (let r = 0; r < allRows.length; r++) {
     let cols = 0;
-    for (let c = 0; c < allRows[r].children.length; c++) {
-      const cell = allRows[r].children[c];
-      if (cell.type === 'tag' && (cell.name === 'td' || cell.name === 'th')) {
-        cols += parseInt(cell.attribs.colspan || '1', 10);
+    const row = allRows[r];
+    if (!row) continue;
+    for (let c = 0; c < row.children.length; c++) {
+      const cell = row.children[c];
+      if (cell && cell.type === 'tag' && ((cell as Element).name === 'td' || (cell as Element).name === 'th')) {
+        cols += parseInt((cell as Element).attribs['colspan'] || '1', 10);
       }
     }
     if (cols > maxCols) maxCols = cols;
@@ -79,35 +129,42 @@ export async function renderTable(doc, element, parentStyle, options, layout, te
   const borderColor = defaultBorder ? defaultBorderColor : undefined;
 
   {
-    const rowCells = [];
+    const rowCells: Element[][] = [];
     for (let r = 0; r < allRows.length; r++) {
-      const cells = [];
-      for (let c = 0; c < allRows[r].children.length; c++) {
-        const cell = allRows[r].children[c];
-        if (cell.type === 'tag' && (cell.name === 'td' || cell.name === 'th')) cells.push(cell);
+      const cells: Element[] = [];
+      const row = allRows[r];
+      if (!row) continue;
+      for (let c = 0; c < row.children.length; c++) {
+        const cell = row.children[c];
+        if (cell && cell.type === 'tag' && ((cell as Element).name === 'td' || (cell as Element).name === 'th')) {
+          cells.push(cell as Element);
+        }
       }
       rowCells.push(cells);
     }
 
+    const gridCells: (CellData | null)[][] = [];
+
     for (let rowIdx = 0; rowIdx < allRows.length; rowIdx++) {
-      const data = Array.from({ length: maxCols }, () => null);
+      const data: (CellData | null)[] = Array.from({ length: maxCols }, () => null);
       if (rowIdx > 0) {
         for (let col = 0; col < maxCols; col++) {
-          const prevCell = rowCells[rowIdx - 1][col];
+          const prevCell = gridCells[rowIdx - 1]?.[col];
           if (prevCell && prevCell.startRow < rowIdx && prevCell.startRow + prevCell.rowspan > rowIdx) {
             data[col] = prevCell;
           }
         }
       }
       let col = 0;
-      for (const cell of rowCells[rowIdx]) {
+      const currentCells = rowCells[rowIdx] ?? [];
+      for (const cell of currentCells) {
         while (col < maxCols && data[col] !== null) col++;
         if (col >= maxCols) break;
-        const colspan = Math.min(parseInt(cell.attribs.colspan || '1', 10), maxCols - col);
-        const rowspan = Math.max(1, Math.min(parseInt(cell.attribs.rowspan || '1', 10), allRows.length - rowIdx));
+        const colspan = Math.min(parseInt(cell.attribs['colspan'] || '1', 10), maxCols - col);
+        const rowspan = Math.max(1, Math.min(parseInt(cell.attribs['rowspan'] || '1', 10), allRows.length - rowIdx));
 
         const cellInlineStyle = parseInlineStyle(cell);
-        const cellStyle = {
+        const cellStyle: TextStyle = {
           ...parentStyle,
           ...cellInlineStyle,
           fontSize: cellInlineStyle.fontSize ?? FONT_SIZES_TABLE[cell.name] ?? parentStyle.fontSize,
@@ -124,16 +181,18 @@ export async function renderTable(doc, element, parentStyle, options, layout, te
         const nestedTables = getCellNestedTables(cell);
         let nestedHeight = 0;
         for (const nt of nestedTables) {
-          const ntRows = [];
+          const ntRows: Element[] = [];
           for (let ci = 0; ci < nt.children.length; ci++) {
             const child = nt.children[ci];
-            if (child.name === 'thead' || child.name === 'tbody' || child.name === 'tfoot') {
-              for (let gi = 0; gi < child.children.length; gi++) {
-                const gc = child.children[gi];
-                if (gc.type === 'tag' && gc.name === 'tr') ntRows.push(gc);
+            if (!child || child.type !== 'tag') continue;
+            const el = child as Element;
+            if (el.name === 'thead' || el.name === 'tbody' || el.name === 'tfoot') {
+              for (let gi = 0; gi < el.children.length; gi++) {
+                const gc = el.children[gi];
+                if (gc && gc.type === 'tag' && (gc as Element).name === 'tr') ntRows.push(gc as Element);
               }
-            } else if (child.name === 'tr') {
-              ntRows.push(child);
+            } else if (el.name === 'tr') {
+              ntRows.push(el);
             }
           }
           const ntStyle = parseInlineStyle(nt);
@@ -144,41 +203,61 @@ export async function renderTable(doc, element, parentStyle, options, layout, te
             let rh = 0;
             for (let nci = 0; nci < ntRow.children.length; nci++) {
               const ntCell = ntRow.children[nci];
-              if (ntCell.type === 'tag' && (ntCell.name === 'td' || ntCell.name === 'th')) {
-                const ncStyle = parseInlineStyle(ntCell);
+              if (
+                ntCell &&
+                ntCell.type === 'tag' &&
+                ((ntCell as Element).name === 'td' || (ntCell as Element).name === 'th')
+              ) {
+                const ncEl = ntCell as Element;
+                const ncStyle = parseInlineStyle(ncEl);
                 const ncFontSize = ncStyle.fontSize ?? fontSize;
-                const ncText = getCellText(ntCell);
+                const ncText = getCellText(ncEl);
                 const ncPh = ncStyle.padding ?? ntPadding;
-                const ncFf = resolveFontFamily(ncStyle.fontFamily, ncStyle.bold || ntCell.name === 'th', ncStyle.italic, fontAliasSet);
+                const ncFf = resolveFontFamily(
+                  ncStyle.fontFamily,
+                  Boolean(ncStyle.bold || ncEl.name === 'th'),
+                  Boolean(ncStyle.italic),
+                  fontAliasSet,
+                );
                 rh = Math.max(rh, ncText ? textCache.measure(doc, ncText, ncFf, ncFontSize, colWidth - ncPh * 2) : 0);
               }
             }
-            ntH += rh + (ntPadding * 2) + ntBorderWidth;
+            ntH += rh + ntPadding * 2 + ntBorderWidth;
           }
           nestedHeight += ntH;
         }
 
         const cellHeight = Math.max(textHeight, fontSize) + padding * 2 + nestedHeight;
 
-        data[col] = {
-          text, style: cellStyle, padding, fontSize, fontFamily,
-          height: cellHeight, colspan, rowspan, nestedTables,
+        const cellData: CellData = {
+          text,
+          style: cellStyle,
+          padding,
+          fontSize,
+          fontFamily,
+          height: cellHeight,
+          colspan,
+          rowspan,
+          nestedTables,
           nonTableChildren: getCellNonTableChildren(cell),
-          rawCell: cell, startRow: rowIdx, startCol: col,
+          rawCell: cell,
+          startRow: rowIdx,
+          startCol: col,
         };
+        data[col] = cellData;
 
         for (let r = 0; r < colspan; r++) {
-          data[col + r] = data[col];
+          data[col + r] = cellData;
         }
         col += colspan;
       }
-      rowCells[rowIdx] = data;
+      gridCells[rowIdx] = data;
     }
 
-    const rowHeights = allRows.map((_, rowIdx) => {
+    const rowHeights: number[] = allRows.map((_, rowIdx) => {
       let h = 0;
       for (let col = 0; col < maxCols; col++) {
-        const cell = rowCells[rowIdx][col];
+        const cell = gridCells[rowIdx]?.[col];
         if (cell && cell.startRow === rowIdx) {
           h = Math.max(h, cell.height / cell.rowspan);
         }
@@ -186,14 +265,14 @@ export async function renderTable(doc, element, parentStyle, options, layout, te
       return h + (borderWidth > 0 ? borderWidth : 0);
     });
 
-    const blocks = [];
+    const blocks: Array<{ start: number; end: number }> = [];
     {
       let prevStart = 0;
       let blockEnd = 0;
       for (let r = 0; r < allRows.length; r++) {
         blockEnd = Math.max(blockEnd, r);
         for (let col = 0; col < maxCols; col++) {
-          const cell = rowCells[r][col];
+          const cell = gridCells[r]?.[col];
           if (cell && cell.startRow === r) {
             blockEnd = Math.max(blockEnd, r + cell.rowspan - 1);
           }
@@ -203,7 +282,8 @@ export async function renderTable(doc, element, parentStyle, options, layout, te
           prevStart = r + 1;
         }
       }
-      if (prevStart <= blocks[blocks.length - 1].end) {
+      const lastBlock = blocks[blocks.length - 1];
+      if (lastBlock && prevStart <= lastBlock.end) {
         blocks.push({ start: prevStart, end: allRows.length - 1 });
       }
     }
@@ -217,30 +297,34 @@ export async function renderTable(doc, element, parentStyle, options, layout, te
       }
 
       const blockY = doc.y;
-      const rowTop = Array.from({ length: allRows.length }, () => 0);
+      const rowTop: number[] = Array.from({ length: allRows.length }, () => 0);
       let offset = 0;
       for (let r = block.start; r <= block.end; r++) {
         rowTop[r] = blockY + offset;
-        offset += rowHeights[r];
+        offset += rowHeights[r] ?? 0;
       }
 
       for (let r = block.start; r <= block.end; r++) {
         let col = 0;
         while (col < maxCols) {
-          const cell = rowCells[r][col];
+          const cell = gridCells[r]?.[col];
           if (cell && cell.startRow === r) {
             const cellWidth = colWidth * cell.colspan;
             const cellX = layout.leftMargin + cell.startCol * colWidth;
-            const cellY = rowTop[r];
+            const cellY = rowTop[r] ?? 0;
             const endRow = Math.min(r + cell.rowspan - 1, allRows.length - 1);
-            const cellH = rowTop[endRow] + rowHeights[endRow] - cellY;
+            const cellH = (rowTop[endRow] ?? 0) + (rowHeights[endRow] ?? 0) - cellY;
 
             if (cell.style.backgroundColor) {
               doc.fillColor(cell.style.backgroundColor).rect(cellX, cellY, cellWidth, cellH).fill();
             }
 
             if (borderWidth > 0) {
-              doc.strokeColor(borderColor).lineWidth(borderWidth).rect(cellX, cellY, cellWidth, cellH).stroke();
+              doc
+                .strokeColor(borderColor ?? '#000000')
+                .lineWidth(borderWidth)
+                .rect(cellX, cellY, cellWidth, cellH)
+                .stroke();
             }
 
             doc.font(cell.fontFamily).fontSize(cell.fontSize).fillColor(cell.style.color);
@@ -279,7 +363,8 @@ export async function renderTable(doc, element, parentStyle, options, layout, te
         }
       }
 
-      doc.y = rowTop[block.end] + rowHeights[block.end];
+      const endRowIdx = block.end;
+      doc.y = (rowTop[endRowIdx] ?? 0) + (rowHeights[endRowIdx] ?? 0);
     }
   }
 }

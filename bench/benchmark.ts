@@ -96,7 +96,7 @@ const PRECOMPILED_REGEX = {
     'bottom-left': /@bottom-left\s*\{([^}]*)\}/i,
     'bottom-center': /@bottom-center\s*\{([^}]*)\}/i,
     'bottom-right': /@bottom-right\s*\{([^}]*)\}/i,
-  }
+  },
 };
 
 // 3. Text Measurement LRU Cache Simulation
@@ -136,7 +136,11 @@ async function runBenchmarks() {
   const datasets = [
     { name: 'Document Texte Multi-pages (80 par.)', html: generateMultiPageHtml(80), css: 'p { color: #333; }' },
     { name: 'Grand Tableau (100 lignes x 5 cols)', html: generateLargeTableHtml(100, 5), css: '' },
-    { name: 'Rapport Complet (Texte + Table + CSS)', html: generateFullDocumentHtml(), css: '@page { @bottom-center { content: "Page " counter(page) " sur " counter(num-pages); } } h1 { color: navy; }' }
+    {
+      name: 'Rapport Complet (Texte + Table + CSS)',
+      html: generateFullDocumentHtml(),
+      css: '@page { @bottom-center { content: "Page " counter(page) " sur " counter(num-pages); } } h1 { color: navy; }',
+    },
   ];
 
   const results = [];
@@ -154,12 +158,14 @@ async function runBenchmarks() {
     for (let i = 0; i < iterations; i++) {
       const t0 = performance.now();
       await generatorBaseline.generate(ds.html, { css: ds.css });
-      baselineTotalTime += (performance.now() - t0);
+      baselineTotalTime += performance.now() - t0;
     }
     const baselineAvgTime = baselineTotalTime / iterations;
     const baselineMemDelta = Math.max(0, getHeapMemoryMB() - baselineMemStart);
 
-    console.log(`  [BASELINE]       Temps moyen : ${baselineAvgTime.toFixed(2)} ms | Delta Mémoire : ${baselineMemDelta.toFixed(2)} MB`);
+    console.log(
+      `  [BASELINE]       Temps moyen : ${baselineAvgTime.toFixed(2)} ms | Delta Mémoire : ${baselineMemDelta.toFixed(2)} MB`,
+    );
 
     // 2. OPTIMISATION A : Single-Pass DOM & Conditional Page Count
     // Eliminates Cheerio duplicate parsing + DOM re-traversals
@@ -175,7 +181,7 @@ async function runBenchmarks() {
       // Single pass PDF generation logic simulation
       const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
       const buffers = [];
-      doc.on('data', chunk => buffers.push(chunk));
+      doc.on('data', (chunk) => buffers.push(chunk));
 
       // Traversing AST once and rendering
       doc.addPage({ size: 'A4', margin: 0 });
@@ -188,12 +194,14 @@ async function runBenchmarks() {
       });
       doc.end();
 
-      optATotalTime += (performance.now() - t0);
+      optATotalTime += performance.now() - t0;
     }
     const optAAvgTime = optATotalTime / iterations;
     const optAMemDelta = Math.max(0, getHeapMemoryMB() - optAMemStart);
 
-    console.log(`  [SIMULATION A]   Single-Pass AST & Shared DOM : ${optAAvgTime.toFixed(2)} ms | Delta Mémoire : ${optAMemDelta.toFixed(2)} MB`);
+    console.log(
+      `  [SIMULATION A]   Single-Pass AST & Shared DOM : ${optAAvgTime.toFixed(2)} ms | Delta Mémoire : ${optAMemDelta.toFixed(2)} MB`,
+    );
 
     // 3. OPTIMISATION B : Full Optimized Stack (Single-Pass + WeakMap Style Cache + Precompiled Regex + Text Cache)
     let optBTotalTime = 0;
@@ -206,7 +214,7 @@ async function runBenchmarks() {
 
       const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
       const buffers = [];
-      doc.on('data', chunk => buffers.push(chunk));
+      doc.on('data', (chunk) => buffers.push(chunk));
       doc.addPage({ size: 'A4', margin: 0 });
 
       // Fast single pass traversal
@@ -223,12 +231,14 @@ async function runBenchmarks() {
       }
       doc.end();
 
-      optBTotalTime += (performance.now() - t0);
+      optBTotalTime += performance.now() - t0;
     }
     const optBAvgTime = optBTotalTime / iterations;
     const optBMemDelta = Math.max(0, getHeapMemoryMB() - optBMemStart);
 
-    console.log(`  [SIMULATION B]   Stack complète (WeakMap + Caches + Precompiled) : ${optBAvgTime.toFixed(2)} ms | Delta Mémoire : ${optBMemDelta.toFixed(2)} MB`);
+    console.log(
+      `  [SIMULATION B]   Stack complète (WeakMap + Caches + Precompiled) : ${optBAvgTime.toFixed(2)} ms | Delta Mémoire : ${optBMemDelta.toFixed(2)} MB`,
+    );
 
     const speedupPct = (((baselineAvgTime - optBAvgTime) / baselineAvgTime) * 100).toFixed(1);
     console.log(`  📈 Gain de performance (Stack complète vs Baseline) : +${speedupPct}% de rapidité`);
@@ -272,7 +282,7 @@ Mesurer les performances actuelles (**Baseline**) du module face aux nouvelles i
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 `;
 
-  results.forEach(r => {
+  results.forEach((r) => {
     md += `| **${r.scenario}** | ${r.baselineTimeMs} ms | ${r.optATimeMs} ms | ${r.optBTimeMs} ms | **+${r.speedupPct}** | ${r.baselineMemMB} MB | ${r.optBMemMB} MB |\n`;
   });
 

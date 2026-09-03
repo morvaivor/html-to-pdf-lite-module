@@ -2,7 +2,14 @@ import { describe, it, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPdfGenerator } from '../src/index.js';
 import { renderHtmlToPdf, PageLayout, TextMeasureCache } from '../src/htmlRenderer.js';
-import { parseCssRules, applyCssToElements, parsePageRule, parseFontFaces, elementMatchesSelector, stripFontFaceBlocks } from '../src/cssParser.js';
+import {
+  parseCssRules,
+  applyCssToElements,
+  parsePageRule,
+  parseFontFaces,
+  elementMatchesSelector,
+  stripFontFaceBlocks,
+} from '../src/cssParser.js';
 import PDFDocument from 'pdfkit';
 import * as cheerio from 'cheerio';
 
@@ -30,7 +37,8 @@ describe('cssParser', () => {
     });
 
     test('strips @page and @font-face before parsing', () => {
-      const css = '@page { @bottom-center { content: "P"; } } @font-face { font-family: T; src: url(t.ttf); } p { color: blue; }';
+      const css =
+        '@page { @bottom-center { content: "P"; } } @font-face { font-family: T; src: url(t.ttf); } p { color: blue; }';
       const r = parseCssRules(css);
       assert.equal(r.length, 1);
       assert.equal(r[0].selector, 'p');
@@ -53,7 +61,8 @@ describe('cssParser', () => {
     });
 
     test('parses font-face with bold italic', () => {
-      const css = "@font-face { font-family: 'MF'; src: url('http://x.com/f.ttf'); font-weight: bold; font-style: italic; }";
+      const css =
+        "@font-face { font-family: 'MF'; src: url('http://x.com/f.ttf'); font-weight: bold; font-style: italic; }";
       const f = parseFontFaces(css);
       assert.equal(f.length, 1);
       assert.equal(f[0].bold, true);
@@ -61,19 +70,19 @@ describe('cssParser', () => {
     });
 
     test('numeric weight >= 700 is bold', () => {
-      const f = parseFontFaces("@font-face { font-family: T; src: url(t.ttf); font-weight: 700; }");
+      const f = parseFontFaces('@font-face { font-family: T; src: url(t.ttf); font-weight: 700; }');
       assert.equal(f[0].bold, true);
     });
 
     test('defaults to normal weight/style', () => {
-      const f = parseFontFaces("@font-face { font-family: T; src: url(t.ttf); }");
+      const f = parseFontFaces('@font-face { font-family: T; src: url(t.ttf); }');
       assert.equal(f[0].bold, false);
       assert.equal(f[0].italic, false);
     });
 
     test('skips without family or url', () => {
-      assert.equal(parseFontFaces("@font-face { font-family: T; }").length, 0);
-      assert.equal(parseFontFaces("@font-face { src: url(t.ttf); }").length, 0);
+      assert.equal(parseFontFaces('@font-face { font-family: T; }').length, 0);
+      assert.equal(parseFontFaces('@font-face { src: url(t.ttf); }').length, 0);
     });
   });
 
@@ -142,7 +151,8 @@ describe('cssParser', () => {
     });
 
     test('parses all 6 zones', () => {
-      const css = '@page { @top-left { content: "a"; } @top-center { content: "b"; } @top-right { content: "c"; } @bottom-left { content: "d"; } @bottom-center { content: "e"; } @bottom-right { content: "f"; } }';
+      const css =
+        '@page { @top-left { content: "a"; } @top-center { content: "b"; } @top-right { content: "c"; } @bottom-left { content: "d"; } @bottom-center { content: "e"; } @bottom-right { content: "f"; } }';
       const z = parsePageRule(css);
       assert.equal(Object.keys(z).length, 6);
     });
@@ -197,7 +207,8 @@ describe('htmlRenderer', () => {
   });
 
   test('handles all inline CSS properties', async () => {
-    const html = '<div style="color: #333; background-color: #eee; font-size: 14px; font-weight: bold; font-style: italic; font-family: Courier; border: 1px solid #000; border-color: #ff0000; border-width: 2px; padding: 10px; text-align: center;">All</div>';
+    const html =
+      '<div style="color: #333; background-color: #eee; font-size: 14px; font-weight: bold; font-style: italic; font-family: Courier; border: 1px solid #000; border-color: #ff0000; border-width: 2px; padding: 10px; text-align: center;">All</div>';
     const buf = await renderHtmlToPdf(html);
     assert.ok(buf.length > 0);
   });
@@ -213,22 +224,32 @@ describe('htmlRenderer', () => {
   });
 
   test('custom format and orientation', async () => {
-    const buf = await renderHtmlToPdf('<p>L</p>', { format: 'Letter', orientation: 'landscape', margin: { top: 50, bottom: 50, left: 40, right: 40 } });
+    const buf = await renderHtmlToPdf('<p>L</p>', {
+      format: 'Letter',
+      orientation: 'landscape',
+      margin: { top: 50, bottom: 50, left: 40, right: 40 },
+    });
     assert.ok(buf.length > 0);
   });
 
   test('table with borders, thead, tbody', async () => {
-    const buf = await renderHtmlToPdf('<table style="border: 1px solid #000000; padding: 5px;"><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>');
+    const buf = await renderHtmlToPdf(
+      '<table style="border: 1px solid #000000; padding: 5px;"><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>',
+    );
     assert.ok(buf.length > 0);
   });
 
   test('table with colspan and rowspan', async () => {
-    const buf = await renderHtmlToPdf('<table style="border: 1px solid #000;"><tr><th colspan="2">H</th><th>C</th></tr><tr><td rowspan="2">S</td><td>B1</td><td>C1</td></tr><tr><td>B2</td><td>C2</td></tr></table>');
+    const buf = await renderHtmlToPdf(
+      '<table style="border: 1px solid #000;"><tr><th colspan="2">H</th><th>C</th></tr><tr><td rowspan="2">S</td><td>B1</td><td>C1</td></tr><tr><td>B2</td><td>C2</td></tr></table>',
+    );
     assert.ok(buf.length > 0);
   });
 
   test('nested tables', async () => {
-    const buf = await renderHtmlToPdf('<table style="border: 1px solid #000;"><tr><td><table style="border: 1px solid #00f;"><tr><td>N</td></tr></table></td></tr></table>');
+    const buf = await renderHtmlToPdf(
+      '<table style="border: 1px solid #000;"><tr><td><table style="border: 1px solid #00f;"><tr><td>N</td></tr></table></td></tr></table>',
+    );
     assert.ok(buf.length > 0);
   });
 
@@ -243,7 +264,8 @@ describe('htmlRenderer', () => {
   });
 
   test('image from data URI', async () => {
-    const img = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
+    const img =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
     const buf = await renderHtmlToPdf('<img src="' + img + '" width="50" height="50" />');
     assert.ok(buf.length > 0);
   });
@@ -263,31 +285,44 @@ describe('htmlRenderer', () => {
   test('header and footer with page/totalPages', async () => {
     let html = '';
     for (let i = 0; i < 30; i++) html += '<p>L ' + i + '</p>';
-    const buf = await renderHtmlToPdf(html, { header: '<div style="font-size: 8px;">H</div>', footer: '<div style="font-size: 8px;">P {page}/{totalPages}</div>' });
+    const buf = await renderHtmlToPdf(html, {
+      header: '<div style="font-size: 8px;">H</div>',
+      footer: '<div style="font-size: 8px;">P {page}/{totalPages}</div>',
+    });
     assert.ok(buf.length > 0);
   });
 
   test('@page with counter(page) only (single pass)', async () => {
     let html = '';
     for (let i = 0; i < 30; i++) html += '<p>L' + i + '</p>';
-    const buf = await renderHtmlToPdf(html, { css: '@page { @bottom-center { content: "P " counter(page); font-size: 10px; } }' });
+    const buf = await renderHtmlToPdf(html, {
+      css: '@page { @bottom-center { content: "P " counter(page); font-size: 10px; } }',
+    });
     assert.ok(buf.length > 0);
   });
 
   test('@page with counter(num-pages) triggers two-pass', async () => {
     let html = '';
     for (let i = 0; i < 30; i++) html += '<p>L' + i + '</p>';
-    const buf = await renderHtmlToPdf(html, { css: '@page { @bottom-center { content: "P " counter(page) "/" counter(num-pages); font-size: 10px; } }' });
+    const buf = await renderHtmlToPdf(html, {
+      css: '@page { @bottom-center { content: "P " counter(page) "/" counter(num-pages); font-size: 10px; } }',
+    });
     assert.ok(buf.length > 0);
   });
 
   test('@page all 6 zones with styles', async () => {
-    const buf = await renderHtmlToPdf('<p>C</p>', { css: '@page { @top-left { content: "TL"; font-size: 8px; color: #f00; font-weight: bold; font-style: italic; } @top-center { content: "TC"; font-size: 8px; } @top-right { content: "TR"; font-size: 8px; font-family: Courier; } @bottom-left { content: "BL"; font-size: 8px; } @bottom-center { content: "BC"; font-size: 8px; } @bottom-right { content: "BR"; font-size: 8px; } }' });
+    const buf = await renderHtmlToPdf('<p>C</p>', {
+      css: '@page { @top-left { content: "TL"; font-size: 8px; color: #f00; font-weight: bold; font-style: italic; } @top-center { content: "TC"; font-size: 8px; } @top-right { content: "TR"; font-size: 8px; font-family: Courier; } @bottom-left { content: "BL"; font-size: 8px; } @bottom-center { content: "BC"; font-size: 8px; } @bottom-right { content: "BR"; font-size: 8px; } }',
+    });
     assert.ok(buf.length > 0);
   });
 
   test('@page zones override header/footer', async () => {
-    const buf = await renderHtmlToPdf('<p>C</p>', { header: '<div>H</div>', footer: '<div>F</div>', css: '@page { @top-left { content: "Z"; } }' });
+    const buf = await renderHtmlToPdf('<p>C</p>', {
+      header: '<div>H</div>',
+      footer: '<div>F</div>',
+      css: '@page { @top-left { content: "Z"; } }',
+    });
     assert.ok(buf.length > 0);
   });
 
@@ -297,7 +332,9 @@ describe('htmlRenderer', () => {
   });
 
   test('table with text-align center/right', async () => {
-    const buf = await renderHtmlToPdf('<table><tr><td style="text-align: center;">C</td><td style="text-align: right;">R</td><td>L</td></tr></table>');
+    const buf = await renderHtmlToPdf(
+      '<table><tr><td style="text-align: center;">C</td><td style="text-align: right;">R</td><td>L</td></tr></table>',
+    );
     assert.ok(buf.length > 0);
   });
 
@@ -307,30 +344,37 @@ describe('htmlRenderer', () => {
   });
 
   test('table with background-color on cells', async () => {
-    const buf = await renderHtmlToPdf('<table style="border: 1px solid #000;"><tr><td style="background-color: #eeffee;">BG</td></tr></table>');
+    const buf = await renderHtmlToPdf(
+      '<table style="border: 1px solid #000;"><tr><td style="background-color: #eeffee;">BG</td></tr></table>',
+    );
     assert.ok(buf.length > 0);
   });
 
   test('image with height-only scaling', async () => {
-    const img = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
+    const img =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
     const buf = await renderHtmlToPdf('<img src="' + img + '" height="100" />');
     assert.ok(buf.length > 0);
   });
 
   test('image with width-only scaling', async () => {
-    const img = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
+    const img =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
     const buf = await renderHtmlToPdf('<img src="' + img + '" width="100" />');
     assert.ok(buf.length > 0);
   });
 
   test('large image is resized to content width', async () => {
-    const img = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
+    const img =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGNgOJFCGhrVMKph+GoAABn1LBB8AQh5AAAAAElFTkSuQmCC';
     const buf = await renderHtmlToPdf('<img src="' + img + '" width="2000" />');
     assert.ok(buf.length > 0);
   });
 
   test('list with styled items', async () => {
-    const buf = await renderHtmlToPdf('<ul><li style="color: #ff0000; font-weight: bold;">R</li><li style="font-style: italic;">I</li></ul>');
+    const buf = await renderHtmlToPdf(
+      '<ul><li style="color: #ff0000; font-weight: bold;">R</li><li style="font-style: italic;">I</li></ul>',
+    );
     assert.ok(buf.length > 0);
   });
 });
@@ -342,7 +386,11 @@ describe('PageLayout', () => {
   test('computes dimensions correctly', () => {
     const doc = new PDFDocument({ autoFirstPage: false, size: 'A4', margin: 0 });
     doc.addPage({ size: 'A4', margin: 0 });
-    const l = new PageLayout(doc, { margin: { top: 20, bottom: 30, left: 25, right: 35 }, _headerHeight: 15, _footerHeight: 10 });
+    const l = new PageLayout(doc, {
+      margin: { top: 20, bottom: 30, left: 25, right: 35 },
+      _headerHeight: 15,
+      _footerHeight: 10,
+    });
     assert.equal(l.contentWidth, doc.page.width - 25 - 35);
     assert.equal(l.contentTop, 20 + 15);
     assert.equal(l.pageBottom, doc.page.height - 30 - 10);
@@ -425,7 +473,10 @@ describe('PdfGenerator', () => {
   });
 
   test('supports global header/footer', async () => {
-    const g = createPdfGenerator({ header: '<div style="font-size: 8px;">H</div>', footer: '<div style="font-size: 8px;">F</div>' });
+    const g = createPdfGenerator({
+      header: '<div style="font-size: 8px;">H</div>',
+      footer: '<div style="font-size: 8px;">F</div>',
+    });
     const buf = await g.generate('<p>C</p>');
     assert.ok(buf instanceof Buffer);
   });

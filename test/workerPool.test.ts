@@ -55,7 +55,7 @@ describe('WorkerPool & Elastic On-Demand Scaling', () => {
     });
 
     const tasks = Array.from({ length: 10 }, (_, i) =>
-      generator.generate(`<h1>Concurrent Doc ${i}</h1><p>Content for doc ${i}</p>`)
+      generator.generate(`<h1>Concurrent Doc ${i}</h1><p>Content for doc ${i}</p>`),
     );
 
     const buffers = await Promise.all(tasks);
@@ -78,7 +78,7 @@ describe('WorkerPool & Elastic On-Demand Scaling', () => {
     assert.ok(generator.getWorkerStats().totalWorkers >= 1);
 
     // Wait for idle timeout (100ms + 50ms buffer)
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 200));
 
     const statsAfterIdle = generator.getWorkerStats();
     assert.equal(statsAfterIdle.totalWorkers, 0);
