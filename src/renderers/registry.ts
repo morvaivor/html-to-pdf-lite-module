@@ -2,6 +2,7 @@ import { renderText, processChildren } from './textRenderer.js';
 import { renderImage } from './imageRenderer.js';
 import { renderTable } from './tableRenderer.js';
 import { renderList } from './listRenderer.js';
+import { renderSvg } from './svgRenderer.js';
 import { parseInlineStyle } from '../core/cacheManager.js';
 import type { TextStyle, RenderOptions } from '../types.js';
 import type { PageLayout } from '../core/PageLayout.js';
@@ -94,6 +95,10 @@ elementRegistry.set('ul', (doc, element, parentStyle, options, layout, textCache
 
 elementRegistry.set('ol', (doc, element, parentStyle, options, layout, textCache, fontAliasSet) => {
   renderList(doc, element, parentStyle, options, 0, layout, textCache, fontAliasSet);
+});
+
+elementRegistry.set('svg', (doc, element, parentStyle, options, layout) => {
+  renderSvg(doc, element, parentStyle, options, layout);
 });
 
 /**

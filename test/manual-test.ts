@@ -1,6 +1,6 @@
 process.env['NODE_ENV'] = 'test';
 import { createPdfGenerator } from '../src/index.js';
-import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 
 const generator = createPdfGenerator({
   defaultFormat: 'A4',
@@ -741,8 +741,8 @@ async function runTests() {
   console.log('  Saved output/test42-table-rowspan.pdf\n');
 
   console.log('=== Test 43: @font-face via localhost URL ===');
-  const http = await import('http');
-  const { readFileSync } = await import('fs');
+  const http = await import('node:http');
+  const { readFileSync } = await import('node:fs');
   const server = http.createServer((req, res) => {
     const file = decodeURIComponent(req.url.replace(/^\//, ''));
     try {
@@ -787,8 +787,22 @@ async function runTests() {
   const arvo44 = (pdf44.toString('latin1').match(/ArvoData|Arvo/g) || []).length;
   console.log('  ArvoData embedded references: ' + arvo44);
   if (arvo44 === 0) throw new Error('ArvoData font was not embedded in the PDF');
-  await savePdf('output/test44-font-face-data-uri.pdf', pdf44);
-  console.log('  Saved output/test44-font-face-data-uri.pdf\n');
+  console.log('=== Test 45: SVG vector graphics ===');
+  const svgContent = `
+    <h1>Test Rendu Vectoriel SVG</h1>
+    <p>Graphique SVG natif intégré directement :</p>
+    <svg width="300" height="150" viewBox="0 0 300 150">
+      <rect x="10" y="10" width="280" height="130" rx="15" fill="#f0f4f8" stroke="#0066cc" stroke-width="2" />
+      <circle cx="70" cy="75" r="40" fill="#ff5722" />
+      <polygon points="170,35 220,115 120,115" fill="#4caf50" opacity="0.8" />
+      <text x="170" y="80" font-family="Helvetica" font-size="14" fill="#333333">SVG PDFKit</text>
+    </svg>
+    <p>Après le SVG.</p>
+  `;
+  const pdf45 = await generator.generate(svgContent);
+  console.log('  Buffer size: ' + pdf45.length + ' bytes');
+  await savePdf('output/test45-svg-vector.pdf', pdf45);
+  console.log('  Saved output/test45-svg-vector.pdf\n');
 
   console.log('\n=== All tests passed ===');
 }

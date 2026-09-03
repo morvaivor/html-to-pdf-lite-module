@@ -13,6 +13,6 @@ export default defineConfig({
   target: 'node18',
   platform: 'node',
   deps: {
-    neverBundle: ['pdfkit', 'cheerio', 'domhandler'],
+    neverBundle: ['pdfkit', 'cheerio', 'domhandler', 'svg-to-pdfkit', 'dom-serializer'],
   },
 });

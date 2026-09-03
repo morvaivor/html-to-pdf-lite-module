@@ -20,6 +20,8 @@
   },
   "ignorePatterns": [
     "dist/**",
+    "dist-demo/**",
+    "demo/site/**",
     "node_modules/**",
     "coverage/**",
     "output/**"

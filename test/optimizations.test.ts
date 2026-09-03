@@ -1,4 +1,4 @@
-import { describe, it, test } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPdfGenerator } from '../src/index.js';
 import { renderHtmlToPdf, PageLayout, TextMeasureCache } from '../src/htmlRenderer.js';

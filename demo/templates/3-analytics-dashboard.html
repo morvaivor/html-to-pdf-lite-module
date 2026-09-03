@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard Analytique & Métriques Cloud Q3 2026</title>
+  <style>
+    @page {
+      @top-left {
+        content: "PULSE ANALYTICS • CLOUD INFRASTRUCTURE REPORT";
+        font-size: 8px;
+        color: #64748b;
+        font-family: Helvetica;
+      }
+      @top-right {
+        content: "Q3 2026 PERFORMANCE OVERVIEW";
+        font-size: 8px;
+        color: #6366f1;
+        font-weight: bold;
+        font-family: Helvetica;
+      }
+      @bottom-center {
+        content: "Page " counter(page) " sur " counter(num-pages);
+        font-size: 8px;
+        color: #94a3b8;
+        font-family: Helvetica;
+      }
+    }
+
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      margin: 0;
+      padding: 10px;
+      line-height: 1.4;
+    }
+
+    .dashboard-header {
+      border-bottom: 2px solid #6366f1;
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 20px;
+      color: #1e1b4b;
+      margin-top: 0;
+      margin-bottom: 4px;
+    }
+
+    .period-badge {
+      font-size: 9px;
+      color: #64748b;
+    }
+
+    /* KPI Summary Cards */
+    table.kpi-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 14px;
+      border: 1px solid #e2e8f0;
+    }
+
+    table.kpi-table td {
+      border: 1px solid #e2e8f0;
+      padding: 8px;
+      background-color: #f8fafc;
+      width: 25%;
+      text-align: center;
+    }
+
+    .kpi-label {
+      font-size: 8px;
+      color: #64748b;
+      text-transform: uppercase;
+      font-weight: bold;
+    }
+
+    .kpi-value {
+      font-size: 16px;
+      color: #1e1b4b;
+      font-weight: bold;
+      margin-top: 2px;
+      margin-bottom: 2px;
+    }
+
+    .kpi-trend {
+      font-size: 8px;
+      color: #16a34a;
+      font-weight: bold;
+    }
+
+    h2 {
+      font-size: 12.5px;
+      color: #312e81;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+      margin-top: 14px;
+      margin-bottom: 8px;
+    }
+
+    /* Section charts */
+    .chart-container {
+      text-align: center;
+      margin-top: 6px;
+      margin-bottom: 12px;
+    }
+
+    /* Data table */
+    table.data-table {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      padding: 4px;
+      margin-top: 6px;
+      margin-bottom: 10px;
+    }
+
+    table.data-table th {
+      background-color: #4f46e5;
+      color: #ffffff;
+      font-size: 8.5px;
+      font-weight: bold;
+      padding: 6px;
+      border: 1px solid #4338ca;
+      text-align: left;
+    }
+
+    table.data-table td {
+      font-size: 8.5px;
+      color: #1e293b;
+      padding: 5px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .badge-ok {
+      background-color: #dcfce7;
+      color: #15803d;
+      font-weight: bold;
+      padding: 2px 6px;
+    }
+
+    .badge-alert {
+      background-color: #fee2e2;
+      color: #b91c1c;
+      font-weight: bold;
+      padding: 2px 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-header">
+    <h1>Plateforme Cloud Pulse • Tableau de Bord Analytique</h1>
+    <div class="period-badge">Période d'analyse : T3 2026 • 24 Groupes de Clusters Surveillés • Région EU-West-3</div>
+  </div>
+
+  <!-- Table de KPI -->
+  <table class="kpi-table">
+    <tr>
+      <td>
+        <div class="kpi-label">Revenus Récurrents (ARR)</div>
+        <div class="kpi-value">2,84 M€</div>
+        <div class="kpi-trend">↑ +24.8% vs N-1</div>
+      </td>
+      <td>
+        <div class="kpi-label">Utilisateurs Actifs (MAU)</div>
+        <div class="kpi-value">148 500</div>
+        <div class="kpi-trend">↑ +18.2% ce mois</div>
+      </td>
+      <td>
+        <div class="kpi-label">Latence P99 API</div>
+        <div class="kpi-value">42 ms</div>
+        <div class="kpi-trend" style="color: #0284c7;">⚡ Conforme SLA</div>
+      </td>
+      <td>
+        <div class="kpi-label">Taux de Disponibilité</div>
+        <div class="kpi-value">99.992 %</div>
+        <div class="kpi-trend">★ Zéro incident critique</div>
+      </td>
+    </tr>
+  </table>
+
+  <h2>1. Répartition Vectorielle des Ressources d'Infrastructure (Graphique Donut SVG)</h2>
+  <div class="chart-container">
+    <svg width="480" height="150" viewBox="0 0 480 150">
+      <!-- Donut Chart -->
+      <!-- Cercle de fond -->
+      <circle cx="90" cy="75" r="55" fill="none" stroke="#f1f5f9" stroke-width="26" />
+      <!-- Segment Compute 50% -->
+      <circle cx="90" cy="75" r="55" fill="none" stroke="#4f46e5" stroke-width="26"
+              stroke-dasharray="172.8 172.8" stroke-dashoffset="0" />
+      <!-- Segment Storage 30% -->
+      <circle cx="90" cy="75" r="55" fill="none" stroke="#06b6d4" stroke-width="26"
+              stroke-dasharray="103.7 241.9" stroke-dashoffset="-172.8" />
+      <!-- Segment Networking 20% -->
+      <circle cx="90" cy="75" r="55" fill="none" stroke="#10b981" stroke-width="26"
+              stroke-dasharray="69.1 276.5" stroke-dashoffset="-276.5" />
+      <!-- Texte central -->
+      <text x="90" y="72" font-family="Helvetica" font-size="12" font-weight="bold" fill="#0f172a" text-anchor="middle">100%</text>
+      <text x="90" y="85" font-family="Helvetica" font-size="7" fill="#64748b" text-anchor="middle">ALLOUÉ</text>
+
+      <!-- Légende du Donut -->
+      <rect x="180" y="35" width="12" height="12" fill="#4f46e5" rx="2" />
+      <text x="200" y="44" font-family="Helvetica" font-size="9" fill="#1e293b" font-weight="bold">Compute & Instances GPU</text>
+      <text x="350" y="44" font-family="Helvetica" font-size="9" fill="#4f46e5" font-weight="bold">50% (742 k€/m)</text>
+
+      <rect x="180" y="65" width="12" height="12" fill="#06b6d4" rx="2" />
+      <text x="200" y="74" font-family="Helvetica" font-size="9" fill="#1e293b" font-weight="bold">Stockage Bloc & NVMe Haute Vitesse</text>
+      <text x="350" y="74" font-family="Helvetica" font-size="9" fill="#06b6d4" font-weight="bold">30% (445 k€/m)</text>
+
+      <rect x="180" y="95" width="12" height="12" fill="#10b981" rx="2" />
+      <text x="200" y="104" font-family="Helvetica" font-size="9" fill="#1e293b" font-weight="bold">Bande Passante & CDN Edge</text>
+      <text x="350" y="104" font-family="Helvetica" font-size="9" fill="#10b981" font-weight="bold">20% (297 k€/m)</text>
+    </svg>
+  </div>
+
+  <h2>2. Évolution de la Croissance Mensuelle (Histogramme Vectoriel SVG)</h2>
+  <div class="chart-container">
+    <svg width="480" height="140" viewBox="0 0 480 140">
+      <!-- Lignes de repère -->
+      <line x1="40" y1="20" x2="460" y2="20" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+      <line x1="40" y1="50" x2="460" y2="50" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+      <line x1="40" y1="80" x2="460" y2="80" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4" />
+      <line x1="40" y1="110" x2="460" y2="110" stroke="#cbd5e1" stroke-width="1.5" />
+
+      <!-- Labels Y -->
+      <text x="32" y="23" font-family="Helvetica" font-size="7" fill="#94a3b8" text-anchor="end">300k</text>
+      <text x="32" y="53" font-family="Helvetica" font-size="7" fill="#94a3b8" text-anchor="end">200k</text>
+      <text x="32" y="83" font-family="Helvetica" font-size="7" fill="#94a3b8" text-anchor="end">100k</text>
+      <text x="32" y="113" font-family="Helvetica" font-size="7" fill="#94a3b8" text-anchor="end">0k</text>
+
+      <!-- Barres 6 mois -->
+      <!-- Avril -->
+      <rect x="65" y="65" width="40" height="45" fill="#c7d2fe" rx="3" />
+      <text x="85" y="122" font-family="Helvetica" font-size="8" fill="#64748b" text-anchor="middle">Avril</text>
+      <text x="85" y="60" font-family="Helvetica" font-size="7.5" fill="#4f46e5" font-weight="bold" text-anchor="middle">148k</text>
+
+      <!-- Mai -->
+      <rect x="130" y="55" width="40" height="55" fill="#a5b4fc" rx="3" />
+      <text x="150" y="122" font-family="Helvetica" font-size="8" fill="#64748b" text-anchor="middle">Mai</text>
+      <text x="150" y="50" font-family="Helvetica" font-size="7.5" fill="#4f46e5" font-weight="bold" text-anchor="middle">178k</text>
+
+      <!-- Juin -->
+      <rect x="195" y="48" width="40" height="62" fill="#818cf8" rx="3" />
+      <text x="215" y="122" font-family="Helvetica" font-size="8" fill="#64748b" text-anchor="middle">Juin</text>
+      <text x="215" y="43" font-family="Helvetica" font-size="7.5" fill="#4f46e5" font-weight="bold" text-anchor="middle">195k</text>
+
+      <!-- Juillet -->
+      <rect x="260" y="40" width="40" height="70" fill="#6366f1" rx="3" />
+      <text x="280" y="122" font-family="Helvetica" font-size="8" fill="#64748b" text-anchor="middle">Juil</text>
+      <text x="280" y="35" font-family="Helvetica" font-size="7.5" fill="#4338ca" font-weight="bold" text-anchor="middle">220k</text>
+
+      <!-- Août -->
+      <rect x="325" y="32" width="40" height="78" fill="#4f46e5" rx="3" />
+      <text x="345" y="122" font-family="Helvetica" font-size="8" fill="#64748b" text-anchor="middle">Août</text>
+      <text x="345" y="27" font-family="Helvetica" font-size="7.5" fill="#3730a3" font-weight="bold" text-anchor="middle">248k</text>
+
+      <!-- Septembre -->
+      <rect x="390" y="24" width="40" height="86" fill="#4338ca" rx="3" />
+      <text x="410" y="122" font-family="Helvetica" font-size="8" fill="#1e1b4b" font-weight="bold" text-anchor="middle">Sept</text>
+      <text x="410" y="19" font-family="Helvetica" font-size="7.5" fill="#312e81" font-weight="bold" text-anchor="middle">284k</text>
+    </svg>
+  </div>
+
+  <h2>3. Santé Opérationnelle des Micro-Services</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 30%;">Micro-Service</th>
+        <th>Instances</th>
+        <th>Trafic Moyen</th>
+        <th>Erreurs 5xx</th>
+        <th>Statut</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>auth-gateway.internal</b></td>
+        <td>12 Pods</td>
+        <td>18 400 req/s</td>
+        <td>0.001 %</td>
+        <td><span class="badge-ok">OPÉRATIONNEL</span></td>
+      </tr>
+      <tr>
+        <td><b>pdf-generator-cluster</b></td>
+        <td>8 Workers</td>
+        <td>4 200 doc/s</td>
+        <td>0.000 %</td>
+        <td><span class="badge-ok">OPÉRATIONNEL</span></td>
+      </tr>
+      <tr>
+        <td><b>payment-processor-v2</b></td>
+        <td>6 Pods</td>
+        <td>1 850 tx/s</td>
+        <td>0.004 %</td>
+        <td><span class="badge-ok">OPÉRATIONNEL</span></td>
+      </tr>
+      <tr>
+        <td><b>vector-indexing-db</b></td>
+        <td>16 Pods</td>
+        <td>32 100 qps</td>
+        <td>0.002 %</td>
+        <td><span class="badge-ok">OPÉRATIONNEL</span></td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

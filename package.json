@@ -34,14 +34,18 @@
     "test:soak": "tsx --expose-gc bench/soak-test.ts",
     "test:soak:parallel": "tsx bench/soak-test-15k-parallel.ts",
     "test:soak:heavy": "tsx bench/soak-test-15k-heavy.ts",
+    "build:demo": "tsx scripts/build-demo.ts",
     "prepublishOnly": "npm run typecheck && npm run build"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
-    "pdfkit": "^0.15.0"
+    "dom-serializer": "^3.1.1",
+    "pdfkit": "^0.15.0",
+    "svg-to-pdfkit": "^0.1.8"
   },
   "devDependencies": {
     "@types/pdfkit": "^0.17.6",
+    "@types/svg-to-pdfkit": "^0.1.4",
     "domhandler": "^6.0.1",
     "oxfmt": "^0.66.0",
     "oxlint": "^1.81.0",
