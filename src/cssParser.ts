@@ -30,6 +30,13 @@ for (const zone of PAGE_ZONES) {
 }
 
 /**
+ * Supprime les commentaires CSS (/* ... *\/) pour éviter de casser les sélecteurs.
+ */
+export function stripCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/**
  * Supprime les blocs @page du CSS pour le parsing des règles normales.
  * Utilise un compteur de profondeur d'accolades équilibrées pour éviter les ReDoS regex.
  */
@@ -121,7 +128,7 @@ export function parseFontFaces(css: string): FontFace[] {
 export function parseCssRules(css: string): CssRule[] {
   if (!css || typeof css !== 'string') return [];
 
-  const cssWithoutPage = stripFontFaceBlocks(stripPageBlocks(css));
+  const cssWithoutPage = stripCssComments(stripFontFaceBlocks(stripPageBlocks(css)));
 
   const rules: CssRule[] = [];
   RULE_REGEX.lastIndex = 0;
@@ -224,14 +231,17 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
       });
     };
 
+    const cleanSel = selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+    if (!cleanSel) continue;
+
     try {
-      applyRule($(selector));
+      applyRule($(cleanSel));
     } catch {
       try {
-        const cleanSelector = selector.replace(ATTR_SELECTOR_REGEX, '').replace(PSEUDO_SELECTOR_REGEX, '').trim();
+        const fallbackSel = cleanSel.replace(ATTR_SELECTOR_REGEX, '').replace(PSEUDO_SELECTOR_REGEX, '').trim();
 
-        if (cleanSelector) {
-          applyRule($(cleanSelector));
+        if (fallbackSel) {
+          applyRule($(fallbackSel));
         }
       } catch {
         // Skip unsupported selectors
