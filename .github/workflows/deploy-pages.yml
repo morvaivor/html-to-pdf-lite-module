@@ -3,7 +3,7 @@ name: Deploy Demo to GitHub Pages
 on:
   push:
     branches:
-      - feat/test-github-io
+      - feat/optimize_style
       - main
   workflow_dispatch:
 
