@@ -117,6 +117,17 @@ export interface TextStyle {
   textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
   display?: string;
   textAlign?: TextAlign;
+  // Propriétés de layout Flexbox & Grid
+  flexDirection?: 'row' | 'column';
+  justifyContent?: 'flex-start' | 'center' | 'flex-end' | 'space-between' | 'space-around';
+  alignItems?: 'flex-start' | 'center' | 'flex-end' | 'stretch';
+  gap?: number;
+  gridTemplateColumns?: string;
+  width?: string | number;
+  height?: string | number;
+  minWidth?: number;
+  maxWidth?: number;
+  borderRadius?: number;
 }
 
 /** Parsed CSS rule */

@@ -552,5 +552,37 @@ describe('High-Fidelity Rendering', () => {
     assert.ok(buf instanceof Buffer);
     assert.ok(buf.length > 0);
   });
+
+  test('renders multi-column flex container (display: flex, flex-direction: row)', async () => {
+    const html = `
+      <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 10px;">
+        <div style="width: 50%; background-color: #f1f5f9; padding: 8px;">
+          <h3>Colonne Gauche</h3>
+          <p>Description société émettrice</p>
+        </div>
+        <div style="width: 50%; background-color: #f8fafc; padding: 8px;">
+          <h3>Colonne Droite</h3>
+          <p>Détails facture et référence</p>
+        </div>
+      </div>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders grid container with grid-template-columns repeat(4, 1fr)', async () => {
+    const html = `
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+        <div style="background-color: #e0e7ff; padding: 6px; border-radius: 4px;">KPI 1</div>
+        <div style="background-color: #dcfce7; padding: 6px; border-radius: 4px;">KPI 2</div>
+        <div style="background-color: #fef3c7; padding: 6px; border-radius: 4px;">KPI 3</div>
+        <div style="background-color: #fee2e2; padding: 6px; border-radius: 4px;">KPI 4</div>
+      </div>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
 });
 

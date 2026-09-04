@@ -96,4 +96,17 @@ describe('qualityAuditor - verifyRenderingQuality', () => {
     assert.strictEqual(result.features.pageZones.expected, true);
     assert.ok(result.features.boxDecorations.expected > 0);
   });
+
+  test('detects multi-column layout on templates with tables or flex containers', async () => {
+    const html = `
+      <div style="display: flex; gap: 8px;">
+        <div style="width: 50%;">Col 1 texte gauche</div>
+        <div style="width: 50%;">Col 2 texte droite</div>
+      </div>
+    `;
+    const result = await verifyRenderingQuality(html);
+    assert.strictEqual(result.layout.multiColumnExpected, true);
+    assert.strictEqual(result.layout.multiColumnDetected, true);
+    assert.ok(result.layout.distinctXPositionsCount >= 2);
+  });
 });

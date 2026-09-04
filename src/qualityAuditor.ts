@@ -39,6 +39,9 @@ export interface QualityAuditResult {
   /** Layout metrics */
   layout: {
     pageCount: number;
+    multiColumnExpected: boolean;
+    multiColumnDetected: boolean;
+    distinctXPositionsCount: number;
   };
   /** Warnings and improvement opportunities */
   warnings: string[];
@@ -54,6 +57,7 @@ interface PdfExtractedData {
   lineCount: number;
   curveCount: number;
   hasColorOperators: boolean;
+  distinctXPositions: number[];
 }
 
 /**
@@ -147,6 +151,21 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
     }
   }
 
+  // Collect distinct horizontal text positions (Tm operators: e = Tm[4])
+  const distinctXSet = new Set<number>();
+  for (const stream of decompressedStreams) {
+    const tmRegex = /[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+([0-9.-]+)\s+[0-9.-]+\s+Tm/g;
+    let tmMatch: RegExpExecArray | null;
+    while ((tmMatch = tmRegex.exec(stream)) !== null) {
+      const xVal = parseFloat(tmMatch[1] || '0');
+      if (!isNaN(xVal) && xVal > 10) {
+        // Quantifier par tranches de 25pt
+        const bucket = Math.round(xVal / 25) * 25;
+        distinctXSet.add(bucket);
+      }
+    }
+  }
+
   return {
     pageCount,
     fullRawText,
@@ -155,6 +174,7 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
     lineCount,
     curveCount,
     hasColorOperators,
+    distinctXPositions: Array.from(distinctXSet),
   };
 }
 
@@ -342,16 +362,11 @@ export async function verifyRenderingQuality(
     warnings.push(`${svgsCount} graphique(s) SVG attendu(s), mais les tracés vectoriels semblent incomplets.`);
   }
 
-  // Box Model Decorations
-  let boxesFound = 0;
-  if (boxesCount > 0) {
-    if (pdfData.rectCount >= Math.min(boxesCount, 2)) {
-      boxesFound = boxesCount;
-    }
-  }
-  const boxesOk = boxesCount === 0 || boxesFound >= boxesCount;
+  // Box Model Decorations (vérification rigoureuse du ratio de rectangles)
+  const boxesFound = Math.min(boxesCount, pdfData.rectCount);
+  const boxesOk = boxesCount === 0 || boxesFound >= Math.ceil(boxesCount * 0.7);
   if (boxesCount > 0 && !boxesOk) {
-    warnings.push(`${boxesCount} bloc(s) avec style de boîte attendu(s), mais les rectangles vectoriels manquent.`);
+    warnings.push(`${boxesCount} bloc(s) avec style de boîte attendu(s), mais seulement ${pdfData.rectCount} rectangle(s) vectoriel(s) détecté(s).`);
   }
 
   // Page Zones
@@ -365,11 +380,37 @@ export async function verifyRenderingQuality(
     warnings.push(`Règles @page définies mais les en-têtes ou pieds de page n'ont pas été identifiés.`);
   }
 
-  // 5. Score Calculation (Weighted)
-  // - Text Completeness: 40 points
-  const textScore = textRecallRate * 40;
+  // Multi-column Layout Detection
+  let multiColumnExpected = false;
+  $('table').each((_i, el) => {
+    const cols = $(el).find('tr').first().find('td, th').length;
+    if (cols >= 2) multiColumnExpected = true;
+  });
+  $('*').each((_i, el) => {
+    const s = parseInlineStyle(el as any);
+    if (
+      s.display === 'flex' ||
+      s.display === 'grid' ||
+      s.gridTemplateColumns ||
+      (s.width && String(s.width).includes('%') && parseFloat(String(s.width)) < 100)
+    ) {
+      multiColumnExpected = true;
+    }
+  });
 
-  // - Structural Features: 25 points
+  const distinctXCount = pdfData.distinctXPositions.length;
+  // Détecté si au moins 2 positions X distinctes trouvées dans les streams
+  const multiColumnDetected = distinctXCount >= 2;
+  const multiColumnOk = !multiColumnExpected || multiColumnDetected;
+  if (!multiColumnOk) {
+    warnings.push(`Mise en page multi-colonnes attendue (flex/grid/table), mais le texte du PDF semble empilé sur une seule colonne.`);
+  }
+
+  // 5. Score Calculation (Weighted - 100 points)
+  // - Text Completeness: 35 points
+  const textScore = textRecallRate * 35;
+
+  // - Structural Features: 20 points
   let featureTotal = 0;
   let featureEarned = 0;
 
@@ -380,28 +421,32 @@ export async function verifyRenderingQuality(
     }
   };
 
-  checkFeatureWeight(6, headingsOk, headingsCount > 0);
-  checkFeatureWeight(6, tablesOk, tablesCount > 0);
-  checkFeatureWeight(5, listsOk, listsCount > 0);
-  checkFeatureWeight(4, imagesOk, imagesCount > 0);
-  checkFeatureWeight(4, svgsOk, svgsCount > 0);
+  checkFeatureWeight(5, headingsOk, headingsCount > 0);
+  checkFeatureWeight(5, tablesOk, tablesCount > 0);
+  checkFeatureWeight(4, listsOk, listsCount > 0);
+  checkFeatureWeight(3, imagesOk, imagesCount > 0);
+  checkFeatureWeight(3, svgsOk, svgsCount > 0);
 
-  const featureScore = featureTotal > 0 ? (featureEarned / featureTotal) * 25 : 25;
+  const featureScore = featureTotal > 0 ? (featureEarned / featureTotal) * 20 : 20;
 
-  // - Box Model & Colors: 20 points
-  let boxScore = 20;
+  // - Box Model & Colors: 25 points
+  let boxScore = 25;
   if (boxesCount > 0) {
-    boxScore = boxesOk ? 20 : Math.max(5, (pdfData.rectCount / Math.max(1, boxesCount)) * 20);
+    const boxRatio = boxesFound / boxesCount;
+    boxScore = Math.round(boxRatio * 20) + (pdfData.hasColorOperators ? 5 : 0);
   }
 
-  // - Layout Integrity: 15 points
-  let layoutScore = 15;
+  // - Layout Integrity & Multi-Column: 20 points
+  let layoutScore = 20;
   if (pdfData.pageCount < 1) {
     layoutScore -= 10;
     warnings.push(`Aucune page PDF valide générée.`);
   }
+  if (!multiColumnOk) {
+    layoutScore -= 7;
+  }
   if (hasPageZonesExpected && !pageZonesOk) {
-    layoutScore -= 5;
+    layoutScore -= 3;
   }
 
   const rawScore = textScore + featureScore + boxScore + layoutScore;
@@ -438,6 +483,9 @@ export async function verifyRenderingQuality(
     },
     layout: {
       pageCount: pdfData.pageCount,
+      multiColumnExpected,
+      multiColumnDetected,
+      distinctXPositionsCount: distinctXCount,
     },
     warnings,
     durationMs,

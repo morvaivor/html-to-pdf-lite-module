@@ -3,6 +3,7 @@ import { renderImage } from './imageRenderer.js';
 import { renderTable } from './tableRenderer.js';
 import { renderList } from './listRenderer.js';
 import { renderSvg } from './svgRenderer.js';
+import { renderFlexContainer } from './flexGridRenderer.js';
 import { parseInlineStyle } from '../core/cacheManager.js';
 import { resolveFontFamily } from '../core/fontManager.js';
 import type { TextStyle, RenderOptions } from '../types.js';
@@ -177,6 +178,57 @@ function collectInlineRuns(
   return runs;
 }
 
+function inheritStyle(parentStyle: TextStyle, inlineStyle: Partial<TextStyle>, tagName: string): TextStyle {
+  return {
+    // Propriétés CSS héritables (typographie & texte)
+    fontFamily: inlineStyle.fontFamily ?? parentStyle.fontFamily,
+    color: inlineStyle.color ?? parentStyle.color,
+    fontSize: inlineStyle.fontSize ?? FONT_SIZES[tagName] ?? parentStyle.fontSize,
+    bold: inlineStyle.bold ?? (tagName === 'b' || tagName === 'strong' ? true : parentStyle.bold),
+    italic: inlineStyle.italic ?? (tagName === 'i' || tagName === 'em' ? true : parentStyle.italic),
+    lineHeight: inlineStyle.lineHeight ?? parentStyle.lineHeight,
+    letterSpacing: inlineStyle.letterSpacing ?? parentStyle.letterSpacing,
+    textAlign: inlineStyle.textAlign ?? parentStyle.textAlign,
+    textTransform: inlineStyle.textTransform ?? parentStyle.textTransform,
+
+    // Propriétés CSS NON héritables (Box Model : bordures, marges, padding, fonds propres à l'élément)
+    backgroundColor: inlineStyle.backgroundColor,
+    border: inlineStyle.border,
+    borderColor: inlineStyle.borderColor,
+    borderWidth: inlineStyle.borderWidth,
+    borderStyle: inlineStyle.borderStyle,
+    borderTopWidth: inlineStyle.borderTopWidth,
+    borderTopColor: inlineStyle.borderTopColor,
+    borderBottomWidth: inlineStyle.borderBottomWidth,
+    borderBottomColor: inlineStyle.borderBottomColor,
+    borderLeftWidth: inlineStyle.borderLeftWidth,
+    borderLeftColor: inlineStyle.borderLeftColor,
+    borderRightWidth: inlineStyle.borderRightWidth,
+    borderRightColor: inlineStyle.borderRightColor,
+    padding: inlineStyle.padding,
+    paddingTop: inlineStyle.paddingTop,
+    paddingRight: inlineStyle.paddingRight,
+    paddingBottom: inlineStyle.paddingBottom,
+    paddingLeft: inlineStyle.paddingLeft,
+    margin: inlineStyle.margin,
+    marginTop: inlineStyle.marginTop,
+    marginRight: inlineStyle.marginRight,
+    marginBottom: inlineStyle.marginBottom,
+    marginLeft: inlineStyle.marginLeft,
+    display: inlineStyle.display,
+    flexDirection: inlineStyle.flexDirection,
+    justifyContent: inlineStyle.justifyContent,
+    alignItems: inlineStyle.alignItems,
+    gap: inlineStyle.gap,
+    gridTemplateColumns: inlineStyle.gridTemplateColumns,
+    width: inlineStyle.width,
+    height: inlineStyle.height,
+    minWidth: inlineStyle.minWidth,
+    maxWidth: inlineStyle.maxWidth,
+    borderRadius: inlineStyle.borderRadius,
+  };
+}
+
 function estimateElementHeight(
   doc: PDFKit.PDFDocument,
   element: Element,
@@ -187,11 +239,7 @@ function estimateElementHeight(
 ): number {
   const tagName = element.name || 'div';
   const inlineStyle = parseInlineStyle(element);
-  const style: TextStyle = {
-    ...parentStyle,
-    fontSize: inlineStyle.fontSize ?? FONT_SIZES[tagName] ?? parentStyle.fontSize,
-    ...inlineStyle,
-  };
+  const style = inheritStyle(parentStyle, inlineStyle, tagName);
 
   const padTop = style.paddingTop ?? style.padding ?? 0;
   const padBottom = style.paddingBottom ?? style.padding ?? 0;
@@ -245,12 +293,7 @@ export async function renderElement(
 ): Promise<void> {
   const tagName = element.name || 'span';
   const inlineStyle = parseInlineStyle(element);
-
-  const style: TextStyle = {
-    ...parentStyle,
-    fontSize: inlineStyle.fontSize ?? FONT_SIZES[tagName] ?? parentStyle.fontSize,
-    ...inlineStyle,
-  };
+  const style = inheritStyle(parentStyle, inlineStyle, tagName);
 
   const registeredRenderer = elementRegistry.get(tagName);
   if (registeredRenderer) {
@@ -258,6 +301,28 @@ export async function renderElement(
       doc,
       element,
       parentStyle,
+      options,
+      layout,
+      textCache,
+      fontAliasSet,
+      imageCache,
+      renderElement,
+    );
+    return;
+  }
+
+  // 0. Flexbox & Grid Layout containers
+  if (
+    style.display === 'flex' ||
+    style.display === 'grid' ||
+    style.display === 'inline-flex' ||
+    style.display === 'inline-grid' ||
+    style.gridTemplateColumns
+  ) {
+    await renderFlexContainer(
+      doc,
+      element,
+      style,
       options,
       layout,
       textCache,
@@ -365,7 +430,9 @@ export async function renderElement(
       doc.y += marginTop;
     }
 
-    if (doc.y + totalBoxHeight > layout.pageBottom) {
+    const remainingPageSpace = layout.pageBottom - doc.y;
+    const pageCapacity = layout.pageBottom - layout.contentTop;
+    if (doc.y > layout.contentTop + 60 && totalBoxHeight > remainingPageSpace && totalBoxHeight <= pageCapacity) {
       doc.addPage({
         size: options.format ?? layout.format,
         layout: options.orientation ?? layout.orientation,
@@ -379,7 +446,11 @@ export async function renderElement(
 
     // Draw background
     if (style.backgroundColor) {
-      doc.fillColor(style.backgroundColor).rect(boxX, startY, boxWidth, totalBoxHeight).fill();
+      if (style.borderRadius && style.borderRadius > 0) {
+        doc.fillColor(style.backgroundColor).roundedRect(boxX, startY, boxWidth, totalBoxHeight, style.borderRadius).fill();
+      } else {
+        doc.fillColor(style.backgroundColor).rect(boxX, startY, boxWidth, totalBoxHeight).fill();
+      }
     }
 
     // Render children inside box with padded layout
@@ -408,7 +479,11 @@ export async function renderElement(
 
     // Draw borders with actual height
     if (style.borderWidth && style.borderWidth > 0 && style.borderColor) {
-      doc.strokeColor(style.borderColor).lineWidth(style.borderWidth).rect(boxX, startY, boxWidth, actualHeight).stroke();
+      if (style.borderRadius && style.borderRadius > 0) {
+        doc.strokeColor(style.borderColor).lineWidth(style.borderWidth).roundedRect(boxX, startY, boxWidth, actualHeight, style.borderRadius).stroke();
+      } else {
+        doc.strokeColor(style.borderColor).lineWidth(style.borderWidth).rect(boxX, startY, boxWidth, actualHeight).stroke();
+      }
     }
     if (style.borderLeftWidth && style.borderLeftWidth > 0) {
       doc

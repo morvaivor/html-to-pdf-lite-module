@@ -168,12 +168,24 @@ export async function renderTable(
         const colspan = Math.min(parseInt(cell.attribs['colspan'] || '1', 10), maxCols - col);
         const rowspan = Math.max(1, Math.min(parseInt(cell.attribs['rowspan'] || '1', 10), allRows.length - rowIdx));
 
+        const currentRow = allRows[rowIdx];
+        const rowInlineStyle = currentRow ? parseInlineStyle(currentRow) : {};
+        const parentSection = currentRow?.parent && (currentRow.parent as any).type === 'tag' ? (currentRow.parent as Element) : null;
+        const sectionInlineStyle = parentSection ? parseInlineStyle(parentSection) : {};
+
         const cellInlineStyle = parseInlineStyle(cell);
+        const inheritedBg = cellInlineStyle.backgroundColor || rowInlineStyle.backgroundColor || sectionInlineStyle.backgroundColor;
+        const inheritedColor = cellInlineStyle.color || rowInlineStyle.color || sectionInlineStyle.color || parentStyle.color;
+
         const cellStyle: TextStyle = {
           ...parentStyle,
+          ...sectionInlineStyle,
+          ...rowInlineStyle,
           ...cellInlineStyle,
+          backgroundColor: inheritedBg,
+          color: inheritedColor,
           fontSize: cellInlineStyle.fontSize ?? FONT_SIZES_TABLE[cell.name] ?? parentStyle.fontSize,
-          bold: cell.name === 'th' || cellInlineStyle.bold || parentStyle.bold,
+          bold: cell.name === 'th' || cellInlineStyle.bold || rowInlineStyle.bold || parentStyle.bold,
         };
 
         const padding = cellStyle.padding ?? defaultPadding;
@@ -356,7 +368,51 @@ export async function renderTable(
             const textWidth = cellWidth - cell.padding * 2;
             const textH = cell.text ? textCache.measure(doc, cell.text, cell.fontFamily, cell.fontSize, textWidth) : 0;
 
-            if (cell.text && textH + cell.padding <= cellH) {
+            const childTags = cell.rawCell.children.filter((c: any) => c.type === 'tag') as Element[];
+            const badgeTag = childTags.find((c) => {
+              const s = parseInlineStyle(c);
+              return Boolean(s.backgroundColor || s.border || s.borderWidth);
+            });
+
+            if (badgeTag) {
+              const bStyleRaw = parseInlineStyle(badgeTag);
+              const bText = getCellText(badgeTag);
+              const bStyle: TextStyle = {
+                ...cell.style,
+                fontSize: bStyleRaw.fontSize ?? cell.style.fontSize,
+                ...bStyleRaw,
+              };
+              const bFont = resolveFontFamily(bStyle.fontFamily, bStyle.bold, bStyle.italic, fontAliasSet);
+              doc.font(bFont).fontSize(bStyle.fontSize);
+              const padL = bStyle.paddingLeft ?? bStyle.padding ?? 4;
+              const padR = bStyle.paddingRight ?? bStyle.padding ?? 4;
+              const padT = bStyle.paddingTop ?? bStyle.padding ?? 2;
+              const padB = bStyle.paddingBottom ?? bStyle.padding ?? 2;
+              const badgeW = padL + doc.widthOfString(bText) + padR;
+              const badgeH = padT + bStyle.fontSize + padB;
+
+              let badgeX = textX;
+              if (cell.style.textAlign === 'center') {
+                badgeX = cellX + (cellWidth - badgeW) / 2;
+              } else if (cell.style.textAlign === 'right') {
+                badgeX = cellX + cellWidth - cell.padding - badgeW;
+              }
+
+              const badgeY = cellY + (cellH - badgeH) / 2;
+
+              if (bStyle.backgroundColor) {
+                doc.fillColor(bStyle.backgroundColor);
+                if (bStyle.borderRadius && bStyle.borderRadius > 0) {
+                  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, bStyle.borderRadius).fill();
+                } else {
+                  doc.rect(badgeX, badgeY, badgeW, badgeH).fill();
+                }
+              }
+              if (bStyle.borderWidth && bStyle.borderColor) {
+                doc.strokeColor(bStyle.borderColor).lineWidth(bStyle.borderWidth).rect(badgeX, badgeY, badgeW, badgeH).stroke();
+              }
+              doc.fillColor(bStyle.color || cell.style.color).text(bText, badgeX + padL, badgeY + padT, { lineBreak: false });
+            } else if (cell.text && textH + cell.padding <= cellH) {
               if (cell.style.textAlign === 'center') {
                 doc.text(cell.text, textX, textY, { width: textWidth, align: 'center' });
               } else if (cell.style.textAlign === 'right') {

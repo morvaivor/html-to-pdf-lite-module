@@ -158,7 +158,7 @@ async function buildDemo(): Promise<void> {
     branch: 'feat/test-github-io',
     generatedAt: new Date().toISOString(),
     totalIntegrationTests: 45,
-    totalUnitTests: 77,
+    totalUnitTests: 85,
     demonstrationExamples: manifest,
     testFiles: testMap,
   };

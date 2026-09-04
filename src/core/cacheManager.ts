@@ -290,6 +290,54 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
       case 'text-align':
         style.textAlign = value as TextStyle['textAlign'];
         break;
+      case 'flex-direction':
+        if (value.toLowerCase() === 'row' || value.toLowerCase() === 'column') {
+          style.flexDirection = value.toLowerCase() as TextStyle['flexDirection'];
+        }
+        break;
+      case 'gap': {
+        const g = parseFloat(value.replace(/(px|pt)/i, ''));
+        if (!isNaN(g)) style.gap = g;
+        break;
+      }
+      case 'justify-content': {
+        const jc = value.toLowerCase();
+        if (['flex-start', 'center', 'flex-end', 'space-between', 'space-around'].includes(jc)) {
+          style.justifyContent = jc as TextStyle['justifyContent'];
+        }
+        break;
+      }
+      case 'align-items': {
+        const ai = value.toLowerCase();
+        if (['flex-start', 'center', 'flex-end', 'stretch'].includes(ai)) {
+          style.alignItems = ai as TextStyle['alignItems'];
+        }
+        break;
+      }
+      case 'grid-template-columns':
+        style.gridTemplateColumns = value;
+        break;
+      case 'width':
+        style.width = value;
+        break;
+      case 'height':
+        style.height = value;
+        break;
+      case 'min-width': {
+        const mw = parseFloat(value.replace(/(px|pt)/i, ''));
+        if (!isNaN(mw)) style.minWidth = mw;
+        break;
+      }
+      case 'max-width': {
+        const mxw = parseFloat(value.replace(/(px|pt)/i, ''));
+        if (!isNaN(mxw)) style.maxWidth = mxw;
+        break;
+      }
+      case 'border-radius': {
+        const br = parseFloat(value.replace(/(px|pt)/i, ''));
+        if (!isNaN(br)) style.borderRadius = br;
+        break;
+      }
     }
   }
 
