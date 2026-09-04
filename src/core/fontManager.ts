@@ -78,6 +78,8 @@ function normalizeBaseFont(fontFamily: string): string {
   return 'Helvetica';
 }
 
+const _fontResolutionCache = new Map<string, string>();
+
 /**
  * Resolves font family name considering bold/italic variants and custom @font-face aliases.
  */
@@ -87,6 +89,13 @@ export function resolveFontFamily(
   italic: boolean,
   fontAliasSet: Set<string> | null | undefined,
 ): string {
+  const hasCustomAliases = Boolean(fontAliasSet && fontAliasSet.size > 0);
+  const cacheKey = !hasCustomAliases ? `${fontFamily || ''}|${bold ? 1 : 0}|${italic ? 1 : 0}` : null;
+  if (cacheKey) {
+    const cached = _fontResolutionCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
+
   let base = fontFamily?.trim() || DEFAULT_STYLE.fontFamily;
 
   const isCustomRegistered = fontAliasSet
@@ -111,7 +120,11 @@ export function resolveFontFamily(
       name = `${base}-BoldItalic`;
     }
   } else if (bold) {
-    name = `${base}-Bold`;
+    if (base === 'Times-Roman' || base === 'Times') {
+      name = 'Times-Bold';
+    } else {
+      name = `${base}-Bold`;
+    }
   } else if (italic) {
     if (base === 'Courier' || base === 'Helvetica') {
       name = `${base}-Oblique`;
@@ -131,5 +144,10 @@ export function resolveFontFamily(
     }
     if (best) name = best;
   }
+
+  if (cacheKey && _fontResolutionCache.size < 256) {
+    _fontResolutionCache.set(cacheKey, name);
+  }
+
   return name;
 }

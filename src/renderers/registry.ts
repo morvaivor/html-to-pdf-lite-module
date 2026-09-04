@@ -252,6 +252,48 @@ function estimateElementHeight(
     return (h || 100) + 8;
   }
 
+  if (tagName === 'table') {
+    let tableHeight = 0;
+    const rows: Element[] = [];
+    for (const child of element.children) {
+      if (child.type !== 'tag') continue;
+      const el = child as Element;
+      if (el.name === 'thead' || el.name === 'tbody' || el.name === 'tfoot') {
+        for (const gc of el.children) {
+          if (gc.type === 'tag' && (gc as Element).name === 'tr') rows.push(gc as Element);
+        }
+      } else if (el.name === 'tr') {
+        rows.push(el);
+      }
+    }
+    for (const row of rows) {
+      let rowMax = 0;
+      for (const cell of row.children) {
+        if (cell.type === 'tag' && ((cell as Element).name === 'td' || (cell as Element).name === 'th')) {
+          const ch = estimateElementHeight(doc, cell as Element, style, innerWidth, textCache, fontAliasSet);
+          if (ch > rowMax) rowMax = ch;
+        }
+      }
+      tableHeight += rowMax;
+    }
+    const marginTop = style.marginTop ?? 0;
+    const marginBottom = style.marginBottom ?? 0;
+    return marginTop + padTop + tableHeight + padBottom + marginBottom;
+  }
+
+  if (style.display === 'flex' && style.flexDirection !== 'column') {
+    let rowMax = 0;
+    for (const child of element.children) {
+      if (child.type === 'tag') {
+        const ch = estimateElementHeight(doc, child as Element, style, innerWidth, textCache, fontAliasSet);
+        if (ch > rowMax) rowMax = ch;
+      }
+    }
+    const marginTop = style.marginTop ?? 0;
+    const marginBottom = style.marginBottom ?? 0;
+    return marginTop + padTop + rowMax + padBottom + marginBottom;
+  }
+
   let totalChildHeight = 0;
   const tagChildren = element.children.filter((c: any) => c.type === 'tag') as Element[];
   const textChildren = element.children.filter((c: any) => c.type === 'text' && c.data?.trim());
@@ -474,7 +516,7 @@ export async function renderElement(
     );
 
     const renderedChildHeight = Math.max(0, doc.y - (startY + padTop));
-    const actualInnerHeight = Math.max(innerContentHeight, renderedChildHeight);
+    const actualInnerHeight = renderedChildHeight > 0 ? renderedChildHeight : innerContentHeight;
     const actualHeight = padTop + actualInnerHeight + padBottom;
 
     // Draw borders with actual height
