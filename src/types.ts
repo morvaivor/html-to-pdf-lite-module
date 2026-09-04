@@ -93,7 +93,29 @@ export interface TextStyle {
   border?: string;
   borderColor?: string;
   borderWidth?: number;
+  borderStyle?: string;
+  borderTopWidth?: number;
+  borderTopColor?: string;
+  borderBottomWidth?: number;
+  borderBottomColor?: string;
+  borderLeftWidth?: number;
+  borderLeftColor?: string;
+  borderRightWidth?: number;
+  borderRightColor?: string;
   padding?: number;
+  paddingTop?: number;
+  paddingRight?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  margin?: number;
+  marginTop?: number;
+  marginRight?: number;
+  marginBottom?: number;
+  marginLeft?: number;
+  lineHeight?: number;
+  letterSpacing?: number;
+  textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
+  display?: string;
   textAlign?: TextAlign;
 }
 

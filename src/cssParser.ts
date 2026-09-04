@@ -1,4 +1,4 @@
-import type { CheerioAPI } from 'cheerio';
+import type { Cheerio, CheerioAPI } from 'cheerio';
 import type { Element } from 'domhandler';
 import type { CssRule, FontFace, PageZones, PageZoneProperties } from './types.js';
 
@@ -198,6 +198,13 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
 
   const rules = parseCssRules(css);
 
+  // Preserve original inline styles so external stylesheet rules don't overwrite them
+  $('[style]').each((_index, element) => {
+    if (element.type === 'tag' && element.attribs?.style && !element.attribs['data-orig-style']) {
+      element.attribs['data-orig-style'] = element.attribs.style;
+    }
+  });
+
   for (const rule of rules) {
     const selector = rule.selector;
 
@@ -208,32 +215,39 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
 
     if (!newStyle) continue;
 
-    try {
-      const elements = $(selector);
-      elements.each((_index, element) => {
+    const applyRule = (elements: Cheerio<Element>) => {
+      elements.each((_index: number, element: Element) => {
         if (element.type === 'tag') {
-          const existingStyle = element.attribs?.style || '';
-          element.attribs.style = existingStyle ? newStyle + '; ' + existingStyle : newStyle;
+          const current = element.attribs?.style || '';
+          element.attribs.style = current ? current + '; ' + newStyle : newStyle;
         }
       });
+    };
+
+    try {
+      applyRule($(selector));
     } catch {
       try {
         const cleanSelector = selector.replace(ATTR_SELECTOR_REGEX, '').replace(PSEUDO_SELECTOR_REGEX, '').trim();
 
         if (cleanSelector) {
-          const elements = $(cleanSelector);
-          elements.each((_index, element) => {
-            if (element.type === 'tag') {
-              const existingStyle = element.attribs?.style || '';
-              element.attribs.style = existingStyle ? newStyle + '; ' + existingStyle : newStyle;
-            }
-          });
+          applyRule($(cleanSelector));
         }
       } catch {
         // Skip unsupported selectors
       }
     }
   }
+
+  // Re-apply original inline styles at the end so they take highest precedence
+  $('[data-orig-style]').each((_index, element) => {
+    if (element.type === 'tag' && element.attribs?.['data-orig-style']) {
+      const orig = element.attribs['data-orig-style'];
+      const current = element.attribs.style || '';
+      element.attribs.style = current ? current + '; ' + orig : orig;
+      delete element.attribs['data-orig-style'];
+    }
+  });
 }
 
 export function extractPageBlock(css: string): string | null {

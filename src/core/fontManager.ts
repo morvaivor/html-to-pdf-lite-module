@@ -61,6 +61,23 @@ export async function registerFontFaces(
   }
 }
 
+function normalizeBaseFont(fontFamily: string): string {
+  const f = fontFamily.toLowerCase().trim();
+  if (f.includes('courier') || f.includes('mono') || f.includes('consolas')) {
+    return 'Courier';
+  }
+  if (
+    f.includes('times') ||
+    f.includes('serif') ||
+    f.includes('georgia') ||
+    f.includes('cursive') ||
+    f.includes('script')
+  ) {
+    return 'Times-Roman';
+  }
+  return 'Helvetica';
+}
+
 /**
  * Resolves font family name considering bold/italic variants and custom @font-face aliases.
  */
@@ -70,8 +87,19 @@ export function resolveFontFamily(
   italic: boolean,
   fontAliasSet: Set<string> | null | undefined,
 ): string {
-  const base = fontFamily || DEFAULT_STYLE.fontFamily;
-  if (!bold && !italic) return base;
+  let base = fontFamily?.trim() || DEFAULT_STYLE.fontFamily;
+
+  const isCustomRegistered = fontAliasSet
+    ? fontAliasSet.has(base) || Array.from(fontAliasSet).some((a) => a.startsWith(base))
+    : false;
+
+  if (!isCustomRegistered) {
+    base = normalizeBaseFont(base);
+  }
+
+  if (!bold && !italic) {
+    return base;
+  }
 
   let name = base;
   if (bold && italic) {

@@ -481,3 +481,76 @@ describe('PdfGenerator', () => {
     assert.ok(buf instanceof Buffer);
   });
 });
+
+// =============================================
+// HIGH-FIDELITY RENDERING TESTS
+// =============================================
+describe('High-Fidelity Rendering', () => {
+  test('extracts and applies internal <style> blocks from HTML', async () => {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          .highlight { color: #1e40af; font-weight: bold; font-size: 16px; }
+          .boxed { background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 10px 14px; }
+        </style>
+      </head>
+      <body>
+        <p class="highlight">Texte stylisé par classe</p>
+        <div class="boxed">Citation ou chapo encadré</div>
+      </body>
+      </html>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders container with box decoration (background, borders, padding)', async () => {
+    const html = `
+      <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 10px 14px; margin: 12px 0;">
+        <p style="color: #1e40af; font-style: italic;">Citation en exergue</p>
+        <p style="text-align: right; color: #3b82f6;">— Auteur</p>
+      </div>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders inline badge with adjacent metadata on same row', async () => {
+    const html = `
+      <div>
+        <span style="background-color: #e0e7ff; color: #3730a3; padding: 4px 8px; font-weight: bold; display: inline-block;">BADGE</span>
+        <span style="color: #64748b; margin-left: 10px;">Date de publication</span>
+      </div>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders headings with border-bottom and text-transform', async () => {
+    const html = `
+      <h2 style="color: #1e3a8a; font-size: 17px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; text-transform: uppercase;">
+        Titre de section souligné
+      </h2>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders mixed inline text runs (bold and italic inside paragraph)', async () => {
+    const html = `
+      <p style="text-align: justify; line-height: 1.5;">
+        Ceci est un texte <b>très important en gras</b> et une mention <i>en italique</i> dans un même paragraphe.
+      </p>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+});
+
