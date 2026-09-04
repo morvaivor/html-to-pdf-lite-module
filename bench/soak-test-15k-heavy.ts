@@ -1,5 +1,5 @@
 import { createPdfGenerator } from '../src/index.js';
-import { performance } from 'perf_hooks';
+import { performance } from 'node:perf_hooks';
 
 function getMemoryStats() {
   if (global.gc) global.gc();

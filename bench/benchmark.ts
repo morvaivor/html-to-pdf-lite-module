@@ -1,10 +1,9 @@
 import { createPdfGenerator } from '../src/index.js';
 import * as cheerio from 'cheerio';
 import PDFDocument from 'pdfkit';
-import { parseCssRules, parsePageRule } from '../src/cssParser.js';
-import { performance } from 'perf_hooks';
-import fs from 'fs';
-import path from 'path';
+import { performance } from 'node:perf_hooks';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // --- Helper for memory measurement ---
 function getHeapMemoryMB() {
@@ -84,20 +83,6 @@ function parseInlineStyleCached(element) {
   styleCache.set(element, style);
   return style;
 }
-
-// 2. Pre-compiled Regex CSS Matcher
-const PRECOMPILED_REGEX = {
-  fontFace: /@font-face\s*\{([^}]*)\}/g,
-  pageRule: /@page\s*\{([^}]*)\}/i,
-  zones: {
-    'top-left': /@top-left\s*\{([^}]*)\}/i,
-    'top-center': /@top-center\s*\{([^}]*)\}/i,
-    'top-right': /@top-right\s*\{([^}]*)\}/i,
-    'bottom-left': /@bottom-left\s*\{([^}]*)\}/i,
-    'bottom-center': /@bottom-center\s*\{([^}]*)\}/i,
-    'bottom-right': /@bottom-right\s*\{([^}]*)\}/i,
-  },
-};
 
 // 3. Text Measurement LRU Cache Simulation
 class TextMeasureCache {
