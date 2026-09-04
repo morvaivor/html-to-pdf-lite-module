@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Démo Interactive • HTML-to-PDF Lite Module</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <span class="logo-icon">⚡</span>
+        <div>
+          <h1 class="app-title">html-to-pdf-lite-module</h1>
+          <p class="app-subtitle">Générateur HTML vers PDF ultra-léger, vectoriel et multi-threadé pour Node.js</p>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="badge badge-branch">
+          <svg class="icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+            <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.5 3.25a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0z"></path>
+          </svg>
+          <span id="branch-name">feat/test-github-io</span>
+        </span>
+        <span class="badge badge-success">
+          <span class="pulse-dot"></span> 45/45 Tests Intégration Passés
+        </span>
+        <a href="https://github.com/niio972/html-to-pdf-lite-module" target="_blank" rel="noopener" class="badge badge-github">
+          <svg class="icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
+          </svg>
+          GitHub Repository
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-bar">
+    <div class="nav-container">
+      <button class="nav-tab active" data-target="example-1">
+        <span class="tab-icon">📄</span>
+        <span class="tab-label">1. Rapport Éditorial</span>
+        <span class="tab-tag">HTML Standard</span>
+      </button>
+      <button class="nav-tab" data-target="example-2">
+        <span class="tab-icon">🖼️</span>
+        <span class="tab-label">2. Fiche Produit</span>
+        <span class="tab-tag">Images</span>
+      </button>
+      <button class="nav-tab" data-target="example-3">
+        <span class="tab-icon">📊</span>
+        <span class="tab-label">3. Dashboard Cloud</span>
+        <span class="tab-tag">Vecteurs SVG</span>
+      </button>
+      <button class="nav-tab" data-target="example-4">
+        <span class="tab-icon">💼</span>
+        <span class="tab-label">4. Facture B2B</span>
+        <span class="tab-tag">Tableaux Avancés</span>
+      </button>
+      <button class="nav-tab" data-target="example-5">
+        <span class="tab-icon">🎓</span>
+        <span class="tab-label">5. Certificat</span>
+        <span class="tab-tag">Format Paysage</span>
+      </button>
+      <button class="nav-tab nav-tab-tests" data-target="tests-panel">
+        <span class="tab-icon">🧪</span>
+        <span class="tab-label">Suite de Tests</span>
+        <span class="tab-count" id="badge-total-tests">45</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="main-content">
+    <!-- Showcase Panels (1 to 5) -->
+    <section id="showcase-container" class="showcase-section">
+      <!-- Action Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-info">
+          <h2 id="current-title" class="current-title">1. Rapport Éditorial & Article Moderne</h2>
+          <span id="current-badge" class="badge badge-meta">A4 Portrait • @page Pagination • CSS3</span>
+        </div>
+        <div class="toolbar-controls">
+          <div class="view-mode-group">
+            <button class="btn-toggle active" data-mode="split" title="Afficher HTML et PDF côte à côte">
+              Vue Scindée
+            </button>
+            <button class="btn-toggle" data-mode="html" title="Afficher uniquement l'aperçu HTML">
+              Aperçu HTML
+            </button>
+            <button class="btn-toggle" data-mode="code" title="Afficher le code source HTML">
+              Code Source
+            </button>
+            <button class="btn-toggle" data-mode="pdf" title="Afficher uniquement le PDF généré">
+              PDF Seul
+            </button>
+          </div>
+          <a id="btn-download-pdf" href="#" download class="btn btn-primary">
+            <svg class="icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+              <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"></path>
+              <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"></path>
+            </svg>
+            Télécharger le PDF
+          </a>
+          <a id="btn-open-pdf" href="#" target="_blank" rel="noopener" class="btn btn-secondary" title="Ouvrir dans un nouvel onglet">
+            ↗
+          </a>
+        </div>
+      </div>
+
+      <!-- Split Viewer Workspace -->
+      <div id="viewer-workspace" class="viewer-workspace mode-split">
+        <!-- Left Pane: HTML Render / Code -->
+        <div id="pane-html" class="pane pane-html">
+          <div class="pane-header">
+            <span class="pane-title">Rendu Navigateur (DOM HTML / CSS)</span>
+            <button id="btn-copy-code" class="btn-sm" style="display: none;">Copier le code</button>
+          </div>
+          <div class="pane-body">
+            <iframe id="iframe-preview" class="iframe-preview" title="HTML Preview"></iframe>
+            <pre id="code-preview" class="code-preview" style="display: none;"><code id="code-content"></code></pre>
+          </div>
+        </div>
+
+        <!-- Right Pane: PDF Generated Viewer -->
+        <div id="pane-pdf" class="pane pane-pdf">
+          <div class="pane-header">
+            <span class="pane-title">Résultat PDF Vectoriel (Généré par html-to-pdf-lite)</span>
+            <span id="pdf-meta" class="meta-tag">Taille : ~2.4 KB</span>
+          </div>
+          <div class="pane-body">
+            <object id="pdf-object" class="pdf-viewer" data="" type="application/pdf">
+              <div class="pdf-fallback">
+                <p>Votre navigateur ne prend pas en charge la visualisation directe des PDF.</p>
+                <a id="pdf-fallback-link" href="#" class="btn btn-primary" download>Télécharger le PDF généré</a>
+              </div>
+            </object>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Test Suite Section (Tab 6) -->
+    <section id="tests-section" class="tests-section" style="display: none;">
+      <div class="tests-header-card">
+        <div>
+          <h2 class="tests-title">🧪 Suite de Tests & Validation Continue</h2>
+          <p class="tests-subtitle">
+            Résultats d'exécution automatisés exécutés sur la branche active <b>feat/test-github-io</b>. Chaque test d'intégration produit un fichier PDF disponible au téléchargement.
+          </p>
+        </div>
+        <div class="tests-summary-stats">
+          <div class="stat-box">
+            <div class="stat-number stat-green" id="stat-total-passed">45 / 45</div>
+            <div class="stat-label">Tests Intégration (100%)</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-number stat-blue">72 / 72</div>
+            <div class="stat-label">Tests Unitaires (>91% Cov.)</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-number stat-purple">0 ms</div>
+            <div class="stat-label">Régression Détectée</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tests Search & Filter Bar -->
+      <div class="tests-filter-bar">
+        <input type="text" id="tests-search-input" class="search-input" placeholder="Rechercher un test (ex: table, @page, svg, font, list)...">
+        <div class="filter-pills">
+          <button class="pill active" data-filter="all">Tous (45)</button>
+          <button class="pill" data-filter="table">Tableaux</button>
+          <button class="pill" data-filter="page">@page & Zones</button>
+          <button class="pill" data-filter="image">Images & SVG</button>
+          <button class="pill" data-filter="font">Polices (@font-face)</button>
+        </div>
+      </div>
+
+      <!-- Test Cases Table -->
+      <div class="table-container">
+        <table class="tests-table">
+          <thead>
+            <tr>
+              <th style="width: 80px;">N° Test</th>
+              <th>Nom & Description du Scénario</th>
+              <th style="width: 140px;">Statut CI</th>
+              <th style="width: 120px;">Taille Sortie</th>
+              <th style="width: 160px; text-align: right;">Artefact Produit</th>
+            </tr>
+          </thead>
+          <tbody id="tests-table-body">
+            <!-- Populated dynamically by app.js -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-content">
+      <p>
+        <b>html-to-pdf-lite-module</b> • Conçu pour une exécution ultra-rapide sans Chromium/Puppeteer.
+      </p>
+      <p class="footer-sub">
+        Déployé continuellement à chaque commit sur GitHub Pages via GitHub Actions • Branche : <code>feat/test-github-io</code>
+      </p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

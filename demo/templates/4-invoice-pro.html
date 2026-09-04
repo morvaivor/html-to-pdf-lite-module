@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Facture Professionnelle - NOVA SOLUTIONS</title>
+  <style>
+    @page {
+      @top-left {
+        content: "NOVA SOLUTIONS SAS • FACTURE N° FA-2026-0842";
+        font-size: 8px;
+        color: #64748b;
+        font-family: Helvetica;
+      }
+      @top-right {
+        content: "ORIGINAL CLIENT";
+        font-size: 8px;
+        color: #059669;
+        font-weight: bold;
+        font-family: Helvetica;
+      }
+      @bottom-left {
+        content: "SIRET: 849 201 948 00021 • RCS Paris • TVA: FR 42 849201948";
+        font-size: 7.5px;
+        color: #94a3b8;
+        font-family: Helvetica;
+      }
+      @bottom-right {
+        content: "Page " counter(page) " sur " counter(num-pages);
+        font-size: 8px;
+        color: #64748b;
+        font-family: Helvetica;
+      }
+    }
+
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      margin: 0;
+      padding: 10px;
+      line-height: 1.4;
+    }
+
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+
+    .header-table td {
+      vertical-align: top;
+      padding: 0;
+    }
+
+    .company-logo {
+      font-size: 22px;
+      font-weight: bold;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+    }
+
+    .company-logo span {
+      color: #059669;
+    }
+
+    .company-info {
+      font-size: 9px;
+      color: #64748b;
+      line-height: 1.4;
+      margin-top: 4px;
+    }
+
+    .invoice-title-block {
+      text-align: right;
+    }
+
+    .invoice-badge {
+      background-color: #d1fae5;
+      color: #065f46;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 4px 10px;
+      display: inline-block;
+      margin-bottom: 6px;
+    }
+
+    .invoice-number {
+      font-size: 16px;
+      font-weight: bold;
+      color: #0f172a;
+    }
+
+    .invoice-meta {
+      font-size: 9px;
+      color: #475569;
+      margin-top: 4px;
+    }
+
+    /* Client Box */
+    .client-card {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+    }
+
+    .client-title {
+      font-size: 8.5px;
+      font-weight: bold;
+      color: #059669;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    .client-name {
+      font-size: 12px;
+      font-weight: bold;
+      color: #0f172a;
+      margin-bottom: 2px;
+    }
+
+    .client-details {
+      font-size: 9px;
+      color: #334155;
+      line-height: 1.4;
+    }
+
+    /* Items Table */
+    table.items-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #cbd5e1;
+      margin-bottom: 12px;
+    }
+
+    table.items-table th {
+      background-color: #0f172a;
+      color: #ffffff;
+      font-size: 8.5px;
+      font-weight: bold;
+      padding: 6px 8px;
+      border: 1px solid #0f172a;
+      text-align: left;
+    }
+
+    table.items-table td {
+      font-size: 8.5px;
+      color: #1e293b;
+      padding: 6px 8px;
+      border: 1px solid #e2e8f0;
+    }
+
+    /* Total block */
+    .total-highlight {
+      background-color: #059669;
+      color: #ffffff;
+      font-weight: bold;
+      font-size: 11px;
+    }
+
+    /* Bank info box */
+    .payment-box {
+      background-color: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      padding: 8px 12px;
+      margin-top: 14px;
+    }
+
+    .payment-title {
+      font-size: 8.5px;
+      font-weight: bold;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+
+    .payment-text {
+      font-size: 8px;
+      color: #334155;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header Table -->
+  <table class="header-table">
+    <tr>
+      <td style="width: 55%;">
+        <div class="company-logo">NOVA<span>SOLUTIONS</span></div>
+        <div class="company-info">
+          142 Boulevard Haussmann, 75008 Paris, France<br>
+          Tél : +33 (0)1 48 00 22 11 • Email : facturation@novasolutions.tech<br>
+          N° TVA Intracommunautaire : FR 42 849201948
+        </div>
+      </td>
+      <td class="invoice-title-block" style="width: 45%;">
+        <div class="invoice-badge">FACTURE OFFICIELLE</div>
+        <div class="invoice-number">FA-2026-0842</div>
+        <div class="invoice-meta">
+          Date d'émission : <b>01/09/2026</b><br>
+          Date d'échéance : <b>01/10/2026</b> (30 jours)<br>
+          Bon de Commande : <b>BC-2026-991</b>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Client Box -->
+  <div class="client-card">
+    <div class="client-title">FACTURÉ À :</div>
+    <div class="client-name">ACME CORP INTERNATIONALE SA</div>
+    <div class="client-details">
+      Service Comptabilité Fournisseurs — Réf: ACM-PAR-89<br>
+      28 Rue de la République, 69002 Lyon, France<br>
+      N° SIRET : 412 890 123 00045 • TVA : FR 88 412890123
+    </div>
+  </div>
+
+  <!-- Items Table with Colspan & Totals -->
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width: 45%;">Description de la Prestation</th>
+        <th style="width: 10%; text-align: center;">Qté</th>
+        <th style="width: 15%; text-align: right;">Prix Unit. HT</th>
+        <th style="width: 10%; text-align: center;">TVA</th>
+        <th style="width: 20%; text-align: right;">Total HT</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <b>Architecture & Modernisation Cloud Native</b><br>
+          <span style="font-size: 7.5px; color: #64748b;">Audit, conception de micro-services et automatisation CI/CD</span>
+        </td>
+        <td style="text-align: center;">10 j/h</td>
+        <td style="text-align: right;">950,00 €</td>
+        <td style="text-align: center;">20%</td>
+        <td style="text-align: right; font-weight: bold;">9 500,00 €</td>
+      </tr>
+      <tr>
+        <td>
+          <b>Intégration Moteur PDF Léger & Worker Threads</b><br>
+          <span style="font-size: 7.5px; color: #64748b;">Déploiement haute disponibilité, benchmark et validation</span>
+        </td>
+        <td style="text-align: center;">6 j/h</td>
+        <td style="text-align: right;">950,00 €</td>
+        <td style="text-align: center;">20%</td>
+        <td style="text-align: right; font-weight: bold;">5 700,00 €</td>
+      </tr>
+      <tr>
+        <td>
+          <b>Support & Maintenance Opérationnelle (Année 1)</b><br>
+          <span style="font-size: 7.5px; color: #64748b;">Couverture 24/7 SLA 99.99%, astreinte et mises à jour de sécurité</span>
+        </td>
+        <td style="text-align: center;">1 forfait</td>
+        <td style="text-align: right;">3 800,00 €</td>
+        <td style="text-align: center;">20%</td>
+        <td style="text-align: right; font-weight: bold;">3 800,00 €</td>
+      </tr>
+
+      <!-- Subtotals rows with colspan -->
+      <tr>
+        <td colspan="4" style="text-align: right; font-weight: bold; background-color: #f8fafc;">Sous-total HT</td>
+        <td style="text-align: right; font-weight: bold; background-color: #f8fafc;">19 000,00 €</td>
+      </tr>
+      <tr>
+        <td colspan="4" style="text-align: right; background-color: #f8fafc;">TVA 20.0%</td>
+        <td style="text-align: right; background-color: #f8fafc;">3 800,00 €</td>
+      </tr>
+      <tr>
+        <td colspan="4" class="total-highlight" style="text-align: right; padding: 8px;">NET À PAYER (TTC)</td>
+        <td class="total-highlight" style="text-align: right; padding: 8px; font-size: 13px;">22 800,00 €</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Bank & Terms box -->
+  <div class="payment-box">
+    <div class="payment-title">COORDONNÉES BANCAIRES POUR VIREMENT (SEPA / INTERNATIONAL)</div>
+    <div class="payment-text">
+      <b>Titulaire :</b> NOVA SOLUTIONS SAS • <b>Banque :</b> BNP Paribas Paris Haussmann<br>
+      <b>IBAN :</b> FR76 3000 4012 3456 7890 1234 567 • <b>Code BIC / SWIFT :</b> BNPAFR22XXX<br>
+      <b>Référence obligatoire du virement :</b> FA-2026-0842 ACME CORP
+    </div>
+  </div>
+
+  <p style="font-size: 7.5px; color: #94a3b8; margin-top: 10px; text-align: center;">
+    Pénalités de retard applicables de plein droit selon taux légal BCE majoré de 10 points + indemnité forfaitaire pour frais de recouvrement de 40 € (art. D. 441-5 C. com). Aucun escompte pour paiement anticipé.
+  </p>
+</body>
+</html>

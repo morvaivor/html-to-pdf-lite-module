@@ -3,5 +3,7 @@ dist/
 output/
 *.pdf
 coverage/
+dist-demo/
 *.log
 *.txt
+.oxc_cache/
