@@ -1,6 +1,6 @@
 # 🚀 HTML to PDF Lite Module (`pdf-generator`) — v2.0.0
 
-> Moteur minimal, ultra-performant et modulaire de génération HTML → PDF sous Node.js (≥ 18.18.0) sans dépendance headless lourde (Puppeteer/Playwright).  
+> Moteur minimal, ultra-performant et modulaire de génération HTML → PDF sous Node.js (≥ 18.18.0) sans dépendance headless lourde (Puppeteer/Playwright).
 > Développé en **TypeScript strict** et propulsé par la stack **OXC (The JavaScript Oxidation Compiler)** : `tsdown`, `oxlint`, `oxfmt`.
 
 ---
