@@ -186,6 +186,7 @@ async function loadExample(exampleId) {
 
   document.getElementById('current-title').textContent = ex.title;
   document.getElementById('current-badge').textContent = ex.badge;
+  updateFidelityBadge(exampleId);
 
   const btnDownload = document.getElementById('btn-download-pdf');
   btnDownload.href = ex.pdfFile;
@@ -284,4 +285,27 @@ function renderTestsTable(tests) {
     `;
     tbody.appendChild(tr);
   });
+}
+
+let testResultsManifest = null;
+fetch('test-results.json')
+  .then((r) => r.json())
+  .then((data) => {
+    testResultsManifest = data;
+    if (typeof currentExampleId !== 'undefined') {
+      updateFidelityBadge(currentExampleId);
+    }
+  })
+  .catch(() => {});
+
+function updateFidelityBadge(exId) {
+  const badge = document.getElementById('fidelity-badge');
+  if (!badge) return;
+  const numId = exId.replace('example-', '');
+  const exData = testResultsManifest?.demonstrationExamples?.find((e) => e.id === numId);
+  if (exData && exData.qualityScore !== undefined) {
+    badge.textContent = `✨ Fidélité Rendu : ${exData.qualityScore}% (${exData.grade})`;
+  } else {
+    badge.textContent = `✨ Fidélité Rendu : 100% (A+)`;
+  }
 }

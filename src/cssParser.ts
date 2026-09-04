@@ -1,4 +1,4 @@
-import type { CheerioAPI } from 'cheerio';
+import type { Cheerio, CheerioAPI } from 'cheerio';
 import type { Element } from 'domhandler';
 import type { CssRule, FontFace, PageZones, PageZoneProperties } from './types.js';
 
@@ -27,6 +27,13 @@ const PAGE_ZONES = [
 const PAGE_ZONE_REGEXES: Record<string, RegExp> = {};
 for (const zone of PAGE_ZONES) {
   PAGE_ZONE_REGEXES[zone] = new RegExp(`${zone}\\s*\\{([^}]*)\\}`, 'i');
+}
+
+/**
+ * Supprime les commentaires CSS (/* ... *\/) pour éviter de casser les sélecteurs.
+ */
+export function stripCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
 /**
@@ -121,7 +128,7 @@ export function parseFontFaces(css: string): FontFace[] {
 export function parseCssRules(css: string): CssRule[] {
   if (!css || typeof css !== 'string') return [];
 
-  const cssWithoutPage = stripFontFaceBlocks(stripPageBlocks(css));
+  const cssWithoutPage = stripCssComments(stripFontFaceBlocks(stripPageBlocks(css)));
 
   const rules: CssRule[] = [];
   RULE_REGEX.lastIndex = 0;
@@ -198,6 +205,13 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
 
   const rules = parseCssRules(css);
 
+  // Preserve original inline styles so external stylesheet rules don't overwrite them
+  $('[style]').each((_index, element) => {
+    if (element.type === 'tag' && element.attribs?.style && !element.attribs['data-orig-style']) {
+      element.attribs['data-orig-style'] = element.attribs.style;
+    }
+  });
+
   for (const rule of rules) {
     const selector = rule.selector;
 
@@ -208,32 +222,42 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
 
     if (!newStyle) continue;
 
-    try {
-      const elements = $(selector);
-      elements.each((_index, element) => {
+    const applyRule = (elements: Cheerio<any>) => {
+      elements.each((_index: number, element: any) => {
         if (element.type === 'tag') {
-          const existingStyle = element.attribs?.style || '';
-          element.attribs.style = existingStyle ? newStyle + '; ' + existingStyle : newStyle;
+          const current = element.attribs?.style || '';
+          element.attribs.style = current ? current + '; ' + newStyle : newStyle;
         }
       });
+    };
+
+    const cleanSel = selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+    if (!cleanSel) continue;
+
+    try {
+      applyRule($(cleanSel));
     } catch {
       try {
-        const cleanSelector = selector.replace(ATTR_SELECTOR_REGEX, '').replace(PSEUDO_SELECTOR_REGEX, '').trim();
+        const fallbackSel = cleanSel.replace(ATTR_SELECTOR_REGEX, '').replace(PSEUDO_SELECTOR_REGEX, '').trim();
 
-        if (cleanSelector) {
-          const elements = $(cleanSelector);
-          elements.each((_index, element) => {
-            if (element.type === 'tag') {
-              const existingStyle = element.attribs?.style || '';
-              element.attribs.style = existingStyle ? newStyle + '; ' + existingStyle : newStyle;
-            }
-          });
+        if (fallbackSel) {
+          applyRule($(fallbackSel));
         }
       } catch {
         // Skip unsupported selectors
       }
     }
   }
+
+  // Re-apply original inline styles at the end so they take highest precedence
+  $('[data-orig-style]').each((_index, element) => {
+    if (element.type === 'tag' && element.attribs?.['data-orig-style']) {
+      const orig = element.attribs['data-orig-style'];
+      const current = element.attribs.style || '';
+      element.attribs.style = current ? current + '; ' + orig : orig;
+      delete element.attribs['data-orig-style'];
+    }
+  });
 }
 
 export function extractPageBlock(css: string): string | null {

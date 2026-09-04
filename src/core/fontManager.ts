@@ -61,6 +61,25 @@ export async function registerFontFaces(
   }
 }
 
+function normalizeBaseFont(fontFamily: string): string {
+  const f = fontFamily.toLowerCase().trim();
+  if (f.includes('courier') || f.includes('mono') || f.includes('consolas')) {
+    return 'Courier';
+  }
+  if (
+    f.includes('times') ||
+    f.includes('serif') ||
+    f.includes('georgia') ||
+    f.includes('cursive') ||
+    f.includes('script')
+  ) {
+    return 'Times-Roman';
+  }
+  return 'Helvetica';
+}
+
+const _fontResolutionCache = new Map<string, string>();
+
 /**
  * Resolves font family name considering bold/italic variants and custom @font-face aliases.
  */
@@ -70,8 +89,26 @@ export function resolveFontFamily(
   italic: boolean,
   fontAliasSet: Set<string> | null | undefined,
 ): string {
-  const base = fontFamily || DEFAULT_STYLE.fontFamily;
-  if (!bold && !italic) return base;
+  const hasCustomAliases = Boolean(fontAliasSet && fontAliasSet.size > 0);
+  const cacheKey = !hasCustomAliases ? `${fontFamily || ''}|${bold ? 1 : 0}|${italic ? 1 : 0}` : null;
+  if (cacheKey) {
+    const cached = _fontResolutionCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
+
+  let base = fontFamily?.trim() || DEFAULT_STYLE.fontFamily;
+
+  const isCustomRegistered = fontAliasSet
+    ? fontAliasSet.has(base) || Array.from(fontAliasSet).some((a) => a.startsWith(base))
+    : false;
+
+  if (!isCustomRegistered) {
+    base = normalizeBaseFont(base);
+  }
+
+  if (!bold && !italic) {
+    return base;
+  }
 
   let name = base;
   if (bold && italic) {
@@ -83,7 +120,11 @@ export function resolveFontFamily(
       name = `${base}-BoldItalic`;
     }
   } else if (bold) {
-    name = `${base}-Bold`;
+    if (base === 'Times-Roman' || base === 'Times') {
+      name = 'Times-Bold';
+    } else {
+      name = `${base}-Bold`;
+    }
   } else if (italic) {
     if (base === 'Courier' || base === 'Helvetica') {
       name = `${base}-Oblique`;
@@ -103,5 +144,10 @@ export function resolveFontFamily(
     }
     if (best) name = best;
   }
+
+  if (cacheKey && _fontResolutionCache.size < 256) {
+    _fontResolutionCache.set(cacheKey, name);
+  }
+
   return name;
 }

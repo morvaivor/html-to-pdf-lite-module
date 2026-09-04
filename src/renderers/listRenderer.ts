@@ -60,26 +60,46 @@ export function renderList(
       }
     }
 
-    let text = '';
+    const runs: Array<{ text: string; bold: boolean; italic: boolean; color: string; decoration?: TextStyle['textDecoration'] }> = [];
+    runs.push({ text: bullet + ' ', bold: false, italic: false, color: itemStyle.color, decoration: itemStyle.textDecoration });
+
+    let fullText = bullet + ' ';
     for (let childIndex = 0; childIndex < textChildren.length; childIndex++) {
       const currentChild = textChildren[childIndex];
       if (!currentChild) continue;
       if (currentChild.type === 'text') {
-        text += (currentChild as any).data ?? '';
+        const d = (currentChild as any).data ?? '';
+        if (d) {
+          runs.push({ text: d, bold: itemStyle.bold, italic: itemStyle.italic, color: itemStyle.color, decoration: itemStyle.textDecoration });
+          fullText += d;
+        }
       } else if (currentChild.type === 'tag') {
-        const grandChildren = (currentChild as Element).children;
+        const el = currentChild as Element;
+        const isBold = el.name === 'b' || el.name === 'strong';
+        const isItalic = el.name === 'i' || el.name === 'em';
+        const cStyle = parseInlineStyle(el);
+        const grandChildren = el.children;
+        let childText = '';
         for (let grandChildIndex = 0; grandChildIndex < grandChildren.length; grandChildIndex++) {
           const grandChild = grandChildren[grandChildIndex];
           if (grandChild && grandChild.type === 'text') {
-            text += (grandChild as any).data ?? '';
+            childText += (grandChild as any).data ?? '';
           }
+        }
+        if (childText) {
+          runs.push({
+            text: childText,
+            bold: Boolean(isBold || cStyle.bold || itemStyle.bold),
+            italic: Boolean(isItalic || cStyle.italic || itemStyle.italic),
+            color: cStyle.color || itemStyle.color,
+            decoration: cStyle.textDecoration || itemStyle.textDecoration,
+          });
+          fullText += childText;
         }
       }
     }
-    text = text.trim();
 
-    const textHeight = text ? textCache.measure(doc, text, fontFamily, itemFontSize, listContentWidth) : 0;
-
+    const textHeight = fullText ? textCache.measure(doc, fullText.trim(), fontFamily, itemFontSize, listContentWidth) : 0;
     const lineHeight = Math.max(textHeight, itemFontSize) + itemSpacing;
 
     if (doc.y + lineHeight > layout.pageBottom) {
@@ -88,11 +108,25 @@ export function renderList(
       doc.x = layout.leftMargin;
     }
 
-    doc.font(fontFamily).fontSize(itemFontSize).fillColor(itemStyle.color);
     doc.x = layout.leftMargin + indent;
-
-    const fullText = text ? bullet + ' ' + text : bullet;
-    doc.text(fullText, { width: layout.contentWidth - indent, lineGap: itemFontSize * 0.25 });
+    for (let i = 0; i < runs.length; i++) {
+      const r = runs[i]!;
+      const isLast = i === runs.length - 1;
+      const f = resolveFontFamily(itemStyle.fontFamily, r.bold, r.italic, fontAliasSet);
+      doc.font(f).fontSize(itemFontSize).fillColor(r.color);
+      const runTextOpts: PDFKit.Mixins.TextOptions = {
+        width: layout.contentWidth - indent,
+        lineGap: itemFontSize * 0.25,
+        continued: !isLast,
+      };
+      if (r.decoration === 'underline') runTextOpts.underline = true;
+      else if (r.decoration === 'line-through') runTextOpts.strike = true;
+      if (i === 0) {
+        doc.text(r.text, layout.leftMargin + indent, doc.y, runTextOpts);
+      } else {
+        doc.text(r.text, runTextOpts);
+      }
+    }
     doc.y += itemSpacing;
 
     for (const nestedList of nestedLists) {

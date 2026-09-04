@@ -3,7 +3,6 @@ name: Deploy Demo to GitHub Pages
 on:
   push:
     branches:
-      - feat/test-github-io
       - main
   workflow_dispatch:
 

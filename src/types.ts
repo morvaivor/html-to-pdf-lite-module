@@ -5,6 +5,7 @@ import type { Worker } from 'node:worker_threads';
 export type PaperFormat = 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal';
 export type Orientation = 'portrait' | 'landscape';
 export type TextAlign = 'left' | 'center' | 'right' | 'justify';
+export type TextDecoration = 'underline' | 'line-through';
 
 /** @page CSS zones for header/footer */
 export type PageZoneName = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
@@ -93,8 +94,42 @@ export interface TextStyle {
   border?: string;
   borderColor?: string;
   borderWidth?: number;
+  borderStyle?: string;
+  borderTopWidth?: number;
+  borderTopColor?: string;
+  borderBottomWidth?: number;
+  borderBottomColor?: string;
+  borderLeftWidth?: number;
+  borderLeftColor?: string;
+  borderRightWidth?: number;
+  borderRightColor?: string;
   padding?: number;
+  paddingTop?: number;
+  paddingRight?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  margin?: number;
+  marginTop?: number;
+  marginRight?: number;
+  marginBottom?: number;
+  marginLeft?: number;
+  lineHeight?: number;
+  letterSpacing?: number;
+  textDecoration?: TextDecoration;
+  textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
+  display?: string;
   textAlign?: TextAlign;
+  // Propriétés de layout Flexbox & Grid
+  flexDirection?: 'row' | 'column';
+  justifyContent?: 'flex-start' | 'center' | 'flex-end' | 'space-between' | 'space-around';
+  alignItems?: 'flex-start' | 'center' | 'flex-end' | 'stretch';
+  gap?: number;
+  gridTemplateColumns?: string;
+  width?: string | number;
+  height?: string | number;
+  minWidth?: number;
+  maxWidth?: number;
+  borderRadius?: number;
 }
 
 /** Parsed CSS rule */

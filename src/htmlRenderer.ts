@@ -64,12 +64,23 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
 
   // Single-pass AST parsing
   const $ = cheerio.load(html);
-  if (options.css) {
-    applyCssToElements($, options.css);
+
+  // Extract internal <style> blocks from HTML
+  const internalStyles: string[] = [];
+  $('style').each((_index, element) => {
+    internalStyles.push($(element).text());
+  });
+  // Remove <style> elements from DOM so their CSS text is not rendered as document text
+  $('style').remove();
+
+  const fullCss = [internalStyles.join('\n'), options.css || ''].filter(Boolean).join('\n');
+
+  if (fullCss) {
+    applyCssToElements($, fullCss);
   }
   const body = $('body').length > 0 ? $('body') : $(html);
 
-  const pageZones = options.css ? parsePageRule(options.css) : null;
+  const pageZones = fullCss ? parsePageRule(fullCss) : null;
   const hasPageHeader = Boolean(
     pageZones && (pageZones['top-left'] || pageZones['top-center'] || pageZones['top-right']),
   );
@@ -83,6 +94,7 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
 
   const renderOptions: RenderOptions = {
     ...options,
+    css: fullCss,
     _headerHeight: headerHeight,
     _footerHeight: footerHeight,
     _pageZones: pageZones,
@@ -107,7 +119,7 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     margin: 0,
   });
 
-  await registerFontFaces(doc, options.css, renderOptions._fontBufferCache, fontAliasSet);
+  await registerFontFaces(doc, fullCss, renderOptions._fontBufferCache, fontAliasSet);
 
   doc.setMaxListeners(0);
 

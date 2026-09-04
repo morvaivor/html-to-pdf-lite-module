@@ -481,3 +481,108 @@ describe('PdfGenerator', () => {
     assert.ok(buf instanceof Buffer);
   });
 });
+
+// =============================================
+// HIGH-FIDELITY RENDERING TESTS
+// =============================================
+describe('High-Fidelity Rendering', () => {
+  test('extracts and applies internal <style> blocks from HTML', async () => {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          .highlight { color: #1e40af; font-weight: bold; font-size: 16px; }
+          .boxed { background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 10px 14px; }
+        </style>
+      </head>
+      <body>
+        <p class="highlight">Texte stylisé par classe</p>
+        <div class="boxed">Citation ou chapo encadré</div>
+      </body>
+      </html>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders container with box decoration (background, borders, padding)', async () => {
+    const html = `
+      <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 10px 14px; margin: 12px 0;">
+        <p style="color: #1e40af; font-style: italic;">Citation en exergue</p>
+        <p style="text-align: right; color: #3b82f6;">— Auteur</p>
+      </div>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders inline badge with adjacent metadata on same row', async () => {
+    const html = `
+      <div>
+        <span style="background-color: #e0e7ff; color: #3730a3; padding: 4px 8px; font-weight: bold; display: inline-block;">BADGE</span>
+        <span style="color: #64748b; margin-left: 10px;">Date de publication</span>
+      </div>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders headings with border-bottom and text-transform', async () => {
+    const html = `
+      <h2 style="color: #1e3a8a; font-size: 17px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; text-transform: uppercase;">
+        Titre de section souligné
+      </h2>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders mixed inline text runs (bold and italic inside paragraph)', async () => {
+    const html = `
+      <p style="text-align: justify; line-height: 1.5;">
+        Ceci est un texte <b>très important en gras</b> et une mention <i>en italique</i> dans un même paragraphe.
+      </p>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders multi-column flex container (display: flex, flex-direction: row)', async () => {
+    const html = `
+      <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 10px;">
+        <div style="width: 50%; background-color: #f1f5f9; padding: 8px;">
+          <h3>Colonne Gauche</h3>
+          <p>Description société émettrice</p>
+        </div>
+        <div style="width: 50%; background-color: #f8fafc; padding: 8px;">
+          <h3>Colonne Droite</h3>
+          <p>Détails facture et référence</p>
+        </div>
+      </div>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+
+  test('renders grid container with grid-template-columns repeat(4, 1fr)', async () => {
+    const html = `
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+        <div style="background-color: #e0e7ff; padding: 6px; border-radius: 4px;">KPI 1</div>
+        <div style="background-color: #dcfce7; padding: 6px; border-radius: 4px;">KPI 2</div>
+        <div style="background-color: #fef3c7; padding: 6px; border-radius: 4px;">KPI 3</div>
+        <div style="background-color: #fee2e2; padding: 6px; border-radius: 4px;">KPI 4</div>
+      </div>
+    `;
+    const buf = await renderHtmlToPdf(html);
+    assert.ok(buf instanceof Buffer);
+    assert.ok(buf.length > 0);
+  });
+});
+

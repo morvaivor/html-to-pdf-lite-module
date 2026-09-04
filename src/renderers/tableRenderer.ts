@@ -126,7 +126,54 @@ export async function renderTable(
     if (cols > maxCols) maxCols = cols;
   }
 
-  const colWidth = layout.contentWidth / maxCols;
+  // Calcul précis des largeurs individuelles des colonnes
+  const explicitColWidths: (number | null)[] = Array.from({ length: maxCols }, () => null);
+
+  for (const row of allRows) {
+    let cIdx = 0;
+    for (let i = 0; i < row.children.length; i++) {
+      const c = row.children[i];
+      if (!c || c.type !== 'tag') continue;
+      const el = c as Element;
+      if (el.name !== 'td' && el.name !== 'th') continue;
+      const cs = parseInt(el.attribs['colspan'] || '1', 10);
+      if (cs === 1 && cIdx < maxCols && explicitColWidths[cIdx] === null) {
+        const cStyle = parseInlineStyle(el);
+        const rawW = cStyle.width || el.attribs['width'];
+        if (rawW) {
+          const strW = String(rawW).trim();
+          if (strW.endsWith('%')) {
+            explicitColWidths[cIdx] = (parseFloat(strW) / 100) * layout.contentWidth;
+          } else {
+            const px = parseFloat(strW.replace(/(px|pt)/i, ''));
+            if (!isNaN(px) && px > 0) explicitColWidths[cIdx] = px;
+          }
+        }
+      }
+      cIdx += cs;
+    }
+  }
+
+  const hasAnyExplicit = explicitColWidths.some((w) => w !== null);
+  let colWidths: number[];
+  if (hasAnyExplicit) {
+    let allocated = 0;
+    let unallocatedCount = 0;
+    for (let c = 0; c < maxCols; c++) {
+      if (explicitColWidths[c] !== null) {
+        allocated += explicitColWidths[c]!;
+      } else {
+        unallocatedCount++;
+      }
+    }
+    const remaining = Math.max(10, layout.contentWidth - allocated);
+    const perUnallocated = unallocatedCount > 0 ? remaining / unallocatedCount : 0;
+    colWidths = explicitColWidths.map((w) => (w !== null ? w : perUnallocated));
+  } else {
+    const defaultW = layout.contentWidth / maxCols;
+    colWidths = Array(maxCols).fill(defaultW);
+  }
+
   const borderWidth = defaultBorder ? defaultBorderWidth : 0;
   const borderColor = defaultBorder ? defaultBorderColor : undefined;
 
@@ -168,20 +215,57 @@ export async function renderTable(
         const colspan = Math.min(parseInt(cell.attribs['colspan'] || '1', 10), maxCols - col);
         const rowspan = Math.max(1, Math.min(parseInt(cell.attribs['rowspan'] || '1', 10), allRows.length - rowIdx));
 
+        const currentRow = allRows[rowIdx];
+        const rowInlineStyle = currentRow ? parseInlineStyle(currentRow) : {};
+        const parentSection = currentRow?.parent && (currentRow.parent as any).type === 'tag' ? (currentRow.parent as Element) : null;
+        const sectionInlineStyle = parentSection ? parseInlineStyle(parentSection) : {};
+
         const cellInlineStyle = parseInlineStyle(cell);
+        const inheritedBg = cellInlineStyle.backgroundColor || rowInlineStyle.backgroundColor || sectionInlineStyle.backgroundColor;
+        const inheritedColor = cellInlineStyle.color || rowInlineStyle.color || sectionInlineStyle.color || parentStyle.color;
+
         const cellStyle: TextStyle = {
           ...parentStyle,
+          ...sectionInlineStyle,
+          ...rowInlineStyle,
           ...cellInlineStyle,
+          backgroundColor: inheritedBg,
+          color: inheritedColor,
           fontSize: cellInlineStyle.fontSize ?? FONT_SIZES_TABLE[cell.name] ?? parentStyle.fontSize,
-          bold: cell.name === 'th' || cellInlineStyle.bold || parentStyle.bold,
+          bold: cell.name === 'th' || cellInlineStyle.bold || rowInlineStyle.bold || parentStyle.bold,
         };
 
         const padding = cellStyle.padding ?? defaultPadding;
         const fontFamily = resolveFontFamily(cellStyle.fontFamily, cellStyle.bold, cellStyle.italic, fontAliasSet);
         const fontSize = cellStyle.fontSize;
 
+        const currentCellWidth = colWidths.slice(col, col + colspan).reduce((sum, w) => sum + w, 0);
+        const textWidth = Math.max(10, currentCellWidth - padding * 2);
+
         const text = getCellText(cell);
-        const textHeight = text ? textCache.measure(doc, text, fontFamily, fontSize, colWidth - padding * 2) : 0;
+        const textHeight = text ? textCache.measure(doc, text, fontFamily, fontSize, textWidth) : 0;
+
+        let complexChildrenHeight = 0;
+        for (const child of cell.children) {
+          if (child.type === 'tag') {
+            const el = child as Element;
+            if (el.name === 'svg') {
+              const h = parseInt(el.attribs['height'] || '', 10) || 90;
+              complexChildrenHeight += h + 8;
+            } else if (el.name === 'img') {
+              const h = parseInt(el.attribs['height'] || '', 10) || 90;
+              complexChildrenHeight += h + 8;
+            } else if (el.name === 'div' || el.name === 'p') {
+              const cTxt = getCellText(el);
+              if (cTxt) {
+                const cStyle = parseInlineStyle(el);
+                const cFont = resolveFontFamily(cStyle.fontFamily || fontFamily, Boolean(cStyle.bold), Boolean(cStyle.italic), fontAliasSet);
+                const cSize = cStyle.fontSize || fontSize;
+                complexChildrenHeight += textCache.measure(doc, cTxt, cFont, cSize, textWidth) + 6;
+              }
+            }
+          }
+        }
 
         const nestedTables = getCellNestedTables(cell);
         let nestedHeight = 0;
@@ -234,7 +318,7 @@ export async function renderTable(
                         nestedCellText,
                         cellFontFamily,
                         nestedCellFontSize,
-                        colWidth - cellPaddingHorizontal * 2,
+                        textWidth - cellPaddingHorizontal * 2,
                       )
                     : 0,
                 );
@@ -245,7 +329,7 @@ export async function renderTable(
           nestedHeight += calculatedNestedHeight;
         }
 
-        const cellHeight = Math.max(textHeight, fontSize) + padding * 2 + nestedHeight;
+        const cellHeight = Math.max(textHeight, fontSize, complexChildrenHeight) + padding * 2 + nestedHeight;
 
         const cellData: CellData = {
           text,
@@ -331,8 +415,8 @@ export async function renderTable(
         while (col < maxCols) {
           const cell = gridCells[rowIndex]?.[col];
           if (cell && cell.startRow === rowIndex) {
-            const cellWidth = colWidth * cell.colspan;
-            const cellX = layout.leftMargin + cell.startCol * colWidth;
+            const cellWidth = colWidths.slice(cell.startCol, cell.startCol + cell.colspan).reduce((sum, w) => sum + w, 0);
+            const cellX = layout.leftMargin + colWidths.slice(0, cell.startCol).reduce((sum, w) => sum + w, 0);
             const cellY = rowTop[rowIndex] ?? 0;
             const endRow = Math.min(rowIndex + cell.rowspan - 1, allRows.length - 1);
             const cellH = (rowTop[endRow] ?? 0) + (rowHeights[endRow] ?? 0) - cellY;
@@ -353,16 +437,95 @@ export async function renderTable(
 
             const textX = cellX + cell.padding;
             const textY = cellY + cell.padding + cell.fontSize;
-            const textWidth = cellWidth - cell.padding * 2;
+            const textWidth = Math.max(10, cellWidth - cell.padding * 2);
             const textH = cell.text ? textCache.measure(doc, cell.text, cell.fontFamily, cell.fontSize, textWidth) : 0;
 
-            if (cell.text && textH + cell.padding <= cellH) {
-              if (cell.style.textAlign === 'center') {
-                doc.text(cell.text, textX, textY, { width: textWidth, align: 'center' });
-              } else if (cell.style.textAlign === 'right') {
-                doc.text(cell.text, textX, textY, { width: textWidth, align: 'right' });
-              } else {
-                doc.text(cell.text, textX, textY, { width: textWidth });
+            const childTags = cell.rawCell.children.filter((c: any) => c.type === 'tag') as Element[];
+            const hasComplexChildren = childTags.some((c) => c.name === 'div' || c.name === 'p' || c.name === 'svg' || c.name === 'img');
+
+            if (hasComplexChildren) {
+              const cellLayout = Object.create(layout);
+              cellLayout.leftMargin = textX;
+              cellLayout.contentWidth = textWidth;
+              const savedX = doc.x;
+              const savedY = doc.y;
+              doc.x = textX;
+              doc.y = cellY + cell.padding;
+
+              for (const child of cell.rawCell.children) {
+                if (child.type === 'tag') {
+                  await renderElementFn(
+                    doc,
+                    child as Element,
+                    cell.style,
+                    options,
+                    cellLayout,
+                    textCache,
+                    fontAliasSet,
+                    imageCache,
+                  );
+                } else if (child.type === 'text' && (child as any).data?.trim()) {
+                  doc.font(cell.fontFamily).fontSize(cell.fontSize).fillColor(cell.style.color);
+                  const align = cell.style.textAlign || 'left';
+                  doc.text((child as any).data.trim(), textX, doc.y, { width: textWidth, align });
+                }
+              }
+              doc.x = savedX;
+              doc.y = savedY;
+            } else {
+              const badgeTag = childTags.find((c) => {
+                const s = parseInlineStyle(c);
+                return Boolean(s.backgroundColor || s.border || s.borderWidth);
+              });
+
+              if (badgeTag) {
+                const bStyleRaw = parseInlineStyle(badgeTag);
+                const bText = getCellText(badgeTag);
+                const bStyle: TextStyle = {
+                  ...cell.style,
+                  fontSize: bStyleRaw.fontSize ?? cell.style.fontSize,
+                  ...bStyleRaw,
+                };
+                const bFont = resolveFontFamily(bStyle.fontFamily, bStyle.bold, bStyle.italic, fontAliasSet);
+                doc.font(bFont).fontSize(bStyle.fontSize);
+                const padL = bStyle.paddingLeft ?? bStyle.padding ?? 4;
+                const padR = bStyle.paddingRight ?? bStyle.padding ?? 4;
+                const padT = bStyle.paddingTop ?? bStyle.padding ?? 2;
+                const padB = bStyle.paddingBottom ?? bStyle.padding ?? 2;
+                const badgeW = padL + doc.widthOfString(bText) + padR;
+                const badgeH = padT + bStyle.fontSize + padB;
+
+                let badgeX = textX;
+                if (cell.style.textAlign === 'center') {
+                  badgeX = cellX + (cellWidth - badgeW) / 2;
+                } else if (cell.style.textAlign === 'right') {
+                  badgeX = cellX + cellWidth - cell.padding - badgeW;
+                }
+
+                const badgeY = cellY + (cellH - badgeH) / 2;
+
+                if (bStyle.backgroundColor) {
+                  doc.fillColor(bStyle.backgroundColor);
+                  if (bStyle.borderRadius && bStyle.borderRadius > 0) {
+                    doc.roundedRect(badgeX, badgeY, badgeW, badgeH, bStyle.borderRadius).fill();
+                  } else {
+                    doc.rect(badgeX, badgeY, badgeW, badgeH).fill();
+                  }
+                }
+                if (bStyle.borderWidth && bStyle.borderColor) {
+                  doc.strokeColor(bStyle.borderColor).lineWidth(bStyle.borderWidth).rect(badgeX, badgeY, badgeW, badgeH).stroke();
+                }
+                const badgeTextOpts: PDFKit.Mixins.TextOptions = { lineBreak: false };
+                if (bStyle.textDecoration === 'underline') badgeTextOpts.underline = true;
+                else if (bStyle.textDecoration === 'line-through') badgeTextOpts.strike = true;
+                doc.fillColor(bStyle.color || cell.style.color).text(bText, badgeX + padL, badgeY + padT, badgeTextOpts);
+              } else if (cell.text && textH + cell.padding <= cellH) {
+                const cellTextOpts: PDFKit.Mixins.TextOptions = { width: textWidth };
+                if (cell.style.textAlign === 'center') cellTextOpts.align = 'center';
+                else if (cell.style.textAlign === 'right') cellTextOpts.align = 'right';
+                if (cell.style.textDecoration === 'underline') cellTextOpts.underline = true;
+                else if (cell.style.textDecoration === 'line-through') cellTextOpts.strike = true;
+                doc.text(cell.text, textX, textY, cellTextOpts);
               }
             }
 
