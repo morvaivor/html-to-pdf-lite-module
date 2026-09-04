@@ -109,6 +109,8 @@ console.log(generator.getWorkerStats());
 |---|---|:---:|
 | **Balises de texte** | `<h1>`-`<h6>`, `<p>`, `<div>`, `<span>`, `<br>`, `<a>` | ✅ |
 | **Styles Inline** | `color`, `font-size`, `font-weight`, `font-style`, `font-family`, `text-align`, `border`, `padding`, `background-color` | ✅ |
+| **CSS Avancé** | `line-height`, `letter-spacing`, `text-decoration` (`underline`/`line-through`), `margin`/`margin-*`, `text-transform`, `border-radius` | ✅ |
+| **Layout Flex & Grid** | `display: flex` / `display: grid`, `grid-template-columns` (`fr`), `gap`, `flex-direction` | ✅ |
 | **CSS Externe & Sélecteurs** | Balise (`p`), Classe (`.box`), ID (`#header`), Combinés (`div.active`) | ✅ |
 | **Polices `@font-face`** | TTF/OTF via URL HTTP(s) ou Data URI `base64` (variantes bold/italic) | ✅ |
 | **Zones de page `@page`** | 6 zones (`@top-left` à `@bottom-right`), `counter(page)`, `counter(num-pages)` | ✅ |
@@ -136,7 +138,7 @@ npm run format
 # 5. Tests unitaires et couverture (>90%)
 npm run test:coverage
 
-# 6. Tests manuels d'intégration (44 scénarios)
+# 6. Tests manuels d'intégration (47 scénarios)
 npm test
 
 # 7. Benchmarks

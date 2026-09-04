@@ -60,8 +60,8 @@ export function renderList(
       }
     }
 
-    const runs: Array<{ text: string; bold: boolean; italic: boolean; color: string }> = [];
-    runs.push({ text: bullet + ' ', bold: false, italic: false, color: itemStyle.color });
+    const runs: Array<{ text: string; bold: boolean; italic: boolean; color: string; decoration?: TextStyle['textDecoration'] }> = [];
+    runs.push({ text: bullet + ' ', bold: false, italic: false, color: itemStyle.color, decoration: itemStyle.textDecoration });
 
     let fullText = bullet + ' ';
     for (let childIndex = 0; childIndex < textChildren.length; childIndex++) {
@@ -70,7 +70,7 @@ export function renderList(
       if (currentChild.type === 'text') {
         const d = (currentChild as any).data ?? '';
         if (d) {
-          runs.push({ text: d, bold: itemStyle.bold, italic: itemStyle.italic, color: itemStyle.color });
+          runs.push({ text: d, bold: itemStyle.bold, italic: itemStyle.italic, color: itemStyle.color, decoration: itemStyle.textDecoration });
           fullText += d;
         }
       } else if (currentChild.type === 'tag') {
@@ -92,6 +92,7 @@ export function renderList(
             bold: Boolean(isBold || cStyle.bold || itemStyle.bold),
             italic: Boolean(isItalic || cStyle.italic || itemStyle.italic),
             color: cStyle.color || itemStyle.color,
+            decoration: cStyle.textDecoration || itemStyle.textDecoration,
           });
           fullText += childText;
         }
@@ -113,18 +114,17 @@ export function renderList(
       const isLast = i === runs.length - 1;
       const f = resolveFontFamily(itemStyle.fontFamily, r.bold, r.italic, fontAliasSet);
       doc.font(f).fontSize(itemFontSize).fillColor(r.color);
+      const runTextOpts: PDFKit.Mixins.TextOptions = {
+        width: layout.contentWidth - indent,
+        lineGap: itemFontSize * 0.25,
+        continued: !isLast,
+      };
+      if (r.decoration === 'underline') runTextOpts.underline = true;
+      else if (r.decoration === 'line-through') runTextOpts.strike = true;
       if (i === 0) {
-        doc.text(r.text, layout.leftMargin + indent, doc.y, {
-          width: layout.contentWidth - indent,
-          lineGap: itemFontSize * 0.25,
-          continued: !isLast,
-        });
+        doc.text(r.text, layout.leftMargin + indent, doc.y, runTextOpts);
       } else {
-        doc.text(r.text, {
-          width: layout.contentWidth - indent,
-          lineGap: itemFontSize * 0.25,
-          continued: !isLast,
-        });
+        doc.text(r.text, runTextOpts);
       }
     }
     doc.y += itemSpacing;

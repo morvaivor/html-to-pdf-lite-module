@@ -5,6 +5,7 @@ import type { Worker } from 'node:worker_threads';
 export type PaperFormat = 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal';
 export type Orientation = 'portrait' | 'landscape';
 export type TextAlign = 'left' | 'center' | 'right' | 'justify';
+export type TextDecoration = 'underline' | 'line-through';
 
 /** @page CSS zones for header/footer */
 export type PageZoneName = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
@@ -114,6 +115,7 @@ export interface TextStyle {
   marginLeft?: number;
   lineHeight?: number;
   letterSpacing?: number;
+  textDecoration?: TextDecoration;
   textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
   display?: string;
   textAlign?: TextAlign;

@@ -55,6 +55,11 @@ export function renderText(
   if (style.letterSpacing !== undefined) {
     textOpts.characterSpacing = style.letterSpacing;
   }
+  if (style.textDecoration === 'underline') {
+    textOpts.underline = true;
+  } else if (style.textDecoration === 'line-through') {
+    textOpts.strike = true;
+  }
 
   const textHeight = textCache.measure(doc, formattedText, fontFamily, fontSize, availableWidth, lineGap);
 
@@ -148,6 +153,11 @@ export function renderInlineRuns(
     };
     if (run.style.letterSpacing !== undefined) {
       opts.characterSpacing = run.style.letterSpacing;
+    }
+    if (run.style.textDecoration === 'underline') {
+      opts.underline = true;
+    } else if (run.style.textDecoration === 'line-through') {
+      opts.strike = true;
     }
 
     if (i === 0) {

@@ -804,6 +804,80 @@ async function runTests() {
   await savePdf('output/test45-svg-vector.pdf', pdf45);
   console.log('  Saved output/test45-svg-vector.pdf\n');
 
+  console.log('=== Test 46: CSS avancé (line-height, letter-spacing, text-decoration) ===');
+  const zlib46 = await import('node:zlib');
+  const decompressStreams = (buf: Buffer): string => {
+    const binary = buf.toString('binary');
+    const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
+    let m: RegExpExecArray | null;
+    let out = '';
+    while ((m = streamRegex.exec(binary)) !== null) {
+      const raw = m[1];
+      if (!raw) continue;
+      try {
+        out += zlib46.inflateSync(Buffer.from(raw, 'binary')).toString('latin1');
+      } catch {
+        out += raw;
+      }
+    }
+    return out;
+  };
+
+  const content46 = `
+    <h1>Textes stylés</h1>
+    <p style="line-height: 2;">Ligne haute un.<br>Ligne haute deux.<br>Ligne haute trois.</p>
+    <p>Ligne simple un.<br>Ligne simple deux.<br>Ligne simple trois.</p>
+    <p style="letter-spacing: 3px;">Ecartement des lettres</p>
+    <p style="text-decoration: underline;">Texte souligné</p>
+    <p style="text-decoration: line-through;">Texte barré</p>
+  `;
+  const pdf46 = await generator.generate(content46);
+  const stream46 = decompressStreams(pdf46);
+  if (!/3 Tc/.test(stream46)) throw new Error('letter-spacing: no "3 Tc" operator found in content stream');
+  const strokeOps46 = (stream46.match(/\n1 w\n/g) || []).length;
+  if (strokeOps46 < 2) throw new Error('text-decoration: expected at least 2 underline/line-through strokes, got ' + strokeOps46);
+
+  const tmRegex = /1 0 0 1 ([\d.]+) ([\d.]+) Tm/g;
+  const yPositions46: number[] = [];
+  let m46: RegExpExecArray | null;
+  while ((m46 = tmRegex.exec(stream46)) !== null) yPositions46.push(parseFloat(m46[2]));
+  const spanStyled = Math.abs(yPositions46[3] - yPositions46[1]);
+  const spanPlain = Math.abs(yPositions46[6] - yPositions46[4]);
+  console.log('  line-height:2 span = ' + spanStyled.toFixed(1) + ', default span = ' + spanPlain.toFixed(1));
+  if (spanStyled < spanPlain + 10) throw new Error('line-height: styled lines are not more spaced than default lines');
+
+  await savePdf('output/test46-css-advanced.pdf', pdf46);
+  console.log('  Saved output/test46-css-advanced.pdf\n');
+
+  console.log('=== Test 47: CSS margin sur blocs ===');
+  const content47With = `
+    <h1 style="margin: 20px;">Titre avec margin</h1>
+    <p>Paragraphe après.</p>
+  `;
+  const content47Without = `
+    <h1>Titre sans margin</h1>
+    <p>Paragraphe après.</p>
+  `;
+  const pdf47With = await generator.generate(content47With);
+  const pdf47Without = await generator.generate(content47Without);
+
+  const firstTwoTextY = (buf: Buffer): number[] => {
+    const ys: number[] = [];
+    const re = /1 0 0 1 ([\d.]+) ([\d.]+) Tm/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(decompressStreams(buf))) !== null && ys.length < 2) ys.push(parseFloat(m[2]));
+    return ys;
+  };
+  const ysWith = firstTwoTextY(pdf47With);
+  const ysWithout = firstTwoTextY(pdf47Without);
+  const gapWith = Math.abs(ysWith[0] - ysWith[1]);
+  const gapWithout = Math.abs(ysWithout[0] - ysWithout[1]);
+  console.log('  gap avec margin:20px = ' + gapWith.toFixed(1) + ', gap sans = ' + gapWithout.toFixed(1));
+  if (gapWith < gapWithout + 15) throw new Error('margin: h1 avec margin:20px devrait éloigner davantage le paragraphe suivant');
+
+  await savePdf('output/test47-css-margin.pdf', pdf47With);
+  console.log('  Saved output/test47-css-margin.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 

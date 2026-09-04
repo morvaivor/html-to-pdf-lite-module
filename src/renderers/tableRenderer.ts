@@ -515,15 +515,17 @@ export async function renderTable(
                 if (bStyle.borderWidth && bStyle.borderColor) {
                   doc.strokeColor(bStyle.borderColor).lineWidth(bStyle.borderWidth).rect(badgeX, badgeY, badgeW, badgeH).stroke();
                 }
-                doc.fillColor(bStyle.color || cell.style.color).text(bText, badgeX + padL, badgeY + padT, { lineBreak: false });
+                const badgeTextOpts: PDFKit.Mixins.TextOptions = { lineBreak: false };
+                if (bStyle.textDecoration === 'underline') badgeTextOpts.underline = true;
+                else if (bStyle.textDecoration === 'line-through') badgeTextOpts.strike = true;
+                doc.fillColor(bStyle.color || cell.style.color).text(bText, badgeX + padL, badgeY + padT, badgeTextOpts);
               } else if (cell.text && textH + cell.padding <= cellH) {
-                if (cell.style.textAlign === 'center') {
-                  doc.text(cell.text, textX, textY, { width: textWidth, align: 'center' });
-                } else if (cell.style.textAlign === 'right') {
-                  doc.text(cell.text, textX, textY, { width: textWidth, align: 'right' });
-                } else {
-                  doc.text(cell.text, textX, textY, { width: textWidth });
-                }
+                const cellTextOpts: PDFKit.Mixins.TextOptions = { width: textWidth };
+                if (cell.style.textAlign === 'center') cellTextOpts.align = 'center';
+                else if (cell.style.textAlign === 'right') cellTextOpts.align = 'right';
+                if (cell.style.textDecoration === 'underline') cellTextOpts.underline = true;
+                else if (cell.style.textDecoration === 'line-through') cellTextOpts.strike = true;
+                doc.text(cell.text, textX, textY, cellTextOpts);
               }
             }
 

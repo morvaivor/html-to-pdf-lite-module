@@ -279,6 +279,12 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         if (!isNaN(ls)) style.letterSpacing = ls;
         break;
       }
+      case 'text-decoration': {
+        const td = value.toLowerCase();
+        if (td === 'underline') style.textDecoration = 'underline';
+        else if (td === 'line-through') style.textDecoration = 'line-through';
+        break;
+      }
       case 'text-transform':
         if (['uppercase', 'lowercase', 'capitalize', 'none'].includes(value.toLowerCase())) {
           style.textTransform = value.toLowerCase() as TextStyle['textTransform'];

@@ -188,6 +188,7 @@ function inheritStyle(parentStyle: TextStyle, inlineStyle: Partial<TextStyle>, t
     italic: inlineStyle.italic ?? (tagName === 'i' || tagName === 'em' ? true : parentStyle.italic),
     lineHeight: inlineStyle.lineHeight ?? parentStyle.lineHeight,
     letterSpacing: inlineStyle.letterSpacing ?? parentStyle.letterSpacing,
+    textDecoration: inlineStyle.textDecoration ?? parentStyle.textDecoration,
     textAlign: inlineStyle.textAlign ?? parentStyle.textAlign,
     textTransform: inlineStyle.textTransform ?? parentStyle.textTransform,
 
@@ -423,7 +424,10 @@ export async function renderElement(
         doc.strokeColor(cStyle.borderColor).lineWidth(cStyle.borderWidth).rect(curX, curY, itemWidth, itemHeight).stroke();
       }
 
-      doc.fillColor(cStyle.color).text(text, curX + padL, curY + padT, { lineBreak: false });
+      const badgeTextOpts: PDFKit.Mixins.TextOptions = { lineBreak: false };
+      if (cStyle.textDecoration === 'underline') badgeTextOpts.underline = true;
+      else if (cStyle.textDecoration === 'line-through') badgeTextOpts.strike = true;
+      doc.fillColor(cStyle.color).text(text, curX + padL, curY + padT, badgeTextOpts);
       curX += itemWidth;
     }
 
