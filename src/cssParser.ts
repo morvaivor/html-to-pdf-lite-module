@@ -215,8 +215,8 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
 
     if (!newStyle) continue;
 
-    const applyRule = (elements: Cheerio<Element>) => {
-      elements.each((_index: number, element: Element) => {
+    const applyRule = (elements: Cheerio<any>) => {
+      elements.each((_index: number, element: any) => {
         if (element.type === 'tag') {
           const current = element.attribs?.style || '';
           element.attribs.style = current ? current + '; ' + newStyle : newStyle;

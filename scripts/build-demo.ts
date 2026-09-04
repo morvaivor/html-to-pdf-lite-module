@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync, copyFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { createPdfGenerator } from '../src/index.js';
+import { createPdfGenerator, verifyRenderingQuality } from '../src/index.js';
 
 interface TemplateConfig {
   id: string;
@@ -104,15 +104,26 @@ async function buildDemo(): Promise<void> {
     const outPdfPath = join(pdfsOutDir, tpl.pdfName);
     writeFileSync(outPdfPath, pdfBuffer);
 
+    const audit = await verifyRenderingQuality(htmlContent, pdfBuffer, {
+      options: {
+        format: tpl.format,
+        orientation: tpl.orientation,
+        margin: tpl.margin,
+      },
+    });
+
     manifest.push({
       id: tpl.id,
       pdf: tpl.pdfName,
       size: pdfBuffer.length,
       durationMs: Math.round(duration * 10) / 10,
+      qualityScore: audit.score,
+      grade: audit.grade,
+      textRecall: audit.textCompleteness.rate,
     });
 
     console.log(
-      `   ✔ [${tpl.id}/5] ${tpl.pdfName.padEnd(30)} ${(pdfBuffer.length / 1024).toFixed(1).padStart(5)} KB  (${duration.toFixed(1)} ms)`
+      `   ✔ [${tpl.id}/5] ${tpl.pdfName.padEnd(28)} ${(pdfBuffer.length / 1024).toFixed(1).padStart(5)} KB  (${duration.toFixed(1).padStart(4)} ms)  —  Fidélité : ${String(audit.score).padStart(3)}% (${audit.grade})`
     );
   }
 
