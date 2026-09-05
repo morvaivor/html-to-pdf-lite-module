@@ -23,6 +23,7 @@
   "license": "MIT",
   "scripts": {
     "build": "tsdown",
+    "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
