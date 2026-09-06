@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateRemoteUrl, decodeDataUri, readLocalFile, fetchRemoteResource } from '../src/core/networkSecurity.js';
 import { resolveFontFamily, registerFontFaces } from '../src/core/fontManager.js';
-import { parseInlineStyle, TextMeasureCache } from '../src/core/cacheManager.js';
+import { parseInlineStyle } from '../src/core/cacheManager.js';
 import { renderHtmlToPdf } from '../src/htmlRenderer.js';
 import { createPdfGenerator } from '../src/index.js';
 import { calculateMaxWorkers } from '../src/workers/workerPool.js';
