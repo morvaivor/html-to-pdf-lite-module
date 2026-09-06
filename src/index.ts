@@ -1,9 +1,5 @@
 export { PdfGenerator, createPdfGenerator, default } from './pdfGenerator.js';
-export {
-  verifyRenderingQuality,
-  type QualityAuditResult,
-  type QualityCheckOptions,
-} from './qualityAuditor.js';
+export { verifyRenderingQuality, type QualityAuditResult, type QualityCheckOptions } from './qualityAuditor.js';
 export type {
   MarginOptions,
   RequiredMargin,

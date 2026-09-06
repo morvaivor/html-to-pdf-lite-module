@@ -2,14 +2,16 @@
 
 ## 📐 Vue d'Ensemble & Structure Modulaire
 
-`pdf-generator` est un moteur léger de conversion HTML + CSS vers PDF sous Node.js (≥ 18.18.0).  
+`pdf-generator` est un moteur léger de conversion HTML + CSS vers PDF sous Node.js (≥ 18.18.0) sans dépendance vers un navigateur headless (Chromium / Puppeteer).  
 Le moteur est développé en **TypeScript strict**, structuré selon les principes **SOLID** et inclut un pool de Worker Threads **100% élastique et à la demande** (Mode Modéré par défaut : 50% CPU, RAM hors charge ~116 MB).
 
 ```
 src/
 ├── index.ts                     # Point d'entrée du package & ré-exports de types
 ├── pdfGenerator.ts              # Façade principale (API publique, AsyncDisposable & diagnostics)
+├── htmlRenderer.ts              # Orchestrateur du pipeline de rendu HTML → PDF
 ├── cssParser.ts                 # Parser CSS (règles, sélecteurs, @font-face, @page)
+├── qualityAuditor.ts            # Auditeur de fidélité visuelle et complétude du PDF
 ├── types.ts                     # Source de vérité des types & interfaces TypeScript
 ├── core/
 │   ├── PageLayout.ts            # Géométrie et limites de page immuables
@@ -46,6 +48,13 @@ Le moteur de tableau résout un problème géométrique complexe :
 ### 3. Analyse CSS sans Risque ReDoS (`cssParser.ts`)
 - **Compteur de Profondeur d'Accolades (`depth`)** : l'extraction des blocs `@page` et `@font-face` s'effectue par comptage itératif d'accolades équilibrées plutôt que par des expressions régulières avec quantification imbriquée, éliminant tout risque de blocage ReDoS.
 
+### 4. Auditeur de Qualité & Conformité Visuelle (`qualityAuditor.ts`)
+Le module intègre un moteur autonome de validation de fidélité documentaire :
+- **Décompression & Analyse de Flux PDF** : décompression du flux binaire (`node:zlib`) et extraction des opérateurs vectoriels (lignes, courbes, rectangles, couleurs, textes).
+- **Complétude Textuelle** : comparaison mot à mot entre le texte extrait du DOM HTML source et celui présent dans le PDF pour garantir qu'aucun paragraphe n'a été tronqué ou occulté.
+- **Audit Structurel & Layout** : vérification de la présence effective des titres (`h1`-`h6`), des tableaux, des listes, des images et des graphismes SVG.
+- **Score de Fidélité** : calcul automatique d'une note de 0 à 100 assortie d'un grade qualitatif (`A+` à `F`).
+
 ---
 
 ## ⚙️ Worker Pool Élastique à la Demande (`workers/`)
@@ -63,9 +72,22 @@ Le moteur de tableau résout un problème géométrique complexe :
 
 1. **Validation SSRF** :
    - Contrôle strict du protocole (`http:` ou `https:` uniquement).
-   - Rejet automatique des adresses loopback (`localhost`, `127.0.0.1`, `::1`), des réseaux locaux privés (RFC 1918 : `10.x`, `172.16-31.x`, `192.168.x`), des adresses link-local (`169.254.x`), et des endpoints de métadonnées de fournisseurs cloud (`metadata.google.internal`, etc.).
+   - Rejet automatique des adresses loopback (`localhost`, `127.0.0.1`, `::1`), des réseaux locaux privés (RFC 1918 : `10.x`, `172.16-31.x`, `192.168.x`), des adresses link-local (`169.254.x`), et des endpoints de métadonnées de fournisseurs cloud (`metadata.google.internal`, AWS `169.254.169.254`, etc.).
 2. **Isolation Système de Fichiers** :
    - Tout chargement d'image par chemin local est validé par `readLocalFile` pour garantir que le chemin résolu demeure strictement dans `process.cwd()`.
 3. **Protection DoS et Mémoire** :
    - Timeout automatique de 30 secondes (`AbortSignal.timeout(30_000)`).
    - Plafonnement de taille maximale pour les ressources distantes à **50 Mo** et les payloads Base64 à **10 Mo**.
+
+---
+
+## 📦 Chaîne de Compilation & Distribution Multi-Cibles
+
+Le projet s'appuie sur la suite **OXC (The JavaScript Oxidation Compiler)** :
+- **Compilateur `tsdown`** (Rolldown + OXC) : produit un bundle ESM pur (`dist/index.js`) ultra-rapide (~100 ms) ainsi que le bundle du worker (`dist/workers/pdfWorker.js`).
+- **Déclarations TypeScript (`dist/index.d.ts`)** : générées via *isolated declarations* pour un typage strict sans ralentir le build.
+- **Interopérabilité Consommateurs** :
+  - **TypeScript** : typage strict et auto-complétion native sans configuration.
+  - **JavaScript ESM** : consommation directe via `import { createPdfGenerator } from 'pdf-generator'`.
+  - **JavaScript CommonJS** : intégration transparente via import dynamique `await import('pdf-generator')`.
+  - **Installation Git / GitHub** : le script `"prepare": "npm run build"` garantit la compilation immédiate du dossier `dist/` dès l'installation par `npm install git+...`.

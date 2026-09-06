@@ -217,12 +217,15 @@ export async function renderTable(
 
         const currentRow = allRows[rowIdx];
         const rowInlineStyle = currentRow ? parseInlineStyle(currentRow) : {};
-        const parentSection = currentRow?.parent && (currentRow.parent as any).type === 'tag' ? (currentRow.parent as Element) : null;
+        const parentSection =
+          currentRow?.parent && (currentRow.parent as any).type === 'tag' ? (currentRow.parent as Element) : null;
         const sectionInlineStyle = parentSection ? parseInlineStyle(parentSection) : {};
 
         const cellInlineStyle = parseInlineStyle(cell);
-        const inheritedBg = cellInlineStyle.backgroundColor || rowInlineStyle.backgroundColor || sectionInlineStyle.backgroundColor;
-        const inheritedColor = cellInlineStyle.color || rowInlineStyle.color || sectionInlineStyle.color || parentStyle.color;
+        const inheritedBg =
+          cellInlineStyle.backgroundColor || rowInlineStyle.backgroundColor || sectionInlineStyle.backgroundColor;
+        const inheritedColor =
+          cellInlineStyle.color || rowInlineStyle.color || sectionInlineStyle.color || parentStyle.color;
 
         const cellStyle: TextStyle = {
           ...parentStyle,
@@ -259,7 +262,12 @@ export async function renderTable(
               const cTxt = getCellText(el);
               if (cTxt) {
                 const cStyle = parseInlineStyle(el);
-                const cFont = resolveFontFamily(cStyle.fontFamily || fontFamily, Boolean(cStyle.bold), Boolean(cStyle.italic), fontAliasSet);
+                const cFont = resolveFontFamily(
+                  cStyle.fontFamily || fontFamily,
+                  Boolean(cStyle.bold),
+                  Boolean(cStyle.italic),
+                  fontAliasSet,
+                );
                 const cSize = cStyle.fontSize || fontSize;
                 complexChildrenHeight += textCache.measure(doc, cTxt, cFont, cSize, textWidth) + 6;
               }
@@ -415,7 +423,9 @@ export async function renderTable(
         while (col < maxCols) {
           const cell = gridCells[rowIndex]?.[col];
           if (cell && cell.startRow === rowIndex) {
-            const cellWidth = colWidths.slice(cell.startCol, cell.startCol + cell.colspan).reduce((sum, w) => sum + w, 0);
+            const cellWidth = colWidths
+              .slice(cell.startCol, cell.startCol + cell.colspan)
+              .reduce((sum, w) => sum + w, 0);
             const cellX = layout.leftMargin + colWidths.slice(0, cell.startCol).reduce((sum, w) => sum + w, 0);
             const cellY = rowTop[rowIndex] ?? 0;
             const endRow = Math.min(rowIndex + cell.rowspan - 1, allRows.length - 1);
@@ -441,7 +451,9 @@ export async function renderTable(
             const textH = cell.text ? textCache.measure(doc, cell.text, cell.fontFamily, cell.fontSize, textWidth) : 0;
 
             const childTags = cell.rawCell.children.filter((c: any) => c.type === 'tag') as Element[];
-            const hasComplexChildren = childTags.some((c) => c.name === 'div' || c.name === 'p' || c.name === 'svg' || c.name === 'img');
+            const hasComplexChildren = childTags.some(
+              (c) => c.name === 'div' || c.name === 'p' || c.name === 'svg' || c.name === 'img',
+            );
 
             if (hasComplexChildren) {
               const cellLayout = Object.create(layout);
@@ -513,12 +525,18 @@ export async function renderTable(
                   }
                 }
                 if (bStyle.borderWidth && bStyle.borderColor) {
-                  doc.strokeColor(bStyle.borderColor).lineWidth(bStyle.borderWidth).rect(badgeX, badgeY, badgeW, badgeH).stroke();
+                  doc
+                    .strokeColor(bStyle.borderColor)
+                    .lineWidth(bStyle.borderWidth)
+                    .rect(badgeX, badgeY, badgeW, badgeH)
+                    .stroke();
                 }
                 const badgeTextOpts: PDFKit.Mixins.TextOptions = { lineBreak: false };
                 if (bStyle.textDecoration === 'underline') badgeTextOpts.underline = true;
                 else if (bStyle.textDecoration === 'line-through') badgeTextOpts.strike = true;
-                doc.fillColor(bStyle.color || cell.style.color).text(bText, badgeX + padL, badgeY + padT, badgeTextOpts);
+                doc
+                  .fillColor(bStyle.color || cell.style.color)
+                  .text(bText, badgeX + padL, badgeY + padT, badgeTextOpts);
               } else if (cell.text && textH + cell.padding <= cellH) {
                 const cellTextOpts: PDFKit.Mixins.TextOptions = { width: textWidth };
                 if (cell.style.textAlign === 'center') cellTextOpts.align = 'center';

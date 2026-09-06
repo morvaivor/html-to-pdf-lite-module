@@ -1,6 +1,6 @@
 # 🚀 HTML to PDF Lite Module (`pdf-generator`) — v2.0.0
 
-> Moteur minimal, ultra-performant et modulaire de génération HTML → PDF sous Node.js (≥ 18.18.0) sans dépendance headless lourde (Puppeteer/Playwright).
+> Moteur minimal, ultra-performant et modulaire de génération HTML → PDF sous Node.js (≥ 18.18.0, incluant Node.js 20, 22 et 24) sans dépendance headless lourde (Puppeteer/Playwright).
 > Développé en **TypeScript strict** et propulsé par la stack **OXC (The JavaScript Oxidation Compiler)** : `tsdown`, `oxlint`, `oxfmt`.
 
 ---
@@ -16,7 +16,7 @@
 - **🛡️ RAM Élastique à la Demande** : **0 worker au repos** (~116 MB résiduel). Extinction automatique des threads inactifs après 10s pour rendre la mémoire à l'OS.
 - **🔄 Transfert Zéro-Copie (`ArrayBuffer.transfer` / `Transferable`)** : Aucun surcoût de sérialisation ou duplication mémoire lors du transfert inter-thread des flux PDF.
 - **⚙️ Offloading CPU Réglable (Défaut 50% CPU)** : Allocation dynamique de worker threads secondaires avec limitation CPU pour préserver l'Event Loop de votre serveur HTTP.
-- **🎯 AsyncDisposable (`await using`)** : Gestion moderne du cycle de vie des ressources (Node.js ≥ 22).
+- **🎯 AsyncDisposable (`await using`)** : Gestion moderne du cycle de vie des ressources (standard natif Node.js ≥ 22 & Node.js 24).
 - **🧠 Caches Optimisés (`WeakMap` & LRU)** : Caches de calculs typographiques et de styles CSS sans fuite mémoire.
 - **✅ Qualité & Conformité** : 72 tests unitaires, 44 tests d'intégration, typage strict (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`).
 
@@ -135,7 +135,7 @@ console.log('PDF généré avec succès !');
 ```
 
 #### Gestion du Worker Pool en JavaScript :
-- **Node.js ≥ 22** : Vous bénéficiez du mot-clé natif `await using` sans TypeScript :
+- **Node.js 24 & Node.js ≥ 22** : Vous bénéficiez du mot-clé natif `await using` sans TypeScript :
   ```javascript
   await using generator = createPdfGenerator({ useWorkerPool: true });
   const pdfBuffer = await generator.generate(html);
@@ -218,7 +218,7 @@ const html = `
 const pdfBuffer = await generator.generate(html);
 ```
 
-### Usage Multi-Thread Élastique avec `await using` (Node.js ≥ 22)
+### Usage Multi-Thread Élastique avec `await using` (Node.js 22 & 24)
 
 ```typescript
 import { createPdfGenerator } from 'pdf-generator';

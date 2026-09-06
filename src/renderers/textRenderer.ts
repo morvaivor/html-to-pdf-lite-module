@@ -39,10 +39,7 @@ export function renderText(
   doc.font(fontFamily).fontSize(fontSize).fillColor(style.color);
   doc.x = targetX;
 
-  const lineGap =
-    style.lineHeight !== undefined
-      ? Math.max(0, fontSize * (style.lineHeight - 1.15))
-      : fontSize * 0.15;
+  const lineGap = style.lineHeight !== undefined ? Math.max(0, fontSize * (style.lineHeight - 1.15)) : fontSize * 0.15;
 
   const textOpts: PDFKit.Mixins.TextOptions = {
     width: availableWidth,

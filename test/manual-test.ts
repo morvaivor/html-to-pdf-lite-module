@@ -835,7 +835,8 @@ async function runTests() {
   const stream46 = decompressStreams(pdf46);
   if (!/3 Tc/.test(stream46)) throw new Error('letter-spacing: no "3 Tc" operator found in content stream');
   const strokeOps46 = (stream46.match(/\n1 w\n/g) || []).length;
-  if (strokeOps46 < 2) throw new Error('text-decoration: expected at least 2 underline/line-through strokes, got ' + strokeOps46);
+  if (strokeOps46 < 2)
+    throw new Error('text-decoration: expected at least 2 underline/line-through strokes, got ' + strokeOps46);
 
   const tmRegex = /1 0 0 1 ([\d.]+) ([\d.]+) Tm/g;
   const yPositions46: number[] = [];
@@ -873,7 +874,8 @@ async function runTests() {
   const gapWith = Math.abs(ysWith[0] - ysWith[1]);
   const gapWithout = Math.abs(ysWithout[0] - ysWithout[1]);
   console.log('  gap avec margin:20px = ' + gapWith.toFixed(1) + ', gap sans = ' + gapWithout.toFixed(1));
-  if (gapWith < gapWithout + 15) throw new Error('margin: h1 avec margin:20px devrait éloigner davantage le paragraphe suivant');
+  if (gapWith < gapWithout + 15)
+    throw new Error('margin: h1 avec margin:20px devrait éloigner davantage le paragraphe suivant');
 
   await savePdf('output/test47-css-margin.pdf', pdf47With);
   console.log('  Saved output/test47-css-margin.pdf\n');

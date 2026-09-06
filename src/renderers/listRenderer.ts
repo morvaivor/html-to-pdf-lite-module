@@ -60,8 +60,20 @@ export function renderList(
       }
     }
 
-    const runs: Array<{ text: string; bold: boolean; italic: boolean; color: string; decoration?: TextStyle['textDecoration'] }> = [];
-    runs.push({ text: bullet + ' ', bold: false, italic: false, color: itemStyle.color, decoration: itemStyle.textDecoration });
+    const runs: Array<{
+      text: string;
+      bold: boolean;
+      italic: boolean;
+      color: string;
+      decoration?: TextStyle['textDecoration'];
+    }> = [];
+    runs.push({
+      text: bullet + ' ',
+      bold: false,
+      italic: false,
+      color: itemStyle.color,
+      decoration: itemStyle.textDecoration,
+    });
 
     let fullText = bullet + ' ';
     for (let childIndex = 0; childIndex < textChildren.length; childIndex++) {
@@ -70,7 +82,13 @@ export function renderList(
       if (currentChild.type === 'text') {
         const d = (currentChild as any).data ?? '';
         if (d) {
-          runs.push({ text: d, bold: itemStyle.bold, italic: itemStyle.italic, color: itemStyle.color, decoration: itemStyle.textDecoration });
+          runs.push({
+            text: d,
+            bold: itemStyle.bold,
+            italic: itemStyle.italic,
+            color: itemStyle.color,
+            decoration: itemStyle.textDecoration,
+          });
           fullText += d;
         }
       } else if (currentChild.type === 'tag') {
@@ -99,7 +117,9 @@ export function renderList(
       }
     }
 
-    const textHeight = fullText ? textCache.measure(doc, fullText.trim(), fontFamily, itemFontSize, listContentWidth) : 0;
+    const textHeight = fullText
+      ? textCache.measure(doc, fullText.trim(), fontFamily, itemFontSize, listContentWidth)
+      : 0;
     const lineHeight = Math.max(textHeight, itemFontSize) + itemSpacing;
 
     if (doc.y + lineHeight > layout.pageBottom) {
