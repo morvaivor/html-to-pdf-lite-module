@@ -303,6 +303,15 @@ npm run benchmark
 
 ---
 
+## 📚 Documentation
+
+- [Architecture & Design](docs/architecture.md) — Documentation de l'architecture logicielle
+- [Optimisations & Performance](docs/optimisation.md) — Stratégies de performance et gestion de la mémoire
+- [Rapport de Benchmark](docs/benchmark.md) — Métriques et tests de charge
+- [CI/CD, Dependabot & SemVer](docs/ci-cd.md) — Automatisations GitHub Actions, Dependabot et releases Release Please
+
+---
+
 ## 📄 Licence
 
 MIT © [pdf-generator contributors](LICENSE)
