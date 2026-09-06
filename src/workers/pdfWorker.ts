@@ -7,12 +7,15 @@ if (parentPort) {
     const { id, html, options } = task;
     try {
       const pdfBuffer = await renderHtmlToPdf(html, options);
-      // Senior Optimization: Zero-Copy Transferable Object memory transfer
+      // True Zero-Copy Transferable Object memory transfer
+      const rawArrayBuffer: ArrayBuffer =
+        pdfBuffer.byteOffset === 0 && pdfBuffer.byteLength === pdfBuffer.buffer.byteLength
+          ? (pdfBuffer.buffer as ArrayBuffer)
+          : (pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength) as ArrayBuffer);
+
       const arrayBuffer: ArrayBuffer = (ArrayBuffer as any).transfer
-        ? (ArrayBuffer as any).transfer(
-            pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength),
-          )
-        : pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength);
+        ? (ArrayBuffer as any).transfer(rawArrayBuffer)
+        : rawArrayBuffer;
 
       const response: WorkerResponse = { id, success: true, result: arrayBuffer };
       parentPort!.postMessage(response, [arrayBuffer]);

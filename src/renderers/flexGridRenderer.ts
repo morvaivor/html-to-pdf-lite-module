@@ -127,6 +127,14 @@ export async function renderFlexContainer(
     fontAliasSet: Set<string>,
     imageCache: Map<string, Buffer>,
   ) => Promise<void>,
+  estimateElementHeightFn?: (
+    doc: PDFKit.PDFDocument,
+    element: Element,
+    parentStyle: TextStyle,
+    width: number,
+    textCache: TextMeasureCache,
+    fontAliasSet: Set<string>,
+  ) => number,
 ): Promise<void> {
   const isRow = style.flexDirection !== 'column';
   const gap = style.gap ?? 8;
@@ -169,10 +177,36 @@ export async function renderFlexContainer(
   // Calcul des colonnes horizontales
   const colWidths = calculateColumnWidths(tagChildren, innerWidth, gap, style.gridTemplateColumns);
 
+  // Pre-calculate estimated box height so background is drawn BEFORE children, eliminating double-rendering
+  let maxEstimatedChildHeight = 0;
+  for (let i = 0; i < tagChildren.length; i++) {
+    const colW = colWidths[i] ?? innerWidth / tagChildren.length;
+    const estH = estimateElementHeightFn
+      ? estimateElementHeightFn(doc, tagChildren[i]!, style, colW, textCache, fontAliasSet)
+      : 0;
+    if (estH > maxEstimatedChildHeight) {
+      maxEstimatedChildHeight = estH;
+    }
+  }
+
+  const estimatedBoxHeight = paddingTop + maxEstimatedChildHeight + paddingBottom;
+
+  // Draw background FIRST if present
+  if (style.backgroundColor) {
+    doc.save();
+    doc.fillColor(style.backgroundColor);
+    if (style.borderRadius && style.borderRadius > 0) {
+      doc.roundedRect(containerX, startY, containerWidth, estimatedBoxHeight, style.borderRadius).fill();
+    } else {
+      doc.rect(containerX, startY, containerWidth, estimatedBoxHeight).fill();
+    }
+    doc.restore();
+  }
+
   let curX = containerX + paddingLeft;
   let maxY = startY + paddingTop;
 
-  // Render chaque enfant dans sa colonne avec layout restreint
+  // Render each child exactly ONCE on top of the background
   for (let i = 0; i < tagChildren.length; i++) {
     const child = tagChildren[i]!;
     const colW = colWidths[i] ?? innerWidth / tagChildren.length;
@@ -194,33 +228,7 @@ export async function renderFlexContainer(
     curX += colW + gap;
   }
 
-  const finalBoxHeight = maxY - startY + paddingBottom;
-
-  // Dessin du fond et bordures du conteneur si présent
-  if (style.backgroundColor) {
-    doc.save();
-    doc.fillColor(style.backgroundColor);
-    if (style.borderRadius && style.borderRadius > 0) {
-      doc.roundedRect(containerX, startY, containerWidth, finalBoxHeight, style.borderRadius).fill();
-    } else {
-      doc.rect(containerX, startY, containerWidth, finalBoxHeight).fill();
-    }
-    doc.restore();
-
-    // Re-rendre les enfants pour qu'ils soient au-dessus du fond
-    let reRenderX = containerX + paddingLeft;
-    for (let i = 0; i < tagChildren.length; i++) {
-      const child = tagChildren[i]!;
-      const colW = colWidths[i] ?? innerWidth / tagChildren.length;
-      const childLayout = Object.create(layout);
-      childLayout.leftMargin = reRenderX;
-      childLayout.contentWidth = colW;
-      doc.x = reRenderX;
-      doc.y = startY + paddingTop;
-      await renderElementFn(doc, child, style, options, childLayout, textCache, fontAliasSet, imageCache);
-      reRenderX += colW + gap;
-    }
-  }
+  const finalBoxHeight = Math.max(estimatedBoxHeight, maxY - startY + paddingBottom);
 
   // Bordures du conteneur
   if (style.borderWidth && style.borderColor) {
@@ -233,6 +241,6 @@ export async function renderFlexContainer(
   }
 
   // Positionner le curseur en bas de la plus grande colonne
-  doc.y = maxY + paddingBottom + marginBottom;
+  doc.y = startY + finalBoxHeight + marginBottom;
   doc.x = layout.leftMargin;
 }

@@ -1,4 +1,4 @@
-# Architecture Technique — `pdf-generator` (v2.0.0)
+# Architecture Technique — `pdf-generator` (v2.1.0)
 
 ## 📐 Vue d'Ensemble & Structure Modulaire
 
@@ -23,6 +23,8 @@ src/
 │   ├── textRenderer.ts          # Rendu des paragraphes et nœuds de texte
 │   ├── tableRenderer.ts         # Moteur de tableau (matrice 2D, colspan/rowspan, pagination atomique)
 │   ├── listRenderer.ts          # Rendu des listes ul, ol, li
+│   ├── flexGridRenderer.ts      # Rendu des conteneurs Flexbox et Grid CSS avancés
+│   ├── svgRenderer.ts           # Rendu vectoriel SVG natif (svg-to-pdfkit)
 │   ├── imageRenderer.ts         # Rendu sécurisé des images (local cwd, HTTP, base64)
 │   └── headerFooterRenderer.ts  # Rendu des zones @page et templates header/footer
 └── workers/

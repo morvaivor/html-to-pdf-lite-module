@@ -97,8 +97,16 @@ export function stripFontFaceBlocks(css: string): string {
   return result;
 }
 
+const MAX_CSS_CACHE = 128;
+const _fontFacesCache = new Map<string, FontFace[]>();
+const _cssRulesCache = new Map<string, CssRule[]>();
+const _pageRuleCache = new Map<string, PageZones | null>();
+
 export function parseFontFaces(css: string): FontFace[] {
   if (!css || typeof css !== 'string') return [];
+
+  const cached = _fontFacesCache.get(css);
+  if (cached !== undefined) return cached;
 
   const faces: FontFace[] = [];
   FONT_FACE_REGEX.lastIndex = 0;
@@ -122,11 +130,18 @@ export function parseFontFaces(css: string): FontFace[] {
     });
   }
 
+  if (_fontFacesCache.size >= MAX_CSS_CACHE) {
+    _fontFacesCache.clear();
+  }
+  _fontFacesCache.set(css, faces);
   return faces;
 }
 
 export function parseCssRules(css: string): CssRule[] {
   if (!css || typeof css !== 'string') return [];
+
+  const cached = _cssRulesCache.get(css);
+  if (cached !== undefined) return cached;
 
   const cssWithoutPage = stripCssComments(stripFontFaceBlocks(stripPageBlocks(css)));
 
@@ -156,6 +171,10 @@ export function parseCssRules(css: string): CssRule[] {
     }
   }
 
+  if (_cssRulesCache.size >= MAX_CSS_CACHE) {
+    _cssRulesCache.clear();
+  }
+  _cssRulesCache.set(css, rules);
   return rules;
 }
 
@@ -204,6 +223,7 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
   if (!css || typeof css !== 'string') return;
 
   const rules = parseCssRules(css);
+  if (rules.length === 0) return;
 
   // Preserve original inline styles so external stylesheet rules don't overwrite them
   $('[style]').each((_index, element) => {
@@ -285,8 +305,18 @@ export function extractPageBlock(css: string): string | null {
 export function parsePageRule(css: string): PageZones | null {
   if (!css || typeof css !== 'string') return null;
 
+  const cached = _pageRuleCache.get(css);
+  if (cached !== undefined) return cached;
+
   const pageBody = extractPageBlock(css);
-  if (!pageBody) return null;
+  if (!pageBody) {
+    if (_pageRuleCache.size >= MAX_CSS_CACHE) {
+      const firstKey = _pageRuleCache.keys().next().value;
+      if (firstKey !== undefined) _pageRuleCache.delete(firstKey);
+    }
+    _pageRuleCache.set(css, null);
+    return null;
+  }
 
   const zones: Partial<PageZones> = {};
 
@@ -314,7 +344,10 @@ export function parsePageRule(css: string): PageZones | null {
     }
   }
 
-  if (Object.keys(zones).length === 0) return null;
-
-  return zones as PageZones;
+  const result = Object.keys(zones).length === 0 ? null : (zones as PageZones);
+  if (_pageRuleCache.size >= MAX_CSS_CACHE) {
+    _pageRuleCache.clear();
+  }
+  _pageRuleCache.set(css, result);
+  return result;
 }
