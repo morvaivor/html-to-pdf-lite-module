@@ -23,6 +23,7 @@ async function countPages(
     size: options.format || 'A4',
     layout: options.orientation || 'portrait',
     margin: 0,
+    compress: false,
   });
 
   await registerFontFaces(doc, options.css, options._fontBufferCache, fontAliasSet);
@@ -106,7 +107,7 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
   const textCache = new TextMeasureCache();
 
   // Conditional two-pass rendering
-  const needsPageCount = pageZones && JSON.stringify(pageZones).includes('counter(num-pages)');
+  const needsPageCount = Boolean(pageZones && fullCss.includes('counter(num-pages)'));
   let totalPages = 0;
   if (needsPageCount) {
     totalPages = await countPages(body, renderOptions, fontAliasSet, imageCache, textCache);
@@ -127,6 +128,14 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
   doc.on('data', (chunk: Buffer) => buffers.push(chunk));
 
   let currentPage = 0;
+  let cachedLayout: PageLayout | null = null;
+  const getLayout = (): PageLayout => {
+    if (cachedLayout && doc.page.width === cachedLayout.pageWidth && doc.page.height === cachedLayout.pageHeight) {
+      return cachedLayout;
+    }
+    cachedLayout = new PageLayout(doc, renderOptions);
+    return cachedLayout;
+  };
 
   // Intercepte doc.addPage() pour injecter dynamiquement les en-têtes,
   // pieds de page et zones CSS @page sur chaque nouvelle page créée
@@ -135,7 +144,7 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     originalAddPage({ ...opts, margin: 0 });
     currentPage++;
 
-    const layout = new PageLayout(doc, renderOptions);
+    const layout = getLayout();
     const cw = layout.contentWidth;
     const savedY = doc.y;
     const savedX = doc.x;
@@ -247,7 +256,7 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     margin: 0,
   });
 
-  const layout = new PageLayout(doc, renderOptions);
+  const layout = getLayout();
   doc.x = layout.leftMargin;
   doc.y = layout.contentTop;
 

@@ -29,7 +29,10 @@ export class TextMeasureCache {
     lineGap?: number,
   ): number {
     const effectiveLineGap = lineGap ?? fontSize * 0.15;
-    const key = `${fontFamily}|${fontSize}|${maxWidth}|${effectiveLineGap}|${text.length > 80 ? text.substring(0, 80) + text.length : text}`;
+    const key =
+      text.length <= 80
+        ? `${fontFamily}|${fontSize}|${maxWidth}|${effectiveLineGap}|${text}`
+        : `${fontFamily}|${fontSize}|${maxWidth}|${effectiveLineGap}|${text.length}:${text.substring(0, 40)}`;
     const cached = this.cache.get(key);
     if (cached !== undefined) return cached;
 
@@ -53,6 +56,10 @@ export class TextMeasureCache {
 
 // WeakMap inline style cache
 const _styleCache = new WeakMap<{ attribs?: { style?: string } }, Partial<TextStyle>>();
+
+// Fast Map cache for unique inline style attribute strings (avoids re-parsing identical strings)
+const _parsedStringStyleCache = new Map<string, Partial<TextStyle>>();
+const MAX_PARSED_STYLE_CACHE = 256;
 
 const NAMED_COLORS = new Set([
   'black',
@@ -97,7 +104,7 @@ function parseBoxSpacing(val: string): { top: number; right: number; bottom: num
   const parts = val
     .trim()
     .split(/\s+/)
-    .map((p) => parseFloat(p.replace(/(px|pt)/i, '')) || 0);
+    .map((p) => parseFloat(p) || 0);
   if (parts.length === 1) {
     const v = parts[0] ?? 0;
     return { top: v, right: v, bottom: v, left: v };
@@ -125,7 +132,7 @@ function parseBorderShorthand(val: string): { width: number; style: string; colo
 
   for (const part of parts) {
     if (/^\d+(\.\d+)?(px|pt)?$/i.test(part)) {
-      width = parseFloat(part.replace(/(px|pt)/i, '')) || 1;
+      width = parseFloat(part) || 1;
     } else if (/^(solid|dashed|dotted|double|none)$/i.test(part)) {
       style = part.toLowerCase();
     } else if (isValidColor(part)) {
@@ -149,6 +156,12 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
     return empty;
   }
 
+  const cachedByString = _parsedStringStyleCache.get(styleAttr);
+  if (cachedByString !== undefined) {
+    _styleCache.set(element, cachedByString);
+    return cachedByString;
+  }
+
   const style: Partial<TextStyle> = {};
   const rules = styleAttr.split(';');
 
@@ -168,7 +181,7 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         style.backgroundColor = isValidColor(value) ? value : undefined;
         break;
       case 'font-size':
-        style.fontSize = parseFloat(value.replace(/(px|pt)/i, '')) || DEFAULT_STYLE.fontSize;
+        style.fontSize = parseFloat(value) || DEFAULT_STYLE.fontSize;
         break;
       case 'font-weight':
         style.bold = value === 'bold' || parseInt(value, 10) >= 700;
@@ -201,7 +214,7 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         style.borderColor = isValidColor(value) ? value : '#000000';
         break;
       case 'border-width':
-        style.borderWidth = parseFloat(value.replace(/(px|pt)/i, '')) || 1;
+        style.borderWidth = parseFloat(value) || 1;
         break;
       case 'border-left': {
         const bl = parseBorderShorthand(value);
@@ -237,16 +250,16 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         break;
       }
       case 'padding-top':
-        style.paddingTop = parseFloat(value.replace(/(px|pt)/i, '')) || 0;
+        style.paddingTop = parseFloat(value) || 0;
         break;
       case 'padding-bottom':
-        style.paddingBottom = parseFloat(value.replace(/(px|pt)/i, '')) || 0;
+        style.paddingBottom = parseFloat(value) || 0;
         break;
       case 'padding-left':
-        style.paddingLeft = parseFloat(value.replace(/(px|pt)/i, '')) || 0;
+        style.paddingLeft = parseFloat(value) || 0;
         break;
       case 'padding-right':
-        style.paddingRight = parseFloat(value.replace(/(px|pt)/i, '')) || 0;
+        style.paddingRight = parseFloat(value) || 0;
         break;
       case 'margin': {
         const m = parseBoxSpacing(value);
@@ -258,24 +271,24 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         break;
       }
       case 'margin-top':
-        style.marginTop = parseFloat(value.replace(/(px|pt)/i, '')) || 0;
+        style.marginTop = parseFloat(value) || 0;
         break;
       case 'margin-bottom':
-        style.marginBottom = parseFloat(value.replace(/(px|pt)/i, '')) || 0;
+        style.marginBottom = parseFloat(value) || 0;
         break;
       case 'margin-left':
-        style.marginLeft = parseFloat(value.replace(/(px|pt)/i, '')) || 0;
+        style.marginLeft = parseFloat(value) || 0;
         break;
       case 'margin-right':
-        style.marginRight = parseFloat(value.replace(/(px|pt)/i, '')) || 0;
+        style.marginRight = parseFloat(value) || 0;
         break;
       case 'line-height': {
-        const lh = parseFloat(value.replace(/(px|pt)/i, ''));
+        const lh = parseFloat(value);
         if (!isNaN(lh)) style.lineHeight = lh;
         break;
       }
       case 'letter-spacing': {
-        const ls = parseFloat(value.replace(/(px|pt)/i, ''));
+        const ls = parseFloat(value);
         if (!isNaN(ls)) style.letterSpacing = ls;
         break;
       }
@@ -302,7 +315,7 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         }
         break;
       case 'gap': {
-        const g = parseFloat(value.replace(/(px|pt)/i, ''));
+        const g = parseFloat(value);
         if (!isNaN(g)) style.gap = g;
         break;
       }
@@ -330,23 +343,27 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         style.height = value;
         break;
       case 'min-width': {
-        const mw = parseFloat(value.replace(/(px|pt)/i, ''));
+        const mw = parseFloat(value);
         if (!isNaN(mw)) style.minWidth = mw;
         break;
       }
       case 'max-width': {
-        const mxw = parseFloat(value.replace(/(px|pt)/i, ''));
+        const mxw = parseFloat(value);
         if (!isNaN(mxw)) style.maxWidth = mxw;
         break;
       }
       case 'border-radius': {
-        const br = parseFloat(value.replace(/(px|pt)/i, ''));
+        const br = parseFloat(value);
         if (!isNaN(br)) style.borderRadius = br;
         break;
       }
     }
   }
 
+  if (_parsedStringStyleCache.size >= MAX_PARSED_STYLE_CACHE) {
+    _parsedStringStyleCache.clear();
+  }
+  _parsedStringStyleCache.set(styleAttr, style);
   _styleCache.set(element, style);
   return style;
 }

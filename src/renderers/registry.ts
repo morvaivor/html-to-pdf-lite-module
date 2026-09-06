@@ -225,7 +225,7 @@ function inheritStyle(parentStyle: TextStyle, inlineStyle: Partial<TextStyle>, t
   };
 }
 
-function estimateElementHeight(
+export function estimateElementHeight(
   doc: PDFKit.PDFDocument,
   element: Element,
   parentStyle: TextStyle,
@@ -360,7 +360,18 @@ export async function renderElement(
     style.display === 'inline-grid' ||
     style.gridTemplateColumns
   ) {
-    await renderFlexContainer(doc, element, style, options, layout, textCache, fontAliasSet, imageCache, renderElement);
+    await renderFlexContainer(
+      doc,
+      element,
+      style,
+      options,
+      layout,
+      textCache,
+      fontAliasSet,
+      imageCache,
+      renderElement,
+      estimateElementHeight,
+    );
     return;
   }
 

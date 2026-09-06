@@ -1,4 +1,4 @@
-# 🚀 HTML to PDF Lite Module (`pdf-generator`) — v2.0.0
+# 🚀 HTML to PDF Lite Module (`pdf-generator`) — v2.1.0
 
 > Moteur minimal, ultra-performant et modulaire de génération HTML → PDF sous Node.js (≥ 18.18.0, incluant Node.js 20, 22 et 24) sans dépendance headless lourde (Puppeteer/Playwright).
 > Développé en **TypeScript strict** et propulsé par la stack **OXC (The JavaScript Oxidation Compiler)** : `tsdown`, `oxlint`, `oxfmt`.
@@ -12,13 +12,13 @@
   - **SSRF Shield** : Blocage préventif des réseaux privés, IPs locales et endpoints de métadonnées cloud (AWS, GCP, Azure).
   - **Path Traversal Protection** : Résolution sécurisée bornée au répertoire de travail (`process.cwd()`).
   - **Déni de Service (DoS/OOM)** : Quotas de taille stricts (50 Mo HTTP, 10 Mo base64) et timeouts réseau (30s).
-- **⚡ Débit Extrême (~270 PDFs / sec)** : Traitement multi-thread déporté via `WorkerPool`.
+- **⚡ Débit Extrême (~250-270 PDFs / sec)** : Traitement multi-thread déporté via `WorkerPool`.
 - **🛡️ RAM Élastique à la Demande** : **0 worker au repos** (~116 MB résiduel). Extinction automatique des threads inactifs après 10s pour rendre la mémoire à l'OS.
 - **🔄 Transfert Zéro-Copie (`ArrayBuffer.transfer` / `Transferable`)** : Aucun surcoût de sérialisation ou duplication mémoire lors du transfert inter-thread des flux PDF.
 - **⚙️ Offloading CPU Réglable (Défaut 50% CPU)** : Allocation dynamique de worker threads secondaires avec limitation CPU pour préserver l'Event Loop de votre serveur HTTP.
 - **🎯 AsyncDisposable (`await using`)** : Gestion moderne du cycle de vie des ressources (standard natif Node.js ≥ 22 & Node.js 24).
 - **🧠 Caches Optimisés (`WeakMap` & LRU)** : Caches de calculs typographiques et de styles CSS sans fuite mémoire.
-- **✅ Qualité & Conformité** : 72 tests unitaires, 44 tests d'intégration, typage strict (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`).
+- **✅ Qualité & Conformité** : **133 tests automatisés** (couverture >94% de lignes et >85% sur chaque fichier), 47 tests manuels, typage strict (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`).
 
 ---
 

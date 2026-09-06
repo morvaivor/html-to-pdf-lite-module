@@ -61,7 +61,8 @@ export function validateRemoteUrl(url: string, allowLocalhost: boolean = process
     throw new Error(`Unsupported protocol: ${parsed.protocol}`);
   }
 
-  const hostname = parsed.hostname.toLowerCase();
+  const rawHostname = parsed.hostname.toLowerCase();
+  const hostname = rawHostname.startsWith('[') && rawHostname.endsWith(']') ? rawHostname.slice(1, -1) : rawHostname;
 
   if (allowLocalhost && (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1')) {
     return;

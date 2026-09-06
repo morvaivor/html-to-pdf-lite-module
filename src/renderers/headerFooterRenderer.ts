@@ -79,6 +79,26 @@ export function renderHeaderFooterContent(
 ): void {
   if (!html) return;
 
+  // Plain-text fast path: bypass cheerio loading if no HTML tags are present
+  if (!html.includes('<')) {
+    const textContent = html.trim();
+    if (!textContent) return;
+    const savedX = doc.x;
+    const savedY = doc.y;
+    doc.save();
+    doc.x = x;
+    doc.y = y;
+    doc.font('Helvetica').fontSize(12).fillColor('#000000');
+    const textOpts: PDFKit.Mixins.TextOptions = { width };
+    if (align === 'center') textOpts.align = 'center';
+    else if (align === 'right') textOpts.align = 'right';
+    doc.text(textContent, x, y, textOpts);
+    doc.restore();
+    doc.x = savedX;
+    doc.y = savedY;
+    return;
+  }
+
   const savedX = doc.x;
   const savedY = doc.y;
   doc.save();
