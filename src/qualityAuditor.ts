@@ -366,7 +366,9 @@ export async function verifyRenderingQuality(
   const boxesFound = Math.min(boxesCount, pdfData.rectCount);
   const boxesOk = boxesCount === 0 || boxesFound >= Math.ceil(boxesCount * 0.7);
   if (boxesCount > 0 && !boxesOk) {
-    warnings.push(`${boxesCount} bloc(s) avec style de boîte attendu(s), mais seulement ${pdfData.rectCount} rectangle(s) vectoriel(s) détecté(s).`);
+    warnings.push(
+      `${boxesCount} bloc(s) avec style de boîte attendu(s), mais seulement ${pdfData.rectCount} rectangle(s) vectoriel(s) détecté(s).`,
+    );
   }
 
   // Page Zones
@@ -403,7 +405,9 @@ export async function verifyRenderingQuality(
   const multiColumnDetected = distinctXCount >= 2;
   const multiColumnOk = !multiColumnExpected || multiColumnDetected;
   if (!multiColumnOk) {
-    warnings.push(`Mise en page multi-colonnes attendue (flex/grid/table), mais le texte du PDF semble empilé sur une seule colonne.`);
+    warnings.push(
+      `Mise en page multi-colonnes attendue (flex/grid/table), mais le texte du PDF semble empilé sur une seule colonne.`,
+    );
   }
 
   // 5. Score Calculation (Weighted - 100 points)

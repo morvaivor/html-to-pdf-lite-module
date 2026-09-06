@@ -1,6 +1,6 @@
 {
   "name": "pdf-generator",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Minimal HTML to PDF generator using pdfkit + cheerio",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,6 +20,15 @@
   "engines": {
     "node": ">=18.18.0"
   },
+  "keywords": [
+    "pdf",
+    "html-to-pdf",
+    "pdf-generator",
+    "nodejs24",
+    "worker-threads",
+    "zero-copy",
+    "typescript"
+  ],
   "license": "MIT",
   "scripts": {
     "build": "tsdown",
@@ -36,6 +45,7 @@
     "test:soak:parallel": "tsx bench/soak-test-15k-parallel.ts",
     "test:soak:heavy": "tsx bench/soak-test-15k-heavy.ts",
     "build:demo": "tsx scripts/build-demo.ts",
+    "commitlint": "commitlint",
     "prepublishOnly": "npm run typecheck && npm run build"
   },
   "dependencies": {
@@ -45,6 +55,8 @@
     "svg-to-pdfkit": "^0.1.8"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
     "@types/pdfkit": "^0.17.6",
     "@types/svg-to-pdfkit": "^0.1.4",
     "domhandler": "^6.0.1",

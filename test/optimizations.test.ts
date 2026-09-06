@@ -585,4 +585,3 @@ describe('High-Fidelity Rendering', () => {
     assert.ok(buf.length > 0);
   });
 });
-

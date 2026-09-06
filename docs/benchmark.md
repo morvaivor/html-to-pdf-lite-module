@@ -1,45 +1,81 @@
-# 📊 Rapport de Benchmark & Simulations de Performance
+# 📊 Rapport de Benchmark & Performances — v2.0.0
 
-> **Date d'exécution** : 2026-09-03  
-> **Environnement** : Node.js v24.19.0 (win32 x64)  
-> **Module** : `html-to-pdf-lite-module`
+> **Date d'exécution** : 2026-09-05  
+> **Environnement Système** : Node.js v24.19.0 — Windows_NT 10.0.26200 (x64)  
+> **Processeur Hôte** : AMD Ryzen 5 3600 6-Core Processor               (12 cœurs logiques)  
+> **Mémoire Système** : 15.9 GB RAM  
+> **Module testé** : `pdf-generator` (Stack OXC + TypeScript)
 
 ---
 
 ## 🎯 Objectif du Benchmark
 
-Mesurer les performances actuelles (**Baseline**) du module face aux nouvelles implémentations d'optimisation simulées (**Single-Pass AST**, **WeakMap Style Cache**, **Pre-compiled Regex**, et **Cache LRU de mesure de texte**).
+Ce benchmark évalue les performances réelles du moteur `pdf-generator` v2.0.0 sous deux axes majeurs :
+1. **Latence unitaire et débit mono-thread** sur des charges synthétiques stressantes et des modèles professionnels réels.
+2. **Scalabilité multi-thread via le Worker Thread Pool** élastique avec transfert binaire zéro-copie (`Transferable ArrayBuffer`).
 
 ---
 
-## 📉 Résultats Comparatifs
+## ⚡ 1. Performances Mono-Thread (Latence Unitaire & Débit)
 
-| Scénario d'essai | Baseline (ms) | Single-Pass AST (ms) | Stack Optimisée (ms) | Gain Vitesse (%) | Mémoire Baseline (MB) | Mémoire Optimisée (MB) |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Document Texte Multi-pages (80 par.)** | 34.54 ms | 11.55 ms | 5.69 ms | **+83.5%** | 12.69 MB | 1.06 MB |
-| **Grand Tableau (100 lignes x 5 cols)** | 37.22 ms | 21.26 ms | 15.50 ms | **+58.4%** | 8.89 MB | 0.00 MB |
-| **Rapport Complet (Texte + Table + CSS)** | 56.91 ms | 15.94 ms | 11.80 ms | **+79.3%** | 30.51 MB | 0.00 MB |
+Les mesures ci-dessous ont été obtenues après amorçage des caches mémoires (`WeakMap` styles, `TextMeasureCache` LRU, et caches typographiques).
 
----
+### 📋 Charges Synthétiques de Stress
 
-## 🔍 Analyse Détillée des Gains
+| Scénario d'essai | Latence Min | Latence Moyenne | Latence Max | Débit Unitaire | Taille PDF |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Document Texte Multi-pages (80 par.)** | 25.89 ms | **29.13 ms** | 36.18 ms | ~34.3 docs/s | 7.0 KB |
+| **Grand Tableau (100 lignes x 5 cols)** | 32.73 ms | **38.00 ms** | 47.09 ms | ~26.3 docs/s | 7.7 KB |
+| **Rapport Complet (Texte + Table + CSS)** | 57.27 ms | **60.57 ms** | 70.55 ms | ~16.5 docs/s | 8.9 KB |
 
-### 1. Rendu en Une Passe (Single-Pass AST & Shared DOM)
-* **Constat** : Le module actuel ré-exécute `cheerio.load(html)` et `applyCssToElements()` deux fois (une fois dans `countPages` et une fois dans `renderHtmlToPdf`).
-* **Gain** : Éliminer la seconde passe d'analyse DOM permet de réduire la durée de traitement global de **~45% à 55%**.
+### 🎨 Modèles Professionnels Réels (`demo/templates/`)
 
-### 2. Cache WeakMap pour `parseInlineStyle`
-* **Constat** : Dans le code actuel, `parseInlineStyle` est invoqué jusqu'à 3 fois par cellule de tableau. Pour 500 cellules, cela représente 1 500 parsing de chaînes CSS.
-* **Gain** : La réutilisation des styles via un cache `WeakMap` lié aux nœuds DOM annule le surcoût de parsing et réduit les allocations d'objets temporaires.
-
-### 3. Cache LRU de Mesure de Texte (`TextMeasureCache`)
-* **Constat** : Les appels à `doc.heightOfString()` dans pdfkit effectuent des calculs coûteux d'analyse de glyphes.
-* **Gain** : Mettre en cache les hauteurs calculées pour des chaînes identiques répétées (ex: cellules de tableaux, paragraphes similaires) fait gagner **~15% à 25%** sur le calcul de layout.
+| Modèle HTML/CSS | Latence Min | Latence Moyenne | Latence Max | Débit Unitaire | Taille PDF |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Rapport Éditorial (A4)** | 22.54 ms | **25.63 ms** | 37.96 ms | ~39.0 docs/s | 5.3 KB |
+| **Catalogue Produit (A4)** | 19.59 ms | **21.19 ms** | 23.77 ms | ~47.2 docs/s | 5.9 KB |
+| **Dashboard Analytique (A4)** | 23.26 ms | **26.09 ms** | 29.84 ms | ~38.3 docs/s | 7.2 KB |
+| **Facture Professionnelle (A4)** | 17.02 ms | **18.14 ms** | 20.97 ms | ~55.1 docs/s | 4.1 KB |
+| **Certificat Paysage (A4)** | 11.09 ms | **11.82 ms** | 14.51 ms | ~84.6 docs/s | 3.6 KB |
 
 ---
 
-## 🛠️ Recommandations pour l'Implémentation
+## 🚀 2. Scalabilité Multi-Thread (Worker Pool vs Mono-Thread)
 
-1. **Priorité 1** : Implémenter le partage du DOM Cheerio déjà parsé pour éviter les double-passes d'analyse HTML.
-2. **Priorité 2** : Activer le cache `WeakMap` des styles inline dans `src/htmlRenderer.js` et `src/cssParser.js`.
-3. **Priorité 3** : Remplacer les regex dynamiques dans les boucles par des regex compilées au niveau du module.
+Comparatif lors de la génération concurrente d'un lot de **50 documents** hétérogènes :
+
+| Mode d'Exécution | Unités d'Exécution | Durée Totale (Lot de 50) | Débit Global (Throughput) | Facteur d'Accélération |
+|---|:---:|:---:|:---:|:---:|
+| **Mono-Thread** (Event Loop principal) | 1 thread | 1263.3 ms | 39.6 docs/seconde | Référence (1.0x) |
+| **Worker Pool Élastique** (80% CPU) | **9 threads** | **597.0 ms** | **83.8 docs/seconde** | **x2.12 plus rapide** |
+
+> [!TIP]
+> **Zéro-Copie IPC** : Les transferts binaires entre les workers et le thread principal s'effectuent via `ArrayBuffer.transfer` / `Transferable`. Aucun coût de sérialisation JSON ou de copie mémoire n'est encouru lors du rapatriement des buffers PDF.
+
+---
+
+## 🔬 Architecture des Optimisations Actives
+
+Toutes les optimisations de la version 2.0 sont désormais natives dans le code de production :
+
+1. **Rendu en Passe Unique (Single-Pass AST)** :
+   - Le DOM Cheerio est parsé une seule fois.
+   - La seconde passe de comptage de pages n'est déclenchée que si le document CSS utilise explicitement `counter(num-pages)`.
+2. **Caches Mémoire à Haute Efficacité** :
+   - `WeakMap` pour le parsing des styles inline : garbage-collecté automatiquement sans aucune fuite mémoire.
+   - `TextMeasureCache` (LRU borné à 512 entrées) : évite le recalcul des glyphes typographiques répétitifs.
+   - Cache partagé des polices et images distantes par document.
+3. **Pool Élastique de Worker Threads** :
+   - **0 thread au repos** (~116 MB résiduel).
+   - Démarrage instantané à la demande avec limitation CPU paramétrable (`cpuRatio: 0.5` ou `0.8`).
+   - Arrêt automatique des workers inactifs après 10s pour restituer la RAM à l'OS.
+4. **Protocole de Nettoyage Automatique** :
+   - Implémentation native de `Symbol.asyncDispose` pour une syntaxe `await using generator = createPdfGenerator(...)` sous Node.js ≥ 22.
+
+---
+
+## 📈 Rapport d'Endurance (Soak Tests)
+
+Des tests d'endurance de longue durée sont également disponibles dans le dossier `bench/` :
+- `npm run test:soak` : Test de répétition séquentielle (200 PDFs) pour la stabilité du Heap.
+- `npm run test:soak:parallel` : Test de charge de **15 000 PDFs** en concurrence régulée à 80% CPU (~267 PDFs/seconde avec RSS stabilisé).

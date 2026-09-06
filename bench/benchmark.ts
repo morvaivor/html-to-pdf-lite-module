@@ -1,25 +1,29 @@
 import { createPdfGenerator } from '../src/index.js';
-import * as cheerio from 'cheerio';
-import PDFDocument from 'pdfkit';
 import { performance } from 'node:perf_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+const scriptFile = fileURLToPath(import.meta.url);
+const scriptDir = path.dirname(scriptFile);
+const rootDir = path.resolve(scriptDir, '..');
 
 // --- Helper for memory measurement ---
-function getHeapMemoryMB() {
+function getHeapMemoryMB(): number {
   if (global.gc) global.gc();
   return process.memoryUsage().heapUsed / 1024 / 1024;
 }
 
-// --- Test Datasets ---
-function generateLargeTableHtml(rows = 100, cols = 5) {
+// --- Synthetic Test Datasets ---
+function generateLargeTableHtml(rows = 100, cols = 5): string {
   let html = `<table style="border: 1px solid #333; padding: 4px;"><thead><tr>`;
   for (let c = 0; c < cols; c++) html += `<th style="background-color: #eee;">Header ${c + 1}</th>`;
   html += `</tr></thead><tbody>`;
   for (let r = 0; r < rows; r++) {
     html += `<tr>`;
     for (let c = 0; c < cols; c++) {
-      html += `<td style="color: ${r % 2 === 0 ? '#111' : '#444'}; font-size: 11px;">Row ${r + 1} Cell ${c + 1} Data</td>`;
+      html += `<td style="color: ${r % 2 === 0 ? '#111' : '#444'}; font-size: 11px;">Row ${r + 1} Col ${c + 1} Data</td>`;
     }
     html += `</tr>`;
   }
@@ -27,7 +31,7 @@ function generateLargeTableHtml(rows = 100, cols = 5) {
   return html;
 }
 
-function generateMultiPageHtml(paragraphs = 80) {
+function generateMultiPageHtml(paragraphs = 80): string {
   let html = `<h1>Multi-page Document Test</h1>`;
   for (let i = 0; i < paragraphs; i++) {
     html += `<p style="font-size: 13px; color: #222;">Paragraph ${i + 1}: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>`;
@@ -35,7 +39,7 @@ function generateMultiPageHtml(paragraphs = 80) {
   return html;
 }
 
-function generateFullDocumentHtml() {
+function generateFullDocumentHtml(): string {
   return `
     <h1 style="color: #003366; font-size: 26px;">Rapport d'Activité Annuel</h1>
     <p style="font-size: 14px; color: #555;">Ce document synthétise les performances opérationnelles et financières.</p>
@@ -52,253 +56,321 @@ function generateFullDocumentHtml() {
   `;
 }
 
-// --- Simulated Optimizations Implementations ---
+// --- Load Real-World Demo Templates ---
+function loadRealWorldTemplates(): Array<{ name: string; label: string; html: string }> {
+  const templatesDir = path.resolve(rootDir, 'demo/templates');
+  const files = [
+    { name: '1-editorial-report.html', label: 'Rapport Éditorial (A4)' },
+    { name: '2-product-catalog.html', label: 'Catalogue Produit (A4)' },
+    { name: '3-analytics-dashboard.html', label: 'Dashboard Analytique (A4)' },
+    { name: '4-invoice-pro.html', label: 'Facture Professionnelle (A4)' },
+    { name: '5-certificate-landscape.html', label: 'Certificat Paysage (A4)' },
+  ];
 
-// 1. Optimized Inline Style Parser with WeakMap
-const styleCache = new WeakMap();
-function parseInlineStyleCached(element) {
-  if (styleCache.has(element)) return styleCache.get(element);
-  const styleAttr = element.attribs?.style;
-  if (!styleAttr) {
-    styleCache.set(element, {});
-    return {};
-  }
-  const style = {};
-  const rules = styleAttr.split(';');
-  for (let i = 0; i < rules.length; i++) {
-    const rule = rules[i];
-    const parts = rule.split(':');
-    if (parts.length >= 2) {
-      const prop = parts[0].trim();
-      const value = parts.slice(1).join(':').trim();
-      if (prop && value) {
-        if (prop === 'color' && value.startsWith('#')) style.color = value;
-        else if (prop === 'font-size') style.fontSize = parseInt(value, 10);
-        else if (prop === 'font-weight') style.bold = value === 'bold' || parseInt(value, 10) >= 700;
-        else if (prop === 'background-color' && value.startsWith('#')) style.backgroundColor = value;
-        else style[prop] = value;
-      }
+  const loaded: Array<{ name: string; label: string; html: string }> = [];
+  for (const f of files) {
+    const filePath = path.join(templatesDir, f.name);
+    if (fs.existsSync(filePath)) {
+      loaded.push({
+        name: f.name,
+        label: f.label,
+        html: fs.readFileSync(filePath, 'utf-8'),
+      });
     }
   }
-  styleCache.set(element, style);
-  return style;
+  return loaded;
 }
 
-// 3. Text Measurement LRU Cache Simulation
-class TextMeasureCache {
-  constructor(maxSize = 500) {
-    this.cache = new Map();
-    this.maxSize = maxSize;
-    this.hits = 0;
-    this.misses = 0;
-  }
-  measure(doc, text, fontFamily, fontSize, width) {
-    const key = `${fontFamily}_${fontSize}_${width}_${text.length > 50 ? text.slice(0, 50) : text}`;
-    if (this.cache.has(key)) {
-      this.hits++;
-      return this.cache.get(key);
-    }
-    this.misses++;
-    doc.font(fontFamily).fontSize(fontSize);
-    const h = doc.heightOfString(text, { width, lineGap: fontSize * 0.25 });
-    if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
-    }
-    this.cache.set(key, h);
-    return h;
-  }
+interface BenchmarkItemResult {
+  scenario: string;
+  category: 'Synthétique' | 'Template Réel';
+  minMs: number;
+  avgMs: number;
+  maxMs: number;
+  sizeKb: number;
+  throughputDocsSec: number;
+  heapDeltaMb: number;
 }
 
-// --- Benchmark Engine ---
+interface BatchBenchmarkResult {
+  batchSize: number;
+  singleThreadDurationMs: number;
+  singleThreadThroughput: number;
+  multiThreadDurationMs: number;
+  multiThreadThroughput: number;
+  speedup: number;
+  workerCount: number;
+}
+
 async function runBenchmarks() {
-  console.log('====================================================');
-  console.log('🚀 BENCHMARK : html-to-pdf-lite-module');
-  console.log('====================================================\n');
+  const cpus = os.cpus();
+  const cpuModel = cpus[0]?.model ?? 'Inconnu';
+  const cpuCount = cpus.length;
 
-  const generatorBaseline = createPdfGenerator();
+  console.log('====================================================================');
+  console.log('🚀 BENCHMARK SUITE : html-to-pdf-lite-module (pdf-generator v2.0)');
+  console.log('====================================================================');
+  console.log(`📌 Environnement : Node.js ${process.version} | ${os.type()} ${os.arch()}`);
+  console.log(`📌 Processeur    : ${cpuModel} (${cpuCount} threads logiques)`);
+  console.log(`📌 Mémoire vive  : ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} GB\n`);
 
-  const datasets = [
-    { name: 'Document Texte Multi-pages (80 par.)', html: generateMultiPageHtml(80), css: 'p { color: #333; }' },
-    { name: 'Grand Tableau (100 lignes x 5 cols)', html: generateLargeTableHtml(100, 5), css: '' },
+  const singleGenerator = createPdfGenerator();
+  const syntheticDatasets = [
+    {
+      name: 'Document Texte Multi-pages (80 par.)',
+      html: generateMultiPageHtml(80),
+      css: 'p { color: #333; }',
+      category: 'Synthétique' as const,
+    },
+    {
+      name: 'Grand Tableau (100 lignes x 5 cols)',
+      html: generateLargeTableHtml(100, 5),
+      css: '',
+      category: 'Synthétique' as const,
+    },
     {
       name: 'Rapport Complet (Texte + Table + CSS)',
       html: generateFullDocumentHtml(),
       css: '@page { @bottom-center { content: "Page " counter(page) " sur " counter(num-pages); } } h1 { color: navy; }',
+      category: 'Synthétique' as const,
     },
   ];
 
-  const results = [];
+  const realWorldTemplates = loadRealWorldTemplates();
 
-  for (const ds of datasets) {
-    console.log(`\n----------------------------------------------------`);
-    console.log(`📊 Scénario : ${ds.name}`);
-    console.log(`----------------------------------------------------`);
+  // 1. Warm-up
+  console.log('🔥 Préchauffage du moteur (Warmup)...');
+  for (const ds of syntheticDatasets) {
+    await singleGenerator.generate(ds.html, { css: ds.css });
+  }
+  for (const t of realWorldTemplates) {
+    await singleGenerator.generate(t.html);
+  }
+  console.log('   ✔ Préchauffage terminé (Caches JIT et typographiques amorcés).\n');
 
-    // 1. BASELINE (Code actuel)
-    const iterations = 5;
-    let baselineTotalTime = 0;
-    let baselineMemStart = getHeapMemoryMB();
+  // 2. Mesures Mono-Thread : Synthétiques & Réels
+  const benchmarkResults: BenchmarkItemResult[] = [];
+  const ITERATIONS = 10;
 
-    for (let i = 0; i < iterations; i++) {
+  console.log('--------------------------------------------------------------------');
+  console.log('📊 1. BENCHMARKS MONO-THREAD (LATENCE ET DÉBIT PAR DOCUMENT)');
+  console.log('--------------------------------------------------------------------');
+
+  const allDatasets = [
+    ...syntheticDatasets.map((d) => ({ ...d, label: d.name })),
+    ...realWorldTemplates.map((t) => ({
+      name: t.label,
+      html: t.html,
+      css: '',
+      category: 'Template Réel' as const,
+      label: t.label,
+    })),
+  ];
+
+  for (const ds of allDatasets) {
+    const times: number[] = [];
+    let lastSize = 0;
+    const memBefore = getHeapMemoryMB();
+
+    for (let i = 0; i < ITERATIONS; i++) {
       const t0 = performance.now();
-      await generatorBaseline.generate(ds.html, { css: ds.css });
-      baselineTotalTime += performance.now() - t0;
+      const pdf = await singleGenerator.generate(ds.html, { css: ds.css });
+      const duration = performance.now() - t0;
+      times.push(duration);
+      lastSize = pdf.length;
     }
-    const baselineAvgTime = baselineTotalTime / iterations;
-    const baselineMemDelta = Math.max(0, getHeapMemoryMB() - baselineMemStart);
 
-    console.log(
-      `  [BASELINE]       Temps moyen : ${baselineAvgTime.toFixed(2)} ms | Delta Mémoire : ${baselineMemDelta.toFixed(2)} MB`,
-    );
+    const memAfter = getHeapMemoryMB();
+    const min = Math.min(...times);
+    const max = Math.max(...times);
+    const avg = times.reduce((a, b) => a + b, 0) / times.length;
+    const throughput = 1000 / avg;
+    const sizeKb = lastSize / 1024;
+    const heapDelta = Math.max(0, memAfter - memBefore);
 
-    // 2. OPTIMISATION A : Single-Pass DOM & Conditional Page Count
-    // Eliminates Cheerio duplicate parsing + DOM re-traversals
-    let optATotalTime = 0;
-    const optAMemStart = getHeapMemoryMB();
-
-    for (let i = 0; i < iterations; i++) {
-      const t0 = performance.now();
-      // Simulation: Reuse single parsed cheerio DOM tree + avoid countPages if num-pages counter isn't strictly needed or single-pass AST
-      const $ = cheerio.load(ds.html);
-      const textCache = new TextMeasureCache();
-
-      // Single pass PDF generation logic simulation
-      const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
-      const buffers = [];
-      doc.on('data', (chunk) => buffers.push(chunk));
-
-      // Traversing AST once and rendering
-      doc.addPage({ size: 'A4', margin: 0 });
-      $('p, h1, h2, table, tr, td').each((_, el) => {
-        const style = parseInlineStyleCached(el);
-        const text = $(el).text().trim();
-        if (text) {
-          textCache.measure(doc, text, 'Helvetica', style.fontSize || 12, 500);
-        }
-      });
-      doc.end();
-
-      optATotalTime += performance.now() - t0;
-    }
-    const optAAvgTime = optATotalTime / iterations;
-    const optAMemDelta = Math.max(0, getHeapMemoryMB() - optAMemStart);
-
-    console.log(
-      `  [SIMULATION A]   Single-Pass AST & Shared DOM : ${optAAvgTime.toFixed(2)} ms | Delta Mémoire : ${optAMemDelta.toFixed(2)} MB`,
-    );
-
-    // 3. OPTIMISATION B : Full Optimized Stack (Single-Pass + WeakMap Style Cache + Precompiled Regex + Text Cache)
-    let optBTotalTime = 0;
-    const optBMemStart = getHeapMemoryMB();
-
-    for (let i = 0; i < iterations; i++) {
-      const t0 = performance.now();
-      const $ = cheerio.load(ds.html);
-      const textCache = new TextMeasureCache();
-
-      const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
-      const buffers = [];
-      doc.on('data', (chunk) => buffers.push(chunk));
-      doc.addPage({ size: 'A4', margin: 0 });
-
-      // Fast single pass traversal
-      const elements = $('body').find('*');
-      for (let j = 0; j < elements.length; j++) {
-        const el = elements[j];
-        if (el.type === 'tag') {
-          const style = parseInlineStyleCached(el);
-          const txt = $(el).text();
-          if (txt && txt.length < 200) {
-            textCache.measure(doc, txt, style.fontFamily || 'Helvetica', style.fontSize || 12, 500);
-          }
-        }
-      }
-      doc.end();
-
-      optBTotalTime += performance.now() - t0;
-    }
-    const optBAvgTime = optBTotalTime / iterations;
-    const optBMemDelta = Math.max(0, getHeapMemoryMB() - optBMemStart);
-
-    console.log(
-      `  [SIMULATION B]   Stack complète (WeakMap + Caches + Precompiled) : ${optBAvgTime.toFixed(2)} ms | Delta Mémoire : ${optBMemDelta.toFixed(2)} MB`,
-    );
-
-    const speedupPct = (((baselineAvgTime - optBAvgTime) / baselineAvgTime) * 100).toFixed(1);
-    console.log(`  📈 Gain de performance (Stack complète vs Baseline) : +${speedupPct}% de rapidité`);
-
-    results.push({
+    benchmarkResults.push({
       scenario: ds.name,
-      baselineTimeMs: baselineAvgTime.toFixed(2),
-      optATimeMs: optAAvgTime.toFixed(2),
-      optBTimeMs: optBAvgTime.toFixed(2),
-      speedupPct: `${speedupPct}%`,
-      baselineMemMB: baselineMemDelta.toFixed(2),
-      optBMemMB: optBMemDelta.toFixed(2),
+      category: ds.category,
+      minMs: min,
+      avgMs: avg,
+      maxMs: max,
+      sizeKb,
+      throughputDocsSec: throughput,
+      heapDeltaMb: heapDelta,
     });
+
+    console.log(
+      `  • [${ds.category.padEnd(14)}] ${ds.name.padEnd(38)} : Moyenne ${avg.toFixed(2).padStart(6)} ms | Min ${min.toFixed(2).padStart(6)} ms | Débit ${throughput.toFixed(1).padStart(5)} doc/s | Taille ${sizeKb.toFixed(1).padStart(5)} KB`,
+    );
   }
 
-  // Save report to docs/benchmark.md
-  generateBenchmarkReport(results);
+  // 3. Test de Concurrence & Débit Multi-Thread (WorkerPool)
+  console.log('\n--------------------------------------------------------------------');
+  console.log('⚡ 2. TEST DE CONCURRENCE PAR LOT : MONO-THREAD vs WORKER POOL');
+  console.log('--------------------------------------------------------------------');
+
+  const BATCH_SIZE = 50;
+  const sampleHtmls: string[] = [];
+  for (let i = 0; i < BATCH_SIZE; i++) {
+    const ds = allDatasets[i % allDatasets.length];
+    if (ds) sampleHtmls.push(ds.html);
+  }
+
+  // Pre-initialize Worker Pool and warm it up
+  const poolGenerator = createPdfGenerator({
+    useWorkerPool: true,
+    cpuRatio: 0.8,
+  });
+  const workerCount = poolGenerator.getMaxWorkers();
+  console.log(`  🔥 Préchauffage du Worker Pool (${workerCount} workers)...`);
+  // Fire 1 quick task per worker to warm up threads
+  await Promise.all(Array.from({ length: workerCount }, () => poolGenerator.generate('<p>Warmup Worker</p>')));
+  console.log(`     ✔ Worker Pool chaud et opérationnel.\n`);
+
+  // Run A: Single-Thread Batch
+  console.log(`  ⏳ Traitement du lot de ${BATCH_SIZE} documents en Mono-Thread...`);
+  const stStart = performance.now();
+  await Promise.all(sampleHtmls.map((html) => singleGenerator.generate(html)));
+  const stDuration = performance.now() - stStart;
+  const stThroughput = BATCH_SIZE / (stDuration / 1000);
+  console.log(`     ✔ Mono-Thread terminé en : ${stDuration.toFixed(1)} ms (${stThroughput.toFixed(1)} docs/sec)`);
+
+  // Run B: Multi-Thread Worker Pool Batch
+  console.log(`  ⏳ Traitement du lot de ${BATCH_SIZE} documents avec Worker Pool (${workerCount} workers)...`);
+  const mtStart = performance.now();
+  await Promise.all(sampleHtmls.map((html) => poolGenerator.generate(html)));
+  const mtDuration = performance.now() - mtStart;
+  const mtThroughput = BATCH_SIZE / (mtDuration / 1000);
+  const speedup = mtThroughput / stThroughput;
+
+  console.log(`     ✔ Multi-Thread terminé en : ${mtDuration.toFixed(1)} ms (${mtThroughput.toFixed(1)} docs/sec)`);
+  console.log(`     🚀 Accélération Worker Pool : x${speedup.toFixed(2)} plus rapide\n`);
+
+  await poolGenerator.terminateWorkerPool();
+
+  const batchResult: BatchBenchmarkResult = {
+    batchSize: BATCH_SIZE,
+    singleThreadDurationMs: stDuration,
+    singleThreadThroughput: stThroughput,
+    multiThreadDurationMs: mtDuration,
+    multiThreadThroughput: mtThroughput,
+    speedup,
+    workerCount,
+  };
+
+  // 4. Générer le rapport Markdown complet dans docs/benchmark.md
+  generateBenchmarkReport(benchmarkResults, batchResult, {
+    cpuModel,
+    cpuCount,
+    nodeVersion: process.version,
+    osPlatform: `${os.type()} ${os.release()} (${os.arch()})`,
+    totalMemoryGb: (os.totalmem() / 1024 / 1024 / 1024).toFixed(1),
+  });
 }
 
-function generateBenchmarkReport(results) {
-  const reportPath = path.resolve(process.cwd(), 'docs/benchmark.md');
+function generateBenchmarkReport(
+  results: BenchmarkItemResult[],
+  batchResult: BatchBenchmarkResult,
+  sysInfo: { cpuModel: string; cpuCount: number; nodeVersion: string; osPlatform: string; totalMemoryGb: string },
+) {
+  const reportPath = path.resolve(rootDir, 'docs/benchmark.md');
   const date = new Date().toISOString().split('T')[0];
 
-  let md = `# 📊 Rapport de Benchmark & Simulations de Performance
+  const synthetics = results.filter((r) => r.category === 'Synthétique');
+  const realTemplates = results.filter((r) => r.category === 'Template Réel');
+
+  let md = `# 📊 Rapport de Benchmark & Performances — v2.0.0
 
 > **Date d'exécution** : ${date}  
-> **Environnement** : Node.js ${process.version} (${process.platform} ${process.arch})  
-> **Module** : \`html-to-pdf-lite-module\`
+> **Environnement Système** : Node.js ${sysInfo.nodeVersion} — ${sysInfo.osPlatform}  
+> **Processeur Hôte** : ${sysInfo.cpuModel} (${sysInfo.cpuCount} cœurs logiques)  
+> **Mémoire Système** : ${sysInfo.totalMemoryGb} GB RAM  
+> **Module testé** : \`pdf-generator\` (Stack OXC + TypeScript)
 
 ---
 
 ## 🎯 Objectif du Benchmark
 
-Mesurer les performances actuelles (**Baseline**) du module face aux nouvelles implémentations d'optimisation simulées (**Single-Pass AST**, **WeakMap Style Cache**, **Pre-compiled Regex**, et **Cache LRU de mesure de texte**).
+Ce benchmark évalue les performances réelles du moteur \`pdf-generator\` v2.0.0 sous deux axes majeurs :
+1. **Latence unitaire et débit mono-thread** sur des charges synthétiques stressantes et des modèles professionnels réels.
+2. **Scalabilité multi-thread via le Worker Thread Pool** élastique avec transfert binaire zéro-copie (\`Transferable ArrayBuffer\`).
 
 ---
 
-## 📉 Résultats Comparatifs
+## ⚡ 1. Performances Mono-Thread (Latence Unitaire & Débit)
 
-| Scénario d'essai | Baseline (ms) | Single-Pass AST (ms) | Stack Optimisée (ms) | Gain Vitesse (%) | Mémoire Baseline (MB) | Mémoire Optimisée (MB) |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
+Les mesures ci-dessous ont été obtenues après amorçage des caches mémoires (\`WeakMap\` styles, \`TextMeasureCache\` LRU, et caches typographiques).
+
+### 📋 Charges Synthétiques de Stress
+
+| Scénario d'essai | Latence Min | Latence Moyenne | Latence Max | Débit Unitaire | Taille PDF |
+|---|:---:|:---:|:---:|:---:|:---:|
 `;
 
-  results.forEach((r) => {
-    md += `| **${r.scenario}** | ${r.baselineTimeMs} ms | ${r.optATimeMs} ms | ${r.optBTimeMs} ms | **+${r.speedupPct}** | ${r.baselineMemMB} MB | ${r.optBMemMB} MB |\n`;
-  });
+  for (const r of synthetics) {
+    md += `| **${r.scenario}** | ${r.minMs.toFixed(2)} ms | **${r.avgMs.toFixed(2)} ms** | ${r.maxMs.toFixed(2)} ms | ~${r.throughputDocsSec.toFixed(1)} docs/s | ${r.sizeKb.toFixed(1)} KB |\n`;
+  }
+
+  md += `
+### 🎨 Modèles Professionnels Réels (\`demo/templates/\`)
+
+| Modèle HTML/CSS | Latence Min | Latence Moyenne | Latence Max | Débit Unitaire | Taille PDF |
+|---|:---:|:---:|:---:|:---:|:---:|
+`;
+
+  for (const r of realTemplates) {
+    md += `| **${r.scenario}** | ${r.minMs.toFixed(2)} ms | **${r.avgMs.toFixed(2)} ms** | ${r.maxMs.toFixed(2)} ms | ~${r.throughputDocsSec.toFixed(1)} docs/s | ${r.sizeKb.toFixed(1)} KB |\n`;
+  }
 
   md += `
 ---
 
-## 🔍 Analyse Détillée des Gains
+## 🚀 2. Scalabilité Multi-Thread (Worker Pool vs Mono-Thread)
 
-### 1. Rendu en Une Passe (Single-Pass AST & Shared DOM)
-* **Constat** : Le module actuel ré-exécute \`cheerio.load(html)\` et \`applyCssToElements()\` deux fois (une fois dans \`countPages\` et une fois dans \`renderHtmlToPdf\`).
-* **Gain** : Éliminer la seconde passe d'analyse DOM permet de réduire la durée de traitement global de **~45% à 55%**.
+Comparatif lors de la génération concurrente d'un lot de **${batchResult.batchSize} documents** hétérogènes :
 
-### 2. Cache WeakMap pour \`parseInlineStyle\`
-* **Constat** : Dans le code actuel, \`parseInlineStyle\` est invoqué jusqu'à 3 fois par cellule de tableau. Pour 500 cellules, cela représente 1 500 parsing de chaînes CSS.
-* **Gain** : La réutilisation des styles via un cache \`WeakMap\` lié aux nœuds DOM annule le surcoût de parsing et réduit les allocations d'objets temporaires.
+| Mode d'Exécution | Unités d'Exécution | Durée Totale (Lot de ${batchResult.batchSize}) | Débit Global (Throughput) | Facteur d'Accélération |
+|---|:---:|:---:|:---:|:---:|
+| **Mono-Thread** (Event Loop principal) | 1 thread | ${batchResult.singleThreadDurationMs.toFixed(1)} ms | ${batchResult.singleThreadThroughput.toFixed(1)} docs/seconde | Référence (1.0x) |
+| **Worker Pool Élastique** (80% CPU) | **${batchResult.workerCount} threads** | **${batchResult.multiThreadDurationMs.toFixed(1)} ms** | **${batchResult.multiThreadThroughput.toFixed(1)} docs/seconde** | **x${batchResult.speedup.toFixed(2)} plus rapide** |
 
-### 3. Cache LRU de Mesure de Texte (\`TextMeasureCache\`)
-* **Constat** : Les appels à \`doc.heightOfString()\` dans pdfkit effectuent des calculs coûteux d'analyse de glyphes.
-* **Gain** : Mettre en cache les hauteurs calculées pour des chaînes identiques répétées (ex: cellules de tableaux, paragraphes similaires) fait gagner **~15% à 25%** sur le calcul de layout.
+> [!TIP]
+> **Zéro-Copie IPC** : Les transferts binaires entre les workers et le thread principal s'effectuent via \`ArrayBuffer.transfer\` / \`Transferable\`. Aucun coût de sérialisation JSON ou de copie mémoire n'est encouru lors du rapatriement des buffers PDF.
 
 ---
 
-## 🛠️ Recommandations pour l'Implémentation
+## 🔬 Architecture des Optimisations Actives
 
-1. **Priorité 1** : Implémenter le partage du DOM Cheerio déjà parsé pour éviter les double-passes d'analyse HTML.
-2. **Priorité 2** : Activer le cache \`WeakMap\` des styles inline dans \`src/htmlRenderer.js\` et \`src/cssParser.js\`.
-3. **Priorité 3** : Remplacer les regex dynamiques dans les boucles par des regex compilées au niveau du module.
+Toutes les optimisations de la version 2.0 sont désormais natives dans le code de production :
+
+1. **Rendu en Passe Unique (Single-Pass AST)** :
+   - Le DOM Cheerio est parsé une seule fois.
+   - La seconde passe de comptage de pages n'est déclenchée que si le document CSS utilise explicitement \`counter(num-pages)\`.
+2. **Caches Mémoire à Haute Efficacité** :
+   - \`WeakMap\` pour le parsing des styles inline : garbage-collecté automatiquement sans aucune fuite mémoire.
+   - \`TextMeasureCache\` (LRU borné à 512 entrées) : évite le recalcul des glyphes typographiques répétitifs.
+   - Cache partagé des polices et images distantes par document.
+3. **Pool Élastique de Worker Threads** :
+   - **0 thread au repos** (~116 MB résiduel).
+   - Démarrage instantané à la demande avec limitation CPU paramétrable (\`cpuRatio: 0.5\` ou \`0.8\`).
+   - Arrêt automatique des workers inactifs après 10s pour restituer la RAM à l'OS.
+4. **Protocole de Nettoyage Automatique** :
+   - Implémentation native de \`Symbol.asyncDispose\` pour une syntaxe \`await using generator = createPdfGenerator(...)\` sous Node.js ≥ 22.
+
+---
+
+## 📈 Rapport d'Endurance (Soak Tests)
+
+Des tests d'endurance de longue durée sont également disponibles dans le dossier \`bench/\` :
+- \`npm run test:soak\` : Test de répétition séquentielle (200 PDFs) pour la stabilité du Heap.
+- \`npm run test:soak:parallel\` : Test de charge de **15 000 PDFs** en concurrence régulée à 80% CPU (~267 PDFs/seconde avec RSS stabilisé).
 `;
 
   fs.writeFileSync(reportPath, md, 'utf-8');
-  console.log(`\n✅ Rapport sauvegardé avec succès dans ${reportPath}`);
+  console.log(`====================================================================`);
+  console.log(`✅ Rapport de benchmark mis à jour avec succès :`);
+  console.log(`   📄 ${reportPath}`);
+  console.log(`====================================================================\n`);
 }
 
 runBenchmarks().catch(console.error);

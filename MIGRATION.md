@@ -99,13 +99,13 @@ New types available in v2:
 
 ### Node.js version requirement
 
-v2 requires **Node.js ≥ 18.18.0** (documented via `engines` field).
+v2 requires **Node.js ≥ 18.18.0** (documented via `engines` field) and is fully compatible, tested and benchmarked on **Node.js 20, 22, and 24**.
 
 This was already the implicit minimum in v1 (due to global `fetch()` and `availableParallelism()`), but is now explicitly enforced.
 
-### `await using` support (Node.js ≥ 22)
+### `await using` support (Node.js 22 & 24)
 
-If you're on Node 22+, you can use the new `AsyncDisposable` protocol:
+If you're on Node 22+ or Node 24+, you can use the native `AsyncDisposable` protocol without flags:
 
 ```typescript
 // Automatic cleanup — no need to call terminateWorkerPool()

@@ -139,15 +139,10 @@ function isInlineContainer(element: Element): boolean {
 function hasOnlyInlineChildren(element: Element): boolean {
   const tagChildren = element.children.filter((c: any) => c.type === 'tag') as Element[];
   if (tagChildren.length === 0) return true;
-  return tagChildren.every((c) =>
-    ['b', 'strong', 'i', 'em', 'span', 'a', 'small', 'code'].includes(c.name),
-  );
+  return tagChildren.every((c) => ['b', 'strong', 'i', 'em', 'span', 'a', 'small', 'code'].includes(c.name));
 }
 
-function collectInlineRuns(
-  element: Element,
-  parentStyle: TextStyle,
-): Array<{ text: string; style: TextStyle }> {
+function collectInlineRuns(element: Element, parentStyle: TextStyle): Array<{ text: string; style: TextStyle }> {
   const runs: Array<{ text: string; style: TextStyle }> = [];
 
   for (const child of element.children) {
@@ -301,7 +296,10 @@ function estimateElementHeight(
 
   if (tagChildren.length === 0) {
     if (textChildren.length > 0) {
-      const text = textChildren.map((c: any) => (c as any).data).join('').trim();
+      const text = textChildren
+        .map((c: any) => (c as any).data)
+        .join('')
+        .trim();
       const fontFamily = resolveFontFamily(style.fontFamily, style.bold, style.italic, fontAliasSet);
       totalChildHeight = textCache.measure(doc, text, fontFamily, style.fontSize, innerWidth);
     }
@@ -362,17 +360,7 @@ export async function renderElement(
     style.display === 'inline-grid' ||
     style.gridTemplateColumns
   ) {
-    await renderFlexContainer(
-      doc,
-      element,
-      style,
-      options,
-      layout,
-      textCache,
-      fontAliasSet,
-      imageCache,
-      renderElement,
-    );
+    await renderFlexContainer(doc, element, style, options, layout, textCache, fontAliasSet, imageCache, renderElement);
     return;
   }
 
@@ -421,7 +409,11 @@ export async function renderElement(
         doc.fillColor(cStyle.backgroundColor).rect(curX, curY, itemWidth, itemHeight).fill();
       }
       if (cStyle.borderWidth && cStyle.borderColor) {
-        doc.strokeColor(cStyle.borderColor).lineWidth(cStyle.borderWidth).rect(curX, curY, itemWidth, itemHeight).stroke();
+        doc
+          .strokeColor(cStyle.borderColor)
+          .lineWidth(cStyle.borderWidth)
+          .rect(curX, curY, itemWidth, itemHeight)
+          .stroke();
       }
 
       const badgeTextOpts: PDFKit.Mixins.TextOptions = { lineBreak: false };
@@ -439,11 +431,11 @@ export async function renderElement(
   // 2. Box Model Decoration (Containers with background or border or padding)
   const hasBoxDecoration = Boolean(
     style.backgroundColor ||
-      style.borderWidth ||
-      style.borderLeftWidth ||
-      style.borderTopWidth ||
-      style.borderBottomWidth ||
-      style.borderRightWidth,
+    style.borderWidth ||
+    style.borderLeftWidth ||
+    style.borderTopWidth ||
+    style.borderBottomWidth ||
+    style.borderRightWidth,
   );
 
   if (hasBoxDecoration && tagName !== 'p' && tagName !== 'span' && tagName !== 'a') {
@@ -466,7 +458,13 @@ export async function renderElement(
         innerContentHeight += estimateElementHeight(doc, child as Element, style, innerWidth, textCache, fontAliasSet);
       } else if (child.type === 'text' && (child as any).data?.trim()) {
         const fontFamily = resolveFontFamily(style.fontFamily, style.bold, style.italic, fontAliasSet);
-        innerContentHeight += textCache.measure(doc, (child as any).data.trim(), fontFamily, style.fontSize, innerWidth);
+        innerContentHeight += textCache.measure(
+          doc,
+          (child as any).data.trim(),
+          fontFamily,
+          style.fontSize,
+          innerWidth,
+        );
       }
     }
 
@@ -493,7 +491,10 @@ export async function renderElement(
     // Draw background
     if (style.backgroundColor) {
       if (style.borderRadius && style.borderRadius > 0) {
-        doc.fillColor(style.backgroundColor).roundedRect(boxX, startY, boxWidth, totalBoxHeight, style.borderRadius).fill();
+        doc
+          .fillColor(style.backgroundColor)
+          .roundedRect(boxX, startY, boxWidth, totalBoxHeight, style.borderRadius)
+          .fill();
       } else {
         doc.fillColor(style.backgroundColor).rect(boxX, startY, boxWidth, totalBoxHeight).fill();
       }
@@ -526,9 +527,17 @@ export async function renderElement(
     // Draw borders with actual height
     if (style.borderWidth && style.borderWidth > 0 && style.borderColor) {
       if (style.borderRadius && style.borderRadius > 0) {
-        doc.strokeColor(style.borderColor).lineWidth(style.borderWidth).roundedRect(boxX, startY, boxWidth, actualHeight, style.borderRadius).stroke();
+        doc
+          .strokeColor(style.borderColor)
+          .lineWidth(style.borderWidth)
+          .roundedRect(boxX, startY, boxWidth, actualHeight, style.borderRadius)
+          .stroke();
       } else {
-        doc.strokeColor(style.borderColor).lineWidth(style.borderWidth).rect(boxX, startY, boxWidth, actualHeight).stroke();
+        doc
+          .strokeColor(style.borderColor)
+          .lineWidth(style.borderWidth)
+          .rect(boxX, startY, boxWidth, actualHeight)
+          .stroke();
       }
     }
     if (style.borderLeftWidth && style.borderLeftWidth > 0) {

@@ -1,10 +1,6 @@
 import { renderHtmlToPdf } from './htmlRenderer.js';
 import { WorkerPool, calculateMaxWorkers } from './workers/workerPool.js';
-import {
-  verifyRenderingQuality,
-  type QualityAuditResult,
-  type QualityCheckOptions,
-} from './qualityAuditor.js';
+import { verifyRenderingQuality, type QualityAuditResult, type QualityCheckOptions } from './qualityAuditor.js';
 import type {
   PdfGeneratorConfig,
   PdfGenerateOptions,
@@ -104,10 +100,7 @@ export class PdfGenerator {
   /**
    * Audits the rendering quality and fidelity of a generated PDF against the input HTML.
    */
-  async auditQuality(
-    html: string,
-    options?: QualityCheckOptions,
-  ): Promise<QualityAuditResult> {
+  async auditQuality(html: string, options?: QualityCheckOptions): Promise<QualityAuditResult> {
     const pdfBuffer = await this.generate(html, options?.options);
     return verifyRenderingQuality(html, pdfBuffer, options);
   }

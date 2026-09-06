@@ -85,4 +85,15 @@ describe('WorkerPool & Elastic On-Demand Scaling', () => {
 
     await generator.terminateWorkerPool();
   });
+
+  test('PdfGenerator supports AsyncDisposable (await using / Symbol.asyncDispose) in Node.js 24', async () => {
+    let statsInside: number = 0;
+    {
+      await using gen = createPdfGenerator({ useWorkerPool: true });
+      const buf = await gen.generate('<h1>AsyncDisposable Test</h1>');
+      assert.ok(buf.toString('latin1').startsWith('%PDF'));
+      statsInside = gen.getWorkerStats().totalWorkers;
+      assert.ok(statsInside >= 1);
+    }
+  });
 });
