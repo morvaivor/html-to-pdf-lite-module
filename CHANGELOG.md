@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) or [Release Please](https://github.com/googleapis/release-please) for automated commit specifications.
 
+## [2.3.0] - 2026-09-07
+
+### 🎨 Showcase & Démonstrations Interactives
+- **5 Nouveaux Modèles HTML Diversifiés (`demo/templates/`)** :
+  - `6-tech-resume.html` : Curriculum Vitae & profil tech senior avec structure bi-colonne, badges de compétences techniques, timeline d'expériences et certifications (Fidélité : 100% A+).
+  - `7-medical-report.html` : Compte-rendu médical d'analyses biologiques accrédité ISO 15189 avec en-tête hospitalier, code-barres de prélèvement SVG, 3 tableaux denses (NFS, biochimie, lipides) et pastilles de statut colorées (Fidélité : 100% A+).
+  - `8-restaurant-menu.html` : Menu gastronomique de restaurant étoilé avec typographie soignée à empattements (serif), filets dorés, badges allergènes/végétariens et accords mets-vins (Fidélité : 95% A+).
+  - `9-legal-contract.html` : Accord bilatéral de confidentialité (NDA B2B) avec structure juridique formelle, articles et clauses numérotés, tableau de définitions et double bloc d'émargement (Fidélité : 98% A+).
+  - `10-event-ticket.html` : Billet d'événement et pass conférence VIP avec souche de contrôle détachable (`border-style: dashed`), code-barres vectoriel SVG, matrice QR Code SVG et grille d'accès (Fidélité : 90% A).
+- **Stress-Test Volumique Grand Livre Comptable (`demo/templates/11-heavy-financial-ledger.html`)** :
+  - Document financier dense de **~208 KB de DOM** comportant plus de 500 écritures comptables réparties sur 12 mois et 5 journaux.
+  - Conversion complète en **~410 ms** produisant un PDF vectoriel compact de **99.5 KB** avec **97% de fidélité (A+)**.
+  - Ajout du script utilitaire `scripts/generate-heavy-template.ts` pour générer et régénérer le jeu de données comptables.
+- **Infrastructure de Démo & GitHub Pages** :
+  - `scripts/build-demo.ts` : pipeline étendu à 11 templates avec audit de fidélité automatique (`verifyRenderingQuality`).
+  - `demo/site/index.html` & `demo/site/app.js` : prise en charge des 11 onglets de démonstration avec prévisualisation scindée (HTML / Code / PDF) et affichage en temps réel des notes de fidélité.
+  - `demo/site/styles.css` : barre de navigation optimisée avec scrollbar discrète et espacement réactif.
+
 ## [2.2.0] - 2026-09-07
 
 ### 🌐 Network & Security
