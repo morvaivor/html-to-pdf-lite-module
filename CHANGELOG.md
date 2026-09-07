@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) or [Release Please](https://github.com/googleapis/release-please) for automated commit specifications.
 
+## [2.2.0] - 2026-09-07
+
+### 🌐 Network & Security
+- **Allowed Local IPs for Remote CSS (`allowedLocalIps` / `allowedCssIps`)**:
+  - Support for loading external stylesheets (`<link rel="stylesheet">`, `@import url(...)`, and `options.css`) from planned local or intranet IP addresses.
+  - Comprehensive matching support: exact IP addresses (`192.168.1.50`), CIDR subnets (`192.168.1.0/24`, `10.0.0.0/8`), and wildcards (`192.168.1.*`, `*.corp.local`, `*`).
+  - Preserves strict SSRF defense by blocking unauthorized private IP ranges and cloud metadata endpoints.
+
+### 📝 Native Node.js Multi-Level Logging
+- **Zero-Dependency Native Logger (`src/core/logger.ts`)**:
+  - 100% native implementation relying solely on Node.js standard runtime APIs (`process.stdout`, `process.stderr`, `node:fs`).
+  - Configurable log levels: `ERROR`, `WARN`, `INFO`, `DEBUG` via `logLevel` and `verbose` options.
+  - Colorized ANSI terminal output:
+    - **ERROR** (Red): PDF generation and compilation errors (`Echec de construction du pdf : ...`).
+    - **WARN** (Orange): CSS loading and network issues (`Erreur de chargement du CSS : ...`).
+    - **INFO** (Green): Generation task lifecycle (start, completion, elapsed time).
+    - **DEBUG** (Blue): Diagnostic metadata including CSS source origins, HTML character/byte sizes, and rendering phase timings.
+  - File logging support (`logFile` option): Concurrently appends uncolored, clean log lines with ISO-8601 timestamps to a specified file path, with automatic parent directory creation.
+  - Silent by default when verbose mode is inactive to preserve performance and clean console output.
+
+### 🎨 CSS Loading & Error Resilience
+- **Graceful CSS Error Tolerance**: External stylesheet retrieval failures log an orange `WARN` and proceed with PDF generation instead of crashing.
+- **Strict CSS Flag (`strictCss: true`)**: Optional setting to re-enable strict failure mode when external stylesheets fail to load.
+- **Concurrent Resource Downloading**: `<link rel="stylesheet">` tags and remote `@font-face` entries are fetched in parallel with `Promise.all`.
+- **Recursive `@import` Resolution**: Supports nested `@import url(...)` directives with recursion depth limits to prevent circular loops.
+
+### 🧪 Tests & Quality
+- **Expanded Test Suite**: Reached **159 automated unit and integration tests** (33 suites) passing with **95.48% total code coverage** (100% coverage on `src/core/logger.ts`).
+- **Manual Test Suite**: 47/47 functional tests passing.
+- **Typecheck & Lint**: Fully compliant with TypeScript and Oxlint rules.
+
 ## [2.1.0] - 2026-09-06
 
 ### ⚡ Performance & Optimization Pipeline
