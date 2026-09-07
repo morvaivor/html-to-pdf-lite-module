@@ -1,6 +1,6 @@
 {
   "name": "pdf-generator",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Minimal HTML to PDF generator using pdfkit + cheerio",
   "type": "module",
   "main": "./dist/index.js",
@@ -39,7 +39,7 @@
     "format": "oxfmt --write src test bench",
     "format:check": "oxfmt --check src test bench",
     "test": "tsx test/manual-test.ts",
-    "test:coverage": "node --import tsx --experimental-test-coverage --test test/optimizations.test.ts test/workerPool.test.ts test/qualityAuditor.test.ts test/extendedCoverage.test.ts",
+    "test:coverage": "node --import tsx --experimental-test-coverage --test test/optimizations.test.ts test/workerPool.test.ts test/qualityAuditor.test.ts test/extendedCoverage.test.ts test/logger.test.ts",
     "benchmark": "tsx bench/benchmark.ts",
     "test:soak": "tsx --expose-gc bench/soak-test.ts",
     "test:soak:parallel": "tsx --expose-gc bench/soak-test-15k-parallel.ts",

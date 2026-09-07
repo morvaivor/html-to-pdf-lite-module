@@ -43,13 +43,106 @@ const BLOCKED_IP_PREFIXES: readonly string[] = [
   'fe80:',
 ] as const;
 
+export interface ValidateRemoteUrlOptions {
+  allowLocalhost?: boolean;
+  allowedLocalIps?: readonly string[];
+}
+
+function ipToNumber(ip: string): number | null {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  let num = 0;
+  for (const part of parts) {
+    if (!/^\d+$/.test(part)) return null;
+    const n = parseInt(part, 10);
+    if (n < 0 || n > 255 || String(n) !== part) return null;
+    num = ((num << 8) + n) >>> 0;
+  }
+  return num;
+}
+
+function matchesCidr(ip: string, cidr: string): boolean {
+  const slashIdx = cidr.indexOf('/');
+  if (slashIdx === -1) return false;
+  const range = cidr.substring(0, slashIdx);
+  const bitsStr = cidr.substring(slashIdx + 1);
+  if (!range || !bitsStr || !/^\d+$/.test(bitsStr)) return false;
+  const bits = parseInt(bitsStr, 10);
+  if (bits < 0 || bits > 32) return false;
+
+  const ipNum = ipToNumber(ip);
+  const rangeNum = ipToNumber(range);
+  if (ipNum === null || rangeNum === null) return false;
+
+  if (bits === 0) return true;
+  const mask = bits === 32 ? 0xffffffff : ~((1 << (32 - bits)) - 1) >>> 0;
+  return (ipNum & mask) >>> 0 === (rangeNum & mask) >>> 0;
+}
+
 /**
- * Validates that a URL is safe to fetch (not targeting internal networks).
+ * Checks if a hostname or IP is included in the allowed local IP / host list.
+ * Supports exact match, CIDR (e.g. 192.168.1.0/24), wildcards (*.corp, 192.168.1.*, *), and hostnames.
+ */
+export function isIpOrHostAllowed(hostname: string, allowedList: readonly string[]): boolean {
+  const target = hostname.toLowerCase();
+  for (const item of allowedList) {
+    let trimmed = item.trim().toLowerCase();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      trimmed = trimmed.slice(1, -1);
+    }
+
+    if (trimmed === '*' || trimmed === 'all') {
+      return true;
+    }
+
+    if (target === trimmed) {
+      return true;
+    }
+
+    if (trimmed.startsWith('*.') && target.endsWith(trimmed.slice(1))) {
+      return true;
+    }
+
+    if (trimmed.includes('/')) {
+      if (matchesCidr(target, trimmed)) {
+        return true;
+      }
+      continue;
+    }
+
+    if (trimmed.endsWith('.*')) {
+      const prefix = trimmed.slice(0, -1);
+      if (target.startsWith(prefix)) {
+        return true;
+      }
+    } else if (trimmed.endsWith('.')) {
+      if (target.startsWith(trimmed)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Validates that a URL is safe to fetch (not targeting internal networks unless whitelisted).
  * @param url The URL string to validate
- * @param allowLocalhost Whether to allow localhost / 127.0.0.1 for local dev/testing (defaults to true if NODE_ENV === 'test')
+ * @param options Options specifying allowLocalhost and allowedLocalIps, or boolean for allowLocalhost
  * @throws Error if the URL is invalid or targets a blocked host/IP
  */
-export function validateRemoteUrl(url: string, allowLocalhost: boolean = process.env['NODE_ENV'] === 'test'): void {
+export function validateRemoteUrl(
+  url: string,
+  options: ValidateRemoteUrlOptions | boolean = process.env['NODE_ENV'] === 'test',
+): void {
+  const opts: ValidateRemoteUrlOptions =
+    typeof options === 'boolean'
+      ? { allowLocalhost: options }
+      : {
+          allowLocalhost: options?.allowLocalhost ?? process.env['NODE_ENV'] === 'test',
+          allowedLocalIps: options?.allowedLocalIps,
+        };
+
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -64,7 +157,11 @@ export function validateRemoteUrl(url: string, allowLocalhost: boolean = process
   const rawHostname = parsed.hostname.toLowerCase();
   const hostname = rawHostname.startsWith('[') && rawHostname.endsWith(']') ? rawHostname.slice(1, -1) : rawHostname;
 
-  if (allowLocalhost && (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1')) {
+  if (opts.allowLocalhost && (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1')) {
+    return;
+  }
+
+  if (opts.allowedLocalIps && isIpOrHostAllowed(hostname, opts.allowedLocalIps)) {
     return;
   }
 
@@ -83,8 +180,15 @@ export function validateRemoteUrl(url: string, allowLocalhost: boolean = process
  * Fetches a remote resource with SSRF protection, timeout, and size limits.
  * @throws Error on invalid URL, blocked host, timeout, or oversized response
  */
-export async function fetchRemoteResource(url: string): Promise<Buffer> {
-  validateRemoteUrl(url);
+export async function fetchRemoteResource(
+  url: string,
+  options?: ValidateRemoteUrlOptions | readonly string[],
+): Promise<Buffer> {
+  const opts: ValidateRemoteUrlOptions | undefined = Array.isArray(options)
+    ? { allowedLocalIps: options }
+    : (options as ValidateRemoteUrlOptions | undefined);
+
+  validateRemoteUrl(url, opts);
 
   const response = await fetch(url, { signal: AbortSignal.timeout(NETWORK_TIMEOUT_MS) });
 

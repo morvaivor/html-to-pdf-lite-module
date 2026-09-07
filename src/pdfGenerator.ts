@@ -8,6 +8,7 @@ import type {
   RequiredMargin,
   Orientation,
   PaperFormat,
+  LogLevel,
 } from './types.js';
 
 const DEFAULT_FORMAT: PaperFormat = 'A4';
@@ -30,6 +31,12 @@ interface ResolvedConfig {
   readonly cpuRatio: number;
   readonly maxWorkers: number | null;
   readonly idleTimeoutMs: number;
+  readonly allowedLocalIps?: readonly string[];
+  readonly allowedCssIps?: readonly string[];
+  readonly verbose?: boolean | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+  readonly logLevel?: LogLevel;
+  readonly logFile?: string;
+  readonly strictCss?: boolean;
 }
 
 export class PdfGenerator {
@@ -48,6 +55,12 @@ export class PdfGenerator {
       cpuRatio: config.cpuRatio ?? 0.5,
       maxWorkers: config.maxWorkers ?? null,
       idleTimeoutMs: config.idleTimeoutMs ?? 10_000,
+      allowedLocalIps: config.allowedLocalIps,
+      allowedCssIps: config.allowedCssIps,
+      verbose: config.verbose,
+      logLevel: config.logLevel,
+      logFile: config.logFile,
+      strictCss: config.strictCss,
     };
 
     if (this.config.useWorkerPool) {
@@ -88,6 +101,12 @@ export class PdfGenerator {
       css: options.css ?? this.config.css,
       header: options.header ?? this.config.header,
       footer: options.footer ?? this.config.footer,
+      allowedLocalIps: options.allowedLocalIps ?? this.config.allowedLocalIps,
+      allowedCssIps: options.allowedCssIps ?? this.config.allowedCssIps,
+      verbose: options.verbose ?? this.config.verbose,
+      logLevel: options.logLevel ?? this.config.logLevel,
+      logFile: options.logFile ?? this.config.logFile,
+      strictCss: options.strictCss ?? this.config.strictCss,
     };
 
     if (this.workerPool) {

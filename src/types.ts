@@ -34,6 +34,8 @@ export interface WorkerPoolStats {
   readonly maxWorkers: number;
 }
 
+export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'NONE';
+
 export interface PdfGeneratorConfig {
   readonly defaultFormat?: PaperFormat | (string & {});
   readonly defaultOrientation?: Orientation;
@@ -49,6 +51,18 @@ export interface PdfGeneratorConfig {
   readonly maxWorkers?: number;
   /** Auto-terminate idle workers after idleTimeoutMs (default 10000 ms) */
   readonly idleTimeoutMs?: number;
+  /** Allowed local/internal IPs, CIDR ranges, or hostnames for loading remote resources (SSRF allowlist) */
+  readonly allowedLocalIps?: readonly string[];
+  /** Allowed local/internal IPs specifically for CSS loading */
+  readonly allowedCssIps?: readonly string[];
+  /** Enable verbose mode with optional level override */
+  readonly verbose?: boolean | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+  /** Explicit log level (DEBUG, INFO, WARN, ERROR, NONE) */
+  readonly logLevel?: LogLevel;
+  /** Optional path to a log file where logs are appended */
+  readonly logFile?: string;
+  /** Whether CSS loading errors should throw instead of continuing with a WARN (default false) */
+  readonly strictCss?: boolean;
 }
 
 export interface PdfGenerateOptions {
@@ -58,6 +72,18 @@ export interface PdfGenerateOptions {
   readonly css?: string;
   readonly header?: string;
   readonly footer?: string;
+  /** Allowed local/internal IPs, CIDR ranges, or hostnames for loading remote resources (SSRF allowlist) */
+  readonly allowedLocalIps?: readonly string[];
+  /** Allowed local/internal IPs specifically for CSS loading */
+  readonly allowedCssIps?: readonly string[];
+  /** Enable verbose mode with optional level override */
+  readonly verbose?: boolean | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+  /** Explicit log level (DEBUG, INFO, WARN, ERROR, NONE) */
+  readonly logLevel?: LogLevel;
+  /** Optional path to a log file where logs are appended */
+  readonly logFile?: string;
+  /** Whether CSS loading errors should throw instead of continuing with a WARN (default false) */
+  readonly strictCss?: boolean;
 }
 
 // ─── Internal Interfaces ───

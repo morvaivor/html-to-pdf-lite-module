@@ -256,8 +256,31 @@ console.log(generator.getWorkerStats());
 | `cpuRatio` | `number` | `0.5` | Ratio maximal de cœurs CPU utilisés (0.5 = 50% CPU) |
 | `maxWorkers` | `number` | `null` | Nombre d'unités d'exécution secondaires explicites |
 | `idleTimeoutMs` | `number` | `10000` | Délai avant auto-extinction des workers inactifs (ms) |
+| `allowedLocalIps` | `readonly string[]` | `undefined` | Liste d'adresses IP / plages CIDR locales autorisées (ex: `['192.168.1.50', '10.0.0.0/24']`) |
+| `allowedCssIps` | `readonly string[]` | `undefined` | Adresses IP locales autorisées spécifiquement pour le chargement du CSS |
+| `verbose` | `boolean \| LogLevel` | `false` | Active le mode verbose (`true` = DEBUG, ou niveau spécifique) |
+| `logLevel` | `'ERROR' \| 'WARN' \| 'INFO' \| 'DEBUG' \| 'NONE'` | `'NONE'` | Niveau explicite de journalisation |
+| `logFile` | `string` | `undefined` | Chemin du fichier où écrire les logs en plus de la sortie console |
+| `strictCss` | `boolean` | `false` | Si `true`, lève une erreur sur échec CSS au lieu d'avertir et continuer |
 
 ---
+
+### 📝 Mode Verbose & Niveaux de Log Natifs
+
+Le moteur intègre un système de logging **100% natif Node.js** (sans dépendance externe), avec colorisation ANSI et écriture simultanée optionnelle dans un fichier :
+
+```typescript
+const generator = createPdfGenerator({
+  verbose: true, // ou 'INFO', 'WARN', 'ERROR', 'DEBUG'
+  logFile: './logs/generation.log', // Fichier de log optionnel (texte brut sans codes ANSI)
+});
+```
+
+#### Niveaux de Log & Couleurs Terminal :
+- **`ERROR` (Rouge)** : Échec critique de construction du PDF (`Echec de construction du pdf : ...`).
+- **`WARN` (Orange)** : Erreur de chargement d'une feuille de style CSS (`Erreur de chargement du CSS depuis ...`).
+- **`INFO` (Vert)** : Notification de début et de fin de tâche avec durée d'exécution.
+- **`DEBUG` (Bleu)** : Origine du CSS chargé (`<style>`, `<link>`, URL, `@import`), taille du HTML et temps de production.
 
 ## 🎨 Fonctionnalités HTML & CSS Supportées
 
@@ -267,7 +290,8 @@ console.log(generator.getWorkerStats());
 | **Styles Inline** | `color`, `font-size`, `font-weight`, `font-style`, `font-family`, `text-align`, `border`, `padding`, `background-color` | ✅ |
 | **CSS Avancé** | `line-height`, `letter-spacing`, `text-decoration` (`underline`/`line-through`), `margin`/`margin-*`, `text-transform`, `border-radius` | ✅ |
 | **Layout Flex & Grid** | `display: flex` / `display: grid`, `grid-template-columns` (`fr`), `gap`, `flex-direction` | ✅ |
-| **CSS Externe & Sélecteurs** | Balise (`p`), Classe (`.box`), ID (`#header`), Combinés (`div.active`) | ✅ |
+| **CSS Externe & Sélecteurs** | Balise (`p`), Classe (`.box`), ID (`#header`), Combinés (`div.active`), `<link rel="stylesheet">`, `@import` | ✅ |
+| **Allowlist IP Locales (SSRF)** | Chargement sécurisé de CSS depuis des IP locales planifiées (`allowedLocalIps: ['192.168.1.50']`) | ✅ |
 | **Polices `@font-face`** | TTF/OTF via URL HTTP(s) ou Data URI `base64` (variantes bold/italic) | ✅ |
 | **Zones de page `@page`** | 6 zones (`@top-left` à `@bottom-right`), `counter(page)`, `counter(num-pages)` | ✅ |
 | **Tableaux Avancés** | `<table>`, `<thead>`, `<tbody>`, `colspan`, `rowspan`, bordures, tableaux imbriqués (5 niveaux) | ✅ |

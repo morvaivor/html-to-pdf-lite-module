@@ -11,6 +11,7 @@ export async function registerFontFaces(
   css: string | undefined,
   fontBufferCache: Map<string, Buffer>,
   fontAliasSet: Set<string>,
+  allowedLocalIps?: readonly string[],
 ): Promise<void> {
   const faces: FontFace[] = parseFontFaces(css ?? '');
   fontAliasSet.clear();
@@ -26,7 +27,7 @@ export async function registerFontFaces(
       fontBufferCache.set(face.url, decodeDataUri(face.url));
     } else {
       try {
-        const buffer = await fetchRemoteResource(face.url);
+        const buffer = await fetchRemoteResource(face.url, allowedLocalIps);
         fontBufferCache.set(face.url, buffer);
       } catch (err) {
         throw new Error(`Failed to load font from ${face.url}: ${(err as Error).message}`);
