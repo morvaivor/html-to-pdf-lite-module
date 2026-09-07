@@ -34,6 +34,48 @@ const EXAMPLES = {
     htmlFile: 'templates/5-certificate-landscape.html',
     pdfFile: 'pdfs/5-certificate-landscape.pdf',
     description: 'Certificat honorifique officiel au format paysage avec cadre double et sceau vectoriel officiel.'
+  },
+  'example-6': {
+    title: '6. CV Professionnel & Profil Tech Architecte',
+    badge: 'A4 Portrait • Structure Bi-colonne • Badges & Timeline',
+    htmlFile: 'templates/6-tech-resume.html',
+    pdfFile: 'pdfs/6-tech-resume.pdf',
+    description: 'Curriculum Vitae pour profil senior avec mise en page bi-colonne, badges de compétences techniques, certifications et historique d\'expériences.'
+  },
+  'example-7': {
+    title: '7. Bilan Médical & Analyses Biologiques',
+    badge: 'A4 Portrait • Codes-Barres SVG • Badges d\'Alerte',
+    htmlFile: 'templates/7-medical-report.html',
+    pdfFile: 'pdfs/7-medical-report.pdf',
+    description: 'Compte-rendu médical d\'analyses sanguines accrédité ISO 15189 avec tableaux denses, pastilles de conformité (Normal/Élevé) et signature électronique certifiée.'
+  },
+  'example-8': {
+    title: '8. Menu Gastronomique & Carte des Vins',
+    badge: 'A4 Portrait • Typographie Serif • Arabesques & Prix',
+    htmlFile: 'templates/8-restaurant-menu.html',
+    pdfFile: 'pdfs/8-restaurant-menu.pdf',
+    description: 'Carte de restaurant étoilé Michelin avec typographie soignée à empattements, sections culinaires, badges allergènes/végétarien et accords mets-vins.'
+  },
+  'example-9': {
+    title: '9. Accord Bilatéral de Confidentialité (NDA)',
+    badge: 'A4 Portrait • Droit des Affaires • Clauses & Signatures',
+    htmlFile: 'templates/9-legal-contract.html',
+    pdfFile: 'pdfs/9-legal-contract.pdf',
+    description: 'Contrat juridique d\'accord de confidentialité B2B avec clauses contractuelles, définitions techniques, clauses pénales et bloc d\'émargement double.'
+  },
+  'example-10': {
+    title: '10. Billet VIP & Pass Conférence Mondiale',
+    badge: 'A4 Portrait • Souche Détachable • Code-Barres & QR Code SVG',
+    htmlFile: 'templates/10-event-ticket.html',
+    pdfFile: 'pdfs/10-event-ticket.pdf',
+    description: 'Pass événementiel et carte d\'embarquement VIP avec souche de contrôle détachable, découpe en pointillés, QR code vectoriel et code-barres haute définition.'
+  },
+  'example-11': {
+    title: '11. Grand Livre Comptable Volumineux (Stress-Test)',
+    badge: 'A4 Portrait • 500+ Écritures • Multi-pages Denses • Performance',
+    htmlFile: 'templates/11-heavy-financial-ledger.html',
+    pdfFile: 'pdfs/11-heavy-financial-ledger.pdf',
+    description: 'Rapport financier d\'audit général avec plus de 500 écritures comptables réparties sur 12 mois, sous-totaux dynamiques, reports de soldes et pagination continue massive.'
   }
 };
 

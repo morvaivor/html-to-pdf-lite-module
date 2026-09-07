@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Menu Gastronomique & Carte des Vins - L'Apogée</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 18px 24px;
+      @top-center {
+        content: "L'APOGÉE GASTRONOMIQUE • PARIS";
+        font-size: 8px;
+        color: #78716c;
+        font-family: Times-Roman, serif;
+        letter-spacing: 2px;
+      }
+      @bottom-center {
+        content: "Page " counter(page) " sur " counter(num-pages);
+        font-size: 8px;
+        color: #78716c;
+        font-family: Helvetica;
+      }
+    }
+
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      color: #1c1917;
+      margin: 0;
+      padding: 0 10px;
+      line-height: 1.35;
+      background-color: #fdfbf7;
+    }
+
+    /* En-tête restaurant */
+    .restaurant-header {
+      text-align: center;
+      padding-top: 6px;
+      padding-bottom: 8px;
+      border-bottom: 1.5px solid #d97706;
+      margin-bottom: 12px;
+    }
+
+    .stars-badge {
+      font-size: 14px;
+      color: #d97706;
+      letter-spacing: 4px;
+      margin-bottom: 2px;
+    }
+
+    h1.restaurant-name {
+      font-size: 22px;
+      font-weight: bold;
+      color: #1c1917;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin: 2px 0;
+    }
+
+    .chef-name {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 9px;
+      color: #78716c;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+
+    .menu-title-badge {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 8.5px;
+      background-color: #fef3c7;
+      color: #92400e;
+      font-weight: bold;
+      padding: 3px 10px;
+      display: inline-block;
+      margin-top: 6px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border: 1px solid #fde68a;
+    }
+
+    /* Section titres */
+    h2.course-category {
+      font-size: 12px;
+      font-weight: bold;
+      color: #b45309;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      text-align: center;
+      margin-top: 10px;
+      margin-bottom: 6px;
+      border-bottom: 1px solid #d97706;
+      padding-bottom: 3px;
+    }
+
+    /* Ligne de plat avec prix */
+    table.dish-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+      border: 1px solid #e7e5e4;
+      background-color: #ffffff;
+    }
+
+    table.dish-table td {
+      vertical-align: top;
+      padding: 6px 8px;
+      border: 1px solid #f5f5f4;
+    }
+
+    .dish-name {
+      font-size: 10.5px;
+      font-weight: bold;
+      color: #1c1917;
+    }
+
+    .dish-tag {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 7.5px;
+      padding: 1.5px 4px;
+      margin-left: 4px;
+      display: inline-block;
+      vertical-align: middle;
+      border: 1px solid #cbd5e1;
+    }
+
+    .tag-sig {
+      background-color: #fef3c7;
+      color: #92400e;
+      font-weight: bold;
+      border-color: #fde68a;
+    }
+
+    .tag-veg {
+      background-color: #dcfce7;
+      color: #166534;
+      font-weight: bold;
+      border-color: #bbf7d0;
+    }
+
+    .dish-desc {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 8.5px;
+      color: #57534e;
+      font-style: italic;
+      margin-top: 2px;
+    }
+
+    .dish-price {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 10px;
+      font-weight: bold;
+      color: #1c1917;
+      text-align: right;
+      width: 50px;
+      white-space: nowrap;
+    }
+
+    /* Cadre accord mets & vins */
+    .wine-box {
+      background-color: #f5f5f4;
+      border: 1px solid #d6d3d1;
+      padding: 8px 12px;
+      margin-top: 10px;
+      margin-bottom: 8px;
+    }
+
+    h3.wine-title {
+      font-size: 11px;
+      font-weight: bold;
+      color: #7f1d1d;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 0 0 6px 0;
+    }
+
+    .footer-notes {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 7.5px;
+      color: #78716c;
+      text-align: center;
+      margin-top: 10px;
+      border-top: 1px solid #e7e5e4;
+      padding-top: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="restaurant-header">
+    <div class="stars-badge">★ ★ ★</div>
+    <h1 class="restaurant-name">Restaurant L'Apogée</h1>
+    <div class="chef-name">Chef Exécutif : Julien Maréchal • Chef Sommelier : Éric de Montmirail</div>
+    <div>
+      <span class="menu-title-badge">Menu Dégustation d'Automne & Carte des Saisons</span>
+    </div>
+  </div>
+
+  <!-- Entrées -->
+  <h2 class="course-category">Amuse-Bouches & Entrées d'Initiation</h2>
+
+  <table class="dish-table">
+    <tr>
+      <td>
+        <div class="dish-name">Velouté d'artichauts épineux de Bretagne <span class="dish-tag tag-veg">🌱 Végétarien</span></div>
+        <div class="dish-desc">Émulsion mousseuse de truffe noire Melanosporum, copeaux de parmesan affiné 36 mois et croustillant de noisettes du Piémont.</div>
+      </td>
+      <td class="dish-price">34 €</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="dish-name">Carpaccio de noix de Saint-Jacques de la Baie de Seine <span class="dish-tag tag-sig">⭐ Signature</span></div>
+        <div class="dish-desc">Caviar osciètre impérial d'Aquitaine, perles de yuzu fumé au bois de hêtre et émulsion d'eau de mer iodée.</div>
+      </td>
+      <td class="dish-price">42 €</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="dish-name">Foie gras de canard fermier du Sud-Ouest mi-cuit</div>
+        <div class="dish-desc">Marbré au poivre sauvage Voatsiperifery de Madagascar, chutney de figues de Solliès au porto et brioche tiède feuilletée.</div>
+      </td>
+      <td class="dish-price">38 €</td>
+    </tr>
+  </table>
+
+  <!-- Plats Principaux -->
+  <h2 class="course-category">Plats de Haute Mer & Terroir d'Exception</h2>
+
+  <table class="dish-table">
+    <tr>
+      <td>
+        <div class="dish-name">Pavé de turbot sauvage de ligne rôti au sautoir <span class="dish-tag tag-sig">⭐ Signature</span></div>
+        <div class="dish-desc">Mousseline soyeuse de céleri-rave vanillée, jeunes poireaux crayons braisés et jus de coquillages perlé à l'aneth frais.</div>
+      </td>
+      <td class="dish-price">68 €</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="dish-name">Filet de bœuf Black Angus d'Aubrac affiné 45 jours façon Rossini</div>
+        <div class="dish-desc">Escalope de foie gras poêlée au sel de Guérande, pressé de pommes de terre mitraille à la moelle et réduction corsée de Saint-Émilion.</div>
+      </td>
+      <td class="dish-price">74 €</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="dish-name">Risotto de petit épeautre de Haute-Provence aux morilles fraîches <span class="dish-tag tag-veg">🌱 Végétarien</span></div>
+        <div class="dish-desc">Émulsion d'herbes sauvages du potager, parmesan blanc coulant et éclats de châtaignes d'Ardèche rôties.</div>
+      </td>
+      <td class="dish-price">48 €</td>
+    </tr>
+  </table>
+
+  <!-- Fromages & Desserts -->
+  <h2 class="course-category">Sélection Affinée & Créations Sucrées</h2>
+
+  <table class="dish-table">
+    <tr>
+      <td>
+        <div class="dish-name">Chariot de nos maîtres affineurs régionaux AOP</div>
+        <div class="dish-desc">Comté millésimé réserve 42 mois, Saint-Marcellin coulant de la Mère Richard, Sainte-Maure de Touraine et confit de cerises noires.</div>
+      </td>
+      <td class="dish-price">24 €</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="dish-name">Sphère craquante au chocolat grand cru Guanaja 70% <span class="dish-tag tag-sig">⭐ Signature</span></div>
+        <div class="dish-desc">Cœur coulant au caramel beurre salé de Noirmoutier, crumble sablé cacao fleur de sel et crème glacée onctueuse à la fève tonka.</div>
+      </td>
+      <td class="dish-price">22 €</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="dish-name">Sablé croustillant aux figues de Solliès rôties au miel de lavande</div>
+        <div class="dish-desc">Crème légère infusée aux boutons de rose ancienne et sorbet verveine-citron du jardin d'herbes aromatiques.</div>
+      </td>
+      <td class="dish-price">20 €</td>
+    </tr>
+  </table>
+
+  <!-- Accords Mets & Vins -->
+  <div class="wine-box">
+    <h3 class="wine-title">Harmonie des Vins & Sélection du Chef Sommelier</h3>
+    <table style="width: 100%; border: 1px solid #cbd5e1; background-color: #ffffff;">
+      <tr>
+        <td style="font-size: 8.5px; font-family: Helvetica, sans-serif; width: 75%; padding: 6px; border: 1px solid #e2e8f0;">
+          <b>Accord Terroirs & Découverte (4 verres de dégustation) :</b><br>
+          Chablis 1er Cru Montée de Tonnerre 2022 • Côte-Rôtie Domaine Jamet 2019 • Sauternes Château Suduiraut 2016
+        </td>
+        <td style="text-align: right; font-size: 9.5px; font-weight: bold; font-family: Helvetica, sans-serif; padding: 6px; border: 1px solid #e2e8f0;">
+          65 €
+        </td>
+      </tr>
+      <tr>
+        <td style="font-size: 8.5px; font-family: Helvetica, sans-serif; padding: 6px; border: 1px solid #e2e8f0;">
+          <b>Accord Prestige Grands Crus Mythiques (5 verres d'anthologie) :</b><br>
+          Meursault Domaine des Comtes Lafon 2020 • Pauillac Château Pontet-Canet 2015 • Tokaji Aszú 6 Puttonyos 2013
+        </td>
+        <td style="text-align: right; font-size: 9.5px; font-weight: bold; font-family: Helvetica, sans-serif; padding: 6px; border: 1px solid #e2e8f0;">
+          125 €
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="footer-notes">
+    Prix nets toutes taxes comprises et service inclus (15%) • Toutes nos viandes bovines sont nées, élevées et abattues en France.<br>
+    La liste détaillée des 14 substances provoquant des allergies ou intolérances est disponible sur simple demande auprès de notre personnel de salle.
+  </div>
+
+</body>
+</html>

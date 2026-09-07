@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Compte Rendu d'Analyses Médicales - Laboratoire BioSanté</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 18px 22px;
+      @top-left {
+        content: "LABORATOIRE D'ANALYSES MÉDICALES BIOSANTÉ • ACCRÉDITATION ISO 15189";
+        font-size: 7.5px;
+        color: #64748b;
+        font-family: Helvetica;
+      }
+      @top-right {
+        content: "DOSSIER CONFIDENTIEL MÉDICAL";
+        font-size: 7.5px;
+        color: #dc2626;
+        font-weight: bold;
+        font-family: Helvetica;
+      }
+      @bottom-left {
+        content: "Dossier N° 2026-BIO-0982 • M. Alexandre DUPONT";
+        font-size: 8px;
+        color: #94a3b8;
+        font-family: Helvetica;
+      }
+      @bottom-center {
+        content: "Page " counter(page) " sur " counter(num-pages);
+        font-size: 8px;
+        color: #64748b;
+        font-family: Helvetica;
+      }
+      @bottom-right {
+        content: "Validation par Dr. P. Besson";
+        font-size: 8px;
+        color: #64748b;
+        font-family: Helvetica;
+      }
+    }
+
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      margin: 0;
+      padding: 5px;
+      line-height: 1.35;
+      font-size: 9.5px;
+    }
+
+    /* En-tête laboratoire */
+    table.lab-header {
+      width: 100%;
+      border-collapse: collapse;
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+
+    table.lab-header td {
+      vertical-align: middle;
+      padding: 0;
+    }
+
+    .lab-name {
+      font-size: 16px;
+      font-weight: bold;
+      color: #0369a1;
+      letter-spacing: -0.3px;
+    }
+
+    .lab-sub {
+      font-size: 8px;
+      color: #64748b;
+      margin-top: 1px;
+    }
+
+    /* Fiche Patient & Prescripteur */
+    table.patient-card {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #cbd5e1;
+      background-color: #f8fafc;
+      margin-bottom: 14px;
+    }
+
+    table.patient-card td {
+      padding: 6px 10px;
+      vertical-align: top;
+      font-size: 9px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .card-title {
+      font-size: 9px;
+      font-weight: bold;
+      color: #0369a1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    /* Tableaux d'analyses */
+    .section-banner {
+      background-color: #0284c7;
+      color: #ffffff;
+      font-size: 9.5px;
+      font-weight: bold;
+      padding: 4px 8px;
+      margin-top: 10px;
+      margin-bottom: 0;
+      letter-spacing: 0.5px;
+    }
+
+    table.analysis-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #cbd5e1;
+      margin-bottom: 10px;
+    }
+
+    table.analysis-table th {
+      background-color: #f1f5f9;
+      color: #334155;
+      font-size: 8.5px;
+      font-weight: bold;
+      padding: 5px 8px;
+      border: 1px solid #cbd5e1;
+      text-align: left;
+    }
+
+    table.analysis-table td {
+      padding: 4.5px 8px;
+      font-size: 8.5px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .badge-normal {
+      background-color: #dcfce7;
+      color: #166534;
+      font-weight: bold;
+      padding: 2px 5px;
+      font-size: 7.5px;
+      display: inline-block;
+    }
+
+    .badge-high {
+      background-color: #fee2e2;
+      color: #991b1b;
+      font-weight: bold;
+      padding: 2px 5px;
+      font-size: 7.5px;
+      display: inline-block;
+    }
+
+    .badge-low {
+      background-color: #e0f2fe;
+      color: #075985;
+      font-weight: bold;
+      padding: 2px 5px;
+      font-size: 7.5px;
+      display: inline-block;
+    }
+
+    .val-alert {
+      color: #dc2626;
+      font-weight: bold;
+    }
+
+    /* Cadre conclusion médicale */
+    .conclusion-box {
+      border: 1.5px solid #0284c7;
+      background-color: #f0f9ff;
+      padding: 8px 12px;
+      margin-top: 10px;
+      margin-bottom: 12px;
+    }
+
+    .conclusion-title {
+      font-size: 9.5px;
+      font-weight: bold;
+      color: #0369a1;
+      margin-bottom: 3px;
+    }
+
+    /* Bloc de signature */
+    table.sign-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    table.sign-table td {
+      vertical-align: top;
+      padding: 0;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- En-tête laboratoire -->
+  <table class="lab-header">
+    <tr>
+      <td style="width: 50px;">
+        <!-- Logo médical vectoriel SVG (Croix verte/cyan de laboratoire) -->
+        <svg width="42" height="42" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="46" fill="#0284c7" />
+          <rect x="42" y="22" width="16" height="56" rx="4" fill="#ffffff" />
+          <rect x="22" y="42" width="56" height="16" rx="4" fill="#ffffff" />
+          <circle cx="50" cy="50" r="8" fill="#38bdf8" />
+        </svg>
+      </td>
+      <td style="padding-left: 10px;">
+        <div class="lab-name">LABORATOIRE D'ANALYSES MÉDICALES BIOSANTÉ</div>
+        <div class="lab-sub">Réseau Hospitalier Universitaire • 14 Avenue des Sciences Médicales, 75013 Paris</div>
+        <div class="lab-sub">Agrément ARS N° 75-92014 • Accréditation Cofrac Section Santé N° 8-3921 (Portée disponible sur www.cofrac.fr)</div>
+      </td>
+      <td style="text-align: right; width: 140px;">
+        <!-- Code-barres échantillon SVG -->
+        <svg width="130" height="32" viewBox="0 0 130 32">
+          <rect x="0" y="0" width="130" height="32" fill="#f8fafc" />
+          <rect x="8" y="4" width="3" height="20" fill="#0f172a" />
+          <rect x="14" y="4" width="1.5" height="20" fill="#0f172a" />
+          <rect x="18" y="4" width="4" height="20" fill="#0f172a" />
+          <rect x="25" y="4" width="2" height="20" fill="#0f172a" />
+          <rect x="30" y="4" width="3" height="20" fill="#0f172a" />
+          <rect x="36" y="4" width="1.5" height="20" fill="#0f172a" />
+          <rect x="40" y="4" width="5" height="20" fill="#0f172a" />
+          <rect x="48" y="4" width="2" height="20" fill="#0f172a" />
+          <rect x="53" y="4" width="3" height="20" fill="#0f172a" />
+          <rect x="59" y="4" width="4" height="20" fill="#0f172a" />
+          <rect x="66" y="4" width="1.5" height="20" fill="#0f172a" />
+          <rect x="70" y="4" width="3" height="20" fill="#0f172a" />
+          <rect x="76" y="4" width="2" height="20" fill="#0f172a" />
+          <rect x="81" y="4" width="4" height="20" fill="#0f172a" />
+          <rect x="88" y="4" width="1.5" height="20" fill="#0f172a" />
+          <rect x="92" y="4" width="3" height="20" fill="#0f172a" />
+          <rect x="98" y="4" width="5" height="20" fill="#0f172a" />
+          <rect x="106" y="4" width="2" height="20" fill="#0f172a" />
+          <rect x="111" y="4" width="3" height="20" fill="#0f172a" />
+          <rect x="117" y="4" width="2" height="20" fill="#0f172a" />
+          <text x="65" y="29" font-family="Helvetica" font-size="6.5" fill="#475569" text-anchor="middle">ECH-2026-BIO-994</text>
+        </svg>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Fiche Patient et Prescripteur -->
+  <table class="patient-card">
+    <tr>
+      <td style="width: 50%;">
+        <div class="card-title">Patient</div>
+        <div><b>Nom, Prénom :</b> DUPONT Alexandre</div>
+        <div><b>Né(e) le :</b> 14/08/1982 (44 ans) &nbsp;|&nbsp; <b>Sexe :</b> M</div>
+        <div><b>N° Identifiant National :</b> 1 82 08 75 042 118</div>
+        <div><b>Adresse :</b> 28 Rue de la Glacière, 75013 Paris</div>
+      </td>
+      <td style="width: 50%;">
+        <div class="card-title">Prescription & Prélèvement</div>
+        <div><b>Médecin prescripteur :</b> Dr. Hélène MOREL (CHU Paris)</div>
+        <div><b>Prélèvement réalisé le :</b> 07/09/2026 à 07h45</div>
+        <div><b>Échantillon reçu au labo :</b> 07/09/2026 à 08h30</div>
+        <div><b>Date d'édition du compte-rendu :</b> 07/09/2026 à 11h15</div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Section 1 : Hématologie -->
+  <div class="section-banner">1. HÉMATOLOGIE — NUMÉRATION FORMULE SANGUINE (NFS AUTOMATISÉE)</div>
+  <table class="analysis-table">
+    <thead>
+      <tr>
+        <th style="width: 32%;">Examen Biologique</th>
+        <th style="width: 18%;">Résultat</th>
+        <th style="width: 15%;">Unité</th>
+        <th style="width: 20%;">Valeurs de Référence</th>
+        <th style="width: 15%; text-align: center;">Statut</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Leucocytes (Globules blancs)</b></td>
+        <td>6,80</td>
+        <td>G/L</td>
+        <td>4,00 — 10,00</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+      <tr>
+        <td><b>Hématies (Globules rouges)</b></td>
+        <td>4,95</td>
+        <td>T/L</td>
+        <td>4,50 — 5,80</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+      <tr>
+        <td><b>Hémoglobine</b></td>
+        <td>15,2</td>
+        <td>g/dL</td>
+        <td>13,0 — 17,5</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+      <tr>
+        <td><b>Hématocrite</b></td>
+        <td>45,1</td>
+        <td>%</td>
+        <td>40,0 — 52,0</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+      <tr>
+        <td><b>VGM (Volume Globulaire Moyen)</b></td>
+        <td>91,1</td>
+        <td>fL</td>
+        <td>80,0 — 98,0</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+      <tr>
+        <td><b>Plaquettes sanguines</b></td>
+        <td>245</td>
+        <td>G/L</td>
+        <td>150 — 400</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Section 2 : Biochimie Clinique -->
+  <div class="section-banner">2. BIOCHIMIE CLINIQUE & ÉVALUATION RÉNALE</div>
+  <table class="analysis-table">
+    <thead>
+      <tr>
+        <th style="width: 32%;">Examen Biologique</th>
+        <th style="width: 18%;">Résultat</th>
+        <th style="width: 15%;">Unité</th>
+        <th style="width: 20%;">Valeurs de Référence</th>
+        <th style="width: 15%; text-align: center;">Statut</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Glycémie à jeun (Fluorure)</b></td>
+        <td class="val-alert">1,18 *</td>
+        <td>g/L</td>
+        <td>0,74 — 1,06</td>
+        <td style="text-align: center;"><span class="badge-high">ÉLEVÉ</span></td>
+      </tr>
+      <tr>
+        <td><b>Créatinine sérique (Jaffé IDMS)</b></td>
+        <td>9,2</td>
+        <td>mg/L</td>
+        <td>7,0 — 12,0</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+      <tr>
+        <td><b>DFG estimé (Formule CKD-EPI)</b></td>
+        <td>98</td>
+        <td>mL/min/1.73m²</td>
+        <td>&gt; 60</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+      <tr>
+        <td><b>Urée plasmatique</b></td>
+        <td>0,38</td>
+        <td>g/L</td>
+        <td>0,15 — 0,45</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Section 3 : Bilan Lipidique -->
+  <div class="section-banner">3. EXPLORATION D'UNE ANOMALIE LIPIDIQUE (EAL)</div>
+  <table class="analysis-table">
+    <thead>
+      <tr>
+        <th style="width: 32%;">Paramètre Lipidique</th>
+        <th style="width: 18%;">Résultat</th>
+        <th style="width: 15%;">Unité</th>
+        <th style="width: 20%;">Valeurs Cibles</th>
+        <th style="width: 15%; text-align: center;">Statut</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Cholestérol Total</b></td>
+        <td class="val-alert">2,38 *</td>
+        <td>g/L</td>
+        <td>1,50 — 2,00</td>
+        <td style="text-align: center;"><span class="badge-high">ÉLEVÉ</span></td>
+      </tr>
+      <tr>
+        <td><b>Triglycérides</b></td>
+        <td>1,35</td>
+        <td>g/L</td>
+        <td>0,45 — 1,50</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+      <tr>
+        <td><b>Cholestérol HDL (Protecteur)</b></td>
+        <td>0,56</td>
+        <td>g/L</td>
+        <td>&gt; 0,40</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+      <tr>
+        <td><b>Cholestérol LDL calculé (Friedewald)</b></td>
+        <td class="val-alert">1,55 *</td>
+        <td>g/L</td>
+        <td>&lt; 1,15</td>
+        <td style="text-align: center;"><span class="badge-high">ÉLEVÉ</span></td>
+      </tr>
+      <tr>
+        <td><b>Rapport Cholestérol Total / HDL</b></td>
+        <td>4,25</td>
+        <td>indice</td>
+        <td>&lt; 5,00</td>
+        <td style="text-align: center;"><span class="badge-normal">NORMAL</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Remarques Cliniques & Conclusion -->
+  <div class="conclusion-box">
+    <div class="conclusion-title">Commentaires & Interprétation du Biologiste Médical</div>
+    <div>
+      Légère hyperglycémie modérée à jeun (1,18 g/L) associée à une dyslipidémie mixte avec élévation modérée du LDL-Cholestérol à 1,55 g/L. Fonction rénale parfaitement préservée (DFG CKD-EPI à 98 mL/min). Formule sanguine et lignées médullaires sans anomalie décelable. Contrôle glycémique avec dosage de l'Hémoglobine glyquée (HbA1c) préconisé dans 3 mois.
+    </div>
+  </div>
+
+  <!-- Signatures et validation -->
+  <table class="sign-table">
+    <tr>
+      <td style="width: 60%; font-size: 8px; color: #64748b;">
+        <div><b>Validité Légale :</b> Document signé électroniquement au format eIDAS.</div>
+        <div>Conformément aux normes d'accréditation NF EN ISO 15189 et au Code de la Santé Publique.</div>
+        <div>Les résultats hors normes de référence sont signalés par un astérisque (*).</div>
+      </td>
+      <td style="width: 40%; text-align: right;">
+        <div style="font-size: 8.5px; font-weight: bold; color: #0369a1;">Dr. Philippe BESSON</div>
+        <div style="font-size: 7.5px; color: #64748b;">Pharmacien-Biologiste Médical Diplômé</div>
+        <div style="font-size: 7.5px; color: #16a34a; font-weight: bold; margin-top: 3px;">✔ Signature Électronique Certifiée</div>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
