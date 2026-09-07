@@ -75,7 +75,7 @@ We use **Release Please** (`googleapis/release-please-action`):
 
 1. **Configuration**: Managed via `release-please-config.json` and `.release-please-manifest.json`.
 2. **Release PR**: On commits to `main` (or when triggered manually / monthly), Release Please maintains a draft **Release PR**.
-3. **Changelog**: The Release PR automatically compiles commit logs into [CHANGELOG.md](file:///d:/Code/html-to-pdf-lite-module/CHANGELOG.md) formatted by section (`Features`, `Bug Fixes`, `Performance Improvements`, etc.).
+3. **Changelog**: The Release PR automatically compiles commit logs into [CHANGELOG.md](CHANGELOG.md) formatted by section (`Features`, `Bug Fixes`, `Performance Improvements`, etc.).
 4. **Publishing a Release**: Merging the Release PR automatically creates the git tag (e.g. `v2.1.0`), creates a GitHub Release, and updates package versions.
 
 ### Triggering a Release Manually

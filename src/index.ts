@@ -1,6 +1,8 @@
 export { PdfGenerator, createPdfGenerator, default } from './pdfGenerator.js';
 export { verifyRenderingQuality, type QualityAuditResult, type QualityCheckOptions } from './qualityAuditor.js';
+export { Logger, createLogger, type LoggerOptions } from './core/logger.js';
 export type {
+  LogLevel,
   MarginOptions,
   RequiredMargin,
   WorkerPoolStats,

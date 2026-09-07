@@ -5,14 +5,18 @@ import type { PageLayout } from '../core/PageLayout.js';
 import type { TextMeasureCache } from '../core/cacheManager.js';
 import type { Element } from 'domhandler';
 
-export async function loadImage(src: string, imageCache: Map<string, Buffer>): Promise<Buffer | undefined> {
+export async function loadImage(
+  src: string,
+  imageCache: Map<string, Buffer>,
+  allowedLocalIps?: readonly string[],
+): Promise<Buffer | undefined> {
   if (imageCache.has(src)) return imageCache.get(src);
 
   let buffer: Buffer | undefined;
   if (src.startsWith('data:')) {
     buffer = decodeDataUri(src);
   } else if (src.startsWith('http://') || src.startsWith('https://')) {
-    buffer = await fetchRemoteResource(src);
+    buffer = await fetchRemoteResource(src, allowedLocalIps);
   } else {
     buffer = readLocalFile(src);
   }
@@ -25,7 +29,7 @@ export function renderImage(
   doc: PDFKit.PDFDocument,
   element: Element,
   _parentStyle: TextStyle,
-  _options: RenderOptions,
+  options: RenderOptions,
   layout: PageLayout,
   _textCache: TextMeasureCache,
   _fontAliasSet: Set<string>,
@@ -39,7 +43,7 @@ export function renderImage(
 
   if (!src) return Promise.resolve();
 
-  return loadImage(src, imageCache).then((imgBuffer) => {
+  return loadImage(src, imageCache, options.allowedLocalIps).then((imgBuffer) => {
     if (!imgBuffer) return;
 
     const isSvg =
