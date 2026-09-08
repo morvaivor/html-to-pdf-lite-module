@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>CV Professionnel - Thomas Vance • Principal Cloud Architect</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 15px 20px;
+      @bottom-left {
+        content: "Thomas Vance • Curriculum Vitae";
+        font-size: 8px;
+        color: #94a3b8;
+        font-family: Helvetica;
+      }
+      @bottom-right {
+        content: "Page " counter(page) " sur " counter(num-pages);
+        font-size: 8px;
+        color: #94a3b8;
+        font-family: Helvetica;
+      }
+    }
+
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      margin: 0;
+      padding: 5px 10px;
+      line-height: 1.35;
+      font-size: 10px;
+    }
+
+    /* En-tête */
+    .header-box {
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    .name-title {
+      font-size: 22px;
+      font-weight: bold;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+      margin-bottom: 2px;
+    }
+
+    .job-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #0284c7;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 6px;
+    }
+
+    .contact-bar {
+      font-size: 9px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    .contact-item {
+      display: inline-block;
+      margin-right: 14px;
+    }
+
+    .contact-item b {
+      color: #334155;
+    }
+
+    /* Table de mise en page bi-colonne */
+    table.layout-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: none;
+    }
+
+    table.layout-table td {
+      vertical-align: top;
+      padding: 0;
+      border: none;
+    }
+
+    .col-sidebar {
+      width: 32%;
+      padding-right: 14px !important;
+    }
+
+    .col-main {
+      width: 68%;
+      padding-left: 14px !important;
+      border-left: 1px solid #e2e8f0 !important;
+    }
+
+    /* Titres de sections */
+    h2.section-title {
+      font-size: 11px;
+      font-weight: bold;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1.5px solid #0284c7;
+      padding-bottom: 3px;
+      margin-top: 10px;
+      margin-bottom: 8px;
+    }
+
+    /* Blocs expériences */
+    .exp-block {
+      margin-bottom: 11px;
+    }
+
+    .exp-header {
+      font-size: 10.5px;
+      font-weight: bold;
+      color: #0f172a;
+    }
+
+    .exp-company {
+      color: #0284c7;
+      font-weight: bold;
+    }
+
+    .exp-meta {
+      font-size: 8.5px;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+
+    .exp-desc {
+      font-size: 9.5px;
+      color: #334155;
+      margin-bottom: 4px;
+    }
+
+    ul.achievement-list {
+      margin: 2px 0 6px 14px;
+      padding: 0;
+      font-size: 9px;
+      color: #334155;
+    }
+
+    ul.achievement-list li {
+      margin-bottom: 2.5px;
+    }
+
+    /* Sidebar : Badges compétences */
+    .skill-badge {
+      display: inline-block;
+      background-color: #f1f5f9;
+      color: #0369a1;
+      font-size: 8px;
+      font-weight: bold;
+      padding: 2.5px 6px;
+      margin: 2px 2px 2px 0;
+      border: 1px solid #cbd5e1;
+    }
+
+    .skill-group-title {
+      font-size: 9px;
+      font-weight: bold;
+      color: #475569;
+      margin-top: 6px;
+      margin-bottom: 3px;
+    }
+
+    /* Certifications */
+    .cert-item {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 5px 8px;
+      margin-bottom: 5px;
+    }
+
+    .cert-name {
+      font-size: 9px;
+      font-weight: bold;
+      color: #0f172a;
+    }
+
+    .cert-issuer {
+      font-size: 8px;
+      color: #64748b;
+    }
+
+    /* Langues */
+    .lang-item {
+      font-size: 9px;
+      margin-bottom: 3px;
+      color: #334155;
+    }
+
+    .summary-text {
+      font-size: 9.5px;
+      color: #334155;
+      line-height: 1.45;
+      margin-bottom: 10px;
+      background-color: #f8fafc;
+      border-left: 3px solid #0284c7;
+      padding: 6px 10px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header Profil -->
+  <div class="header-box">
+    <div class="name-title">Thomas VANCE</div>
+    <div class="job-title">Principal Cloud Architect & Lead Systems Engineer</div>
+    <div class="contact-bar">
+      <span class="contact-item"><b>Email :</b> t.vance@tech-architects.io</span>
+      <span class="contact-item"><b>Tél :</b> +33 6 42 18 90 77</span>
+      <span class="contact-item"><b>Localisation :</b> Paris, France (Mobile monde)</span>
+      <span class="contact-item"><b>GitHub :</b> github.com/tvance-cloud</span>
+    </div>
+  </div>
+
+  <!-- Résumé professionnel -->
+  <div class="summary-text">
+    Architecte logiciel et d'infrastructure avec 14 années d'expertise dans la conception de plateformes distribuées haute disponibilité, la conteneurisation à grande échelle et la migration vers le cloud hybride. Spécialiste des systèmes à débit soutenu (&gt;250 000 req/s), de la résilience multi-régions et de l'optimisation des coûts FinOps d'infrastructure.
+  </div>
+
+  <!-- Contenu en 2 colonnes -->
+  <table class="layout-table">
+    <tr>
+      <!-- COLONNE GAUCHE (Compétences, Formation, Certifications) -->
+      <td class="col-sidebar">
+        <h2 class="section-title">Compétences Techniques</h2>
+
+        <div class="skill-group-title">Cloud & Infrastructure</div>
+        <div>
+          <span class="skill-badge">AWS</span>
+          <span class="skill-badge">Google Cloud</span>
+          <span class="skill-badge">Kubernetes</span>
+          <span class="skill-badge">Terraform</span>
+          <span class="skill-badge">Helm</span>
+          <span class="skill-badge">Docker</span>
+        </div>
+
+        <div class="skill-group-title">Langages & Runtimes</div>
+        <div>
+          <span class="skill-badge">TypeScript</span>
+          <span class="skill-badge">Node.js 22</span>
+          <span class="skill-badge">Go</span>
+          <span class="skill-badge">Rust</span>
+          <span class="skill-badge">Python</span>
+          <span class="skill-badge">SQL</span>
+        </div>
+
+        <div class="skill-group-title">Bases de Données & Streaming</div>
+        <div>
+          <span class="skill-badge">PostgreSQL</span>
+          <span class="skill-badge">Apache Kafka</span>
+          <span class="skill-badge">Redis</span>
+          <span class="skill-badge">ClickHouse</span>
+        </div>
+
+        <div class="skill-group-title">Architecture & Méthodes</div>
+        <div>
+          <span class="skill-badge">Microservices</span>
+          <span class="skill-badge">Event-Driven</span>
+          <span class="skill-badge">Zero Trust</span>
+          <span class="skill-badge">FinOps</span>
+          <span class="skill-badge">CI/CD GitOps</span>
+        </div>
+
+        <h2 class="section-title">Certifications</h2>
+        <div class="cert-item">
+          <div class="cert-name">AWS Certified Solutions Architect</div>
+          <div class="cert-issuer">Niveau Professional • Validité 2027</div>
+        </div>
+        <div class="cert-item">
+          <div class="cert-name">Certified Kubernetes Security Specialist (CKS)</div>
+          <div class="cert-issuer">Cloud Native Computing Foundation (CNCF)</div>
+        </div>
+        <div class="cert-item">
+          <div class="cert-name">HashiCorp Certified Terraform Associate</div>
+          <div class="cert-issuer">HashiCorp Infrastructure Automation</div>
+        </div>
+
+        <h2 class="section-title">Formation</h2>
+        <div class="cert-item">
+          <div class="cert-name">Master 2 Génie Logiciel & Systèmes Distribués</div>
+          <div class="cert-issuer">École Polytechnique Universitaire • Major de Promotion</div>
+        </div>
+
+        <h2 class="section-title">Langues</h2>
+        <div class="lang-item"><b>Français :</b> Langue maternelle</div>
+        <div class="lang-item"><b>Anglais :</b> Bilingue (C2 - TOEIC 990/990)</div>
+        <div class="lang-item"><b>Allemand :</b> Notions professionnelles (B1)</div>
+      </td>
+
+      <!-- COLONNE DROITE (Expériences professionnelles) -->
+      <td class="col-main">
+        <h2 class="section-title">Expérience Professionnelle</h2>
+
+        <div class="exp-block">
+          <div class="exp-header">Principal Cloud Architect • <span class="exp-company">AURA CLOUD SYSTEMS</span></div>
+          <div class="exp-meta">2021 — Présent | Paris & Télétravail | Équipe de 35 ingénieurs</div>
+          <div class="exp-desc">
+            Pilotage de la refonte globale de la plateforme de streaming financier temps réel traitant plus de 4 milliards d'événements quotidiens.
+          </div>
+          <ul class="achievement-list">
+            <li>Conception et déploiement d'un cluster Kubernetes multi-régions (EKS) avec basculement automatique en &lt;15 secondes.</li>
+            <li>Migration d'un monolithe hérité vers 45 microservices conteneurisés en Go et TypeScript, divisant la latence p99 par 3.</li>
+            <li>Implémentation d'une politique FinOps globale permettant une économie annuelle récurrente de 480 000 € sur la facture cloud.</li>
+            <li>Mise en place d'une chaîne CI/CD GitOps (ArgoCD) réduisant le délai de déploiement de 4 jours à 8 minutes.</li>
+          </ul>
+        </div>
+
+        <div class="exp-block">
+          <div class="exp-header">Lead DevOps & Staff Engineer • <span class="exp-company">PAYPULSE GLOBAL</span></div>
+          <div class="exp-meta">2017 — 2021 | Lyon, France | FinTech B2B</div>
+          <div class="exp-desc">
+            Direction technique de l'infrastructure de paiement certifiée PCI-DSS Niveau 1 opérant dans 18 pays européens.
+          </div>
+          <ul class="achievement-list">
+            <li>Architecture d'une solution haute résilience 99.995% SLA avec déploiement continu sans interruption de service.</li>
+            <li>Automatisation à 100% du provisionnement d'infrastructure via Terraform et modules réutilisables en entreprise.</li>
+            <li>Gestion de la conformité réglementaire de chiffrement des données de paiement au repos et en transit (mTLS, HSM).</li>
+          </ul>
+        </div>
+
+        <div class="exp-block">
+          <div class="exp-header">Ingénieur d'Études & Systèmes Distribués • <span class="exp-company">NEXUS DATA LABS</span></div>
+          <div class="exp-meta">2013 — 2017 | Paris, France</div>
+          <div class="exp-desc">
+            Développement de moteurs d'indexation distribuée et de traitement de données volumineuses (Big Data & ETL).
+          </div>
+          <ul class="achievement-list">
+            <li>Optimisation des performances de requêtage PostgreSQL et Redis sur des jeux de données de plus de 80 millions de lignes.</li>
+            <li>Conception de connecteurs de réplication de données asynchrones tolérants aux pannes réseau.</li>
+          </ul>
+        </div>
+
+        <h2 class="section-title">Conférences & Contributions Open Source</h2>
+        <div class="exp-desc">
+          Intervenant régulier à KubeCon Europe et Devoxx France sur les thèmes de la résilience cloud et du zéro-copy networking. Contributeur actif sur plusieurs outils CLI et bibliothèques d'automatisation cloud native.
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

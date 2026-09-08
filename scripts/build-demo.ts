@@ -53,6 +53,54 @@ const TEMPLATES: TemplateConfig[] = [
     orientation: 'landscape',
     margin: { top: 15, bottom: 15, left: 15, right: 15 },
   },
+  {
+    id: '6',
+    filename: '6-tech-resume.html',
+    pdfName: '6-tech-resume.pdf',
+    format: 'A4',
+    orientation: 'portrait',
+    margin: { top: 15, bottom: 15, left: 20, right: 20 },
+  },
+  {
+    id: '7',
+    filename: '7-medical-report.html',
+    pdfName: '7-medical-report.pdf',
+    format: 'A4',
+    orientation: 'portrait',
+    margin: { top: 18, bottom: 18, left: 22, right: 22 },
+  },
+  {
+    id: '8',
+    filename: '8-restaurant-menu.html',
+    pdfName: '8-restaurant-menu.pdf',
+    format: 'A4',
+    orientation: 'portrait',
+    margin: { top: 18, bottom: 18, left: 24, right: 24 },
+  },
+  {
+    id: '9',
+    filename: '9-legal-contract.html',
+    pdfName: '9-legal-contract.pdf',
+    format: 'A4',
+    orientation: 'portrait',
+    margin: { top: 22, bottom: 22, left: 25, right: 25 },
+  },
+  {
+    id: '10',
+    filename: '10-event-ticket.html',
+    pdfName: '10-event-ticket.pdf',
+    format: 'A4',
+    orientation: 'portrait',
+    margin: { top: 20, bottom: 20, left: 24, right: 24 },
+  },
+  {
+    id: '11',
+    filename: '11-heavy-financial-ledger.html',
+    pdfName: '11-heavy-financial-ledger.pdf',
+    format: 'A4',
+    orientation: 'portrait',
+    margin: { top: 18, bottom: 18, left: 20, right: 20 },
+  },
 ];
 
 async function buildDemo(): Promise<void> {
@@ -85,7 +133,7 @@ async function buildDemo(): Promise<void> {
   const generator = createPdfGenerator();
   const manifest: Array<{ id: string; pdf: string; size: number; durationMs: number }> = [];
 
-  console.log('🎨 Génération des 5 PDFs de démonstration :');
+  console.log(`🎨 Génération des ${TEMPLATES.length} PDFs de démonstration :`);
   for (const tpl of TEMPLATES) {
     const tplPath = join('demo/templates', tpl.filename);
     const htmlContent = readFileSync(tplPath, 'utf8');
@@ -123,7 +171,7 @@ async function buildDemo(): Promise<void> {
     });
 
     console.log(
-      `   ✔ [${tpl.id}/5] ${tpl.pdfName.padEnd(28)} ${(pdfBuffer.length / 1024).toFixed(1).padStart(5)} KB  (${duration.toFixed(1).padStart(4)} ms)  —  Fidélité : ${String(audit.score).padStart(3)}% (${audit.grade})`
+      `   ✔ [${tpl.id}/${TEMPLATES.length}] ${tpl.pdfName.padEnd(32)} ${(pdfBuffer.length / 1024).toFixed(1).padStart(6)} KB  (${duration.toFixed(1).padStart(5)} ms)  —  Fidélité : ${String(audit.score).padStart(3)}% (${audit.grade})`
     );
   }
 
