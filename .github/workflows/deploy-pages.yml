@@ -26,10 +26,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v7
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js 24
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: 'npm'
 
       - name: Install Dependencies
@@ -41,7 +41,7 @@ jobs:
       - name: Build Module
         run: npm run build
 
-      - name: Run Integration Tests Suite (45 tests)
+      - name: Run Integration Tests Suite
         run: npm test
 
       - name: Run Unit Tests & Coverage

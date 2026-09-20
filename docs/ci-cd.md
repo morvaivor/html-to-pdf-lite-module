@@ -11,17 +11,15 @@ The module uses GitHub Actions workflows to automate code validation, dependency
 ```mermaid
 flowchart TD
     PR[Pull Request] --> LintPR[PR Title Linting]
-    PR --> CI[CI Workflow: Typecheck, Lint, Test]
+    PR --> CI[CI Workflow: Matrix Node 22 & 24]
     
-    MainPush[Push to main] --> ReleasePlease[Release Please Action]
+    MainPush[Push to main] --> CI
     MainPush --> PagesDeploy[GitHub Pages Showcase]
     
     DependabotCron[Monthly Cron] --> DependabotPR[Dependabot Grouped PR]
-    ReleaseCron[Monthly Cron / Manual Dispatch] --> ReleasePlease
     
-    ReleasePlease --> ReleasePR[Automated Release PR]
-    ReleasePR -->|Merge| Tag[Git Tag & GitHub Release]
-    ReleasePR -->|Merge| Changelog[Update CHANGELOG.md]
+    ChangelogCmd[npm run changelog] --> Changelog[Update CHANGELOG.md]
+    TagCmd[git tag vX.Y.Z] --> GitHubRelease[GitHub Release & Publish]
 ```
 
 ---
@@ -30,10 +28,9 @@ flowchart TD
 
 | Workflow | File Path | Trigger | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Continuous Integration** | `.github/workflows/ci.yml` | `push` (main), `pull_request` | Runs TypeScript typecheck, oxlint, and unit/integration tests. |
+| **Continuous Integration** | `.github/workflows/ci.yml` | `push` (main), `pull_request` | Matrix test on Node 22 & 24: format check, typecheck, lint, build, integration tests & unit coverage. |
 | **PR Title Validator** | `.github/workflows/semantic-pr-title.yml` | `pull_request_target` | Validates PR title adheres to Conventional Commits. |
-| **Release & Changelog** | `.github/workflows/release.yml` | `workflow_dispatch` (manual) | On-demand Release Please workflow (automated triggers disabled in favor of `npm run changelog`). |
-| **GitHub Pages** | `.github/workflows/deploy-pages.yml` | `push` (main), `workflow_dispatch` | Builds and deploys demo showcase to GitHub Pages. |
+| **GitHub Pages** | `.github/workflows/deploy-pages.yml` | `push` (main), `workflow_dispatch` | Builds module, verifies tests, audits fidelity, and deploys demo showcase to GitHub Pages. |
 
 ---
 
@@ -114,9 +111,16 @@ npm run changelog:all
 
 ---
 
-## 📄 Automated Release Management (Optional)
+## 🏷️ Release & Publishing Workflow
 
-Automated PR generation via **Release Please** (`googleapis/release-please-action`):
+Releases are managed directly and reliably through standard git commands and the changelog utility:
 
-1. **Configuration**: Managed via `release-please-config.json` and `.release-please-manifest.json`.
-2. **On-Demand Dispatch**: The automatic push and schedule triggers are disabled. Maintainers can manually trigger release preparation via the **Actions** tab on GitHub (`Release & Changelog` workflow -> `Run workflow`).
+1. **Changelog Generation**: Run `npm run changelog` to aggregate commits since the last release tag into `CHANGELOG.md`.
+2. **Version Bump**: Update `version` in `package.json` following SemVer.
+3. **Commit & Tag**:
+   ```bash
+   git commit -am "chore(release): v2.5.0"
+   git tag v2.5.0
+   git push origin main --tags
+   ```
+4. **Publish**: Run `npm publish` (runs `prepublishOnly` which automatically enforces `npm run typecheck && npm run build`).
