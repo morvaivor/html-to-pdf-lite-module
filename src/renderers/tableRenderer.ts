@@ -4,6 +4,7 @@ import type { TextStyle, RenderOptions } from '../types.js';
 import type { PageLayout } from '../core/PageLayout.js';
 import type { TextMeasureCache } from '../core/cacheManager.js';
 import type { Element, ChildNode } from 'domhandler';
+import { gpuAccelerator } from '../gpu/gpuAccelerator.js';
 
 const FONT_SIZES_TABLE: Record<string, number> = { td: 12, th: 12 };
 
@@ -374,16 +375,28 @@ export async function renderTable(
       gridCells[rowIdx] = data;
     }
 
-    const rowHeights: number[] = allRows.map((_, rowIdx) => {
-      let maxHeight = 0;
+    const totalCells = allRows.length * maxCols;
+    const cellHeights = new Float32Array(totalCells);
+    for (let rowIdx = 0; rowIdx < allRows.length; rowIdx++) {
+      const base = rowIdx * maxCols;
       for (let col = 0; col < maxCols; col++) {
         const cell = gridCells[rowIdx]?.[col];
         if (cell && cell.startRow === rowIdx) {
-          maxHeight = Math.max(maxHeight, cell.height / cell.rowspan);
+          cellHeights[base + col] = cell.height / cell.rowspan;
+        } else {
+          cellHeights[base + col] = 0;
         }
       }
-      return maxHeight + (borderWidth > 0 ? borderWidth : 0);
-    });
+    }
+
+    const rowHeightsTyped = await gpuAccelerator.tableRowReduce(
+      cellHeights,
+      allRows.length,
+      maxCols,
+      borderWidth > 0 ? borderWidth : 0,
+      options.gpu,
+    );
+    const rowHeights: number[] = Array.from(rowHeightsTyped);
 
     // Precompute cumulative row heights for O(1) block height and cell position calculations (Patch 05)
     const rowPrefix: number[] = [0];
