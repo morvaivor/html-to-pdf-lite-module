@@ -15,13 +15,13 @@
 - [ ] `docs/architecture.md` — Documentation d'architecture complète
 - [ ] `docs/optimisation.md` — Plan d'optimisation et stratégies de performance
 - [ ] `docs/benchmark.md` — Rapport et métriques de benchmark
-- [ ] `bench/benchmark.js` — Suite de benchmark exécutable
+- [ ] `bench/benchmark.ts` — Suite de benchmark exécutable
 - [ ] `.github/ISSUE_TEMPLATE/` — Templates de Bug et de Feature Request
 
 ## 🧪 Tests et Vérification
 
-- [x] `npm test` s'exécute sans erreur (44 tests passés)
-- [x] Benchmark exécuté avec `node bench/benchmark.js`
+- [x] `npm test` s'exécute sans erreur (47 tests passés)
+- [x] Benchmark exécuté avec `npm run benchmark`
 
 ## ⚠️ Impact sur l'existant (Breaking Changes)
 
