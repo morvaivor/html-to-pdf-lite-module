@@ -31,6 +31,7 @@ export interface LoggerOptions {
   readonly verbose?: boolean | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
   readonly logLevel?: LogLevel;
   readonly logFile?: string;
+  readonly debug?: boolean;
 }
 
 export class Logger {
@@ -39,7 +40,7 @@ export class Logger {
   private readonly priority: number;
 
   constructor(options: LoggerOptions = {}) {
-    this.level = this.resolveLogLevel(options.verbose, options.logLevel);
+    this.level = this.resolveLogLevel(options.verbose, options.logLevel, options.debug);
     this.priority = LOG_LEVEL_PRIORITY[this.level];
 
     if (options.logFile && typeof options.logFile === 'string' && options.logFile.trim()) {
@@ -53,7 +54,10 @@ export class Logger {
     }
   }
 
-  private resolveLogLevel(verbose?: boolean | string, explicitLevel?: LogLevel): LogLevel {
+  private resolveLogLevel(verbose?: boolean | string, explicitLevel?: LogLevel, debug?: boolean): LogLevel {
+    if (debug === true) {
+      return 'DEBUG';
+    }
     if (explicitLevel && explicitLevel in LOG_LEVEL_PRIORITY) {
       return explicitLevel;
     }

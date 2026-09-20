@@ -225,6 +225,9 @@ function inheritStyle(parentStyle: TextStyle, inlineStyle: Partial<TextStyle>, t
   };
 }
 
+export type LayoutMeasurementCache = WeakMap<Element, Map<string, number>>;
+const _defaultLayoutCache: LayoutMeasurementCache = new WeakMap();
+
 export function estimateElementHeight(
   doc: PDFKit.PDFDocument,
   element: Element,
@@ -232,6 +235,7 @@ export function estimateElementHeight(
   width: number,
   textCache: TextMeasureCache,
   fontAliasSet: Set<string>,
+  measurementCache: LayoutMeasurementCache = _defaultLayoutCache,
 ): number {
   const tagName = element.name || 'div';
   const inlineStyle = parseInlineStyle(element);
@@ -243,9 +247,28 @@ export function estimateElementHeight(
   const padRight = style.paddingRight ?? style.padding ?? 0;
   const innerWidth = Math.max(10, width - padLeft - padRight);
 
+  // Fast cache key capturing all properties that affect calculated height
+  const cacheKey = `${Math.round(innerWidth * 10) / 10}|${style.fontFamily || ''}|${style.fontSize || 12}|${style.bold ? 1 : 0}|${style.italic ? 1 : 0}|${style.display || ''}|${style.flexDirection || ''}`;
+  let elementCache = measurementCache.get(element);
+  if (elementCache) {
+    const cachedHeight = elementCache.get(cacheKey);
+    if (cachedHeight !== undefined) {
+      return cachedHeight;
+    }
+  }
+
+  const recordResult = (calculatedHeight: number): number => {
+    if (!elementCache) {
+      elementCache = new Map<string, number>();
+      measurementCache.set(element, elementCache);
+    }
+    elementCache.set(cacheKey, calculatedHeight);
+    return calculatedHeight;
+  };
+
   if (tagName === 'img' || tagName === 'svg') {
     const h = parseInt(element.attribs?.['height'] ?? '', 10);
-    return (h || 100) + 8;
+    return recordResult((h || 100) + 8);
   }
 
   if (tagName === 'table') {
@@ -266,7 +289,15 @@ export function estimateElementHeight(
       let rowMax = 0;
       for (const cell of row.children) {
         if (cell.type === 'tag' && ((cell as Element).name === 'td' || (cell as Element).name === 'th')) {
-          const ch = estimateElementHeight(doc, cell as Element, style, innerWidth, textCache, fontAliasSet);
+          const ch = estimateElementHeight(
+            doc,
+            cell as Element,
+            style,
+            innerWidth,
+            textCache,
+            fontAliasSet,
+            measurementCache,
+          );
           if (ch > rowMax) rowMax = ch;
         }
       }
@@ -274,20 +305,28 @@ export function estimateElementHeight(
     }
     const marginTop = style.marginTop ?? 0;
     const marginBottom = style.marginBottom ?? 0;
-    return marginTop + padTop + tableHeight + padBottom + marginBottom;
+    return recordResult(marginTop + padTop + tableHeight + padBottom + marginBottom);
   }
 
   if (style.display === 'flex' && style.flexDirection !== 'column') {
     let rowMax = 0;
     for (const child of element.children) {
       if (child.type === 'tag') {
-        const ch = estimateElementHeight(doc, child as Element, style, innerWidth, textCache, fontAliasSet);
+        const ch = estimateElementHeight(
+          doc,
+          child as Element,
+          style,
+          innerWidth,
+          textCache,
+          fontAliasSet,
+          measurementCache,
+        );
         if (ch > rowMax) rowMax = ch;
       }
     }
     const marginTop = style.marginTop ?? 0;
     const marginBottom = style.marginBottom ?? 0;
-    return marginTop + padTop + rowMax + padBottom + marginBottom;
+    return recordResult(marginTop + padTop + rowMax + padBottom + marginBottom);
   }
 
   let totalChildHeight = 0;
@@ -306,7 +345,15 @@ export function estimateElementHeight(
   } else {
     for (const child of element.children) {
       if (child.type === 'tag') {
-        totalChildHeight += estimateElementHeight(doc, child as Element, style, innerWidth, textCache, fontAliasSet);
+        totalChildHeight += estimateElementHeight(
+          doc,
+          child as Element,
+          style,
+          innerWidth,
+          textCache,
+          fontAliasSet,
+          measurementCache,
+        );
       } else if (child.type === 'text' && (child as any).data?.trim()) {
         const fontFamily = resolveFontFamily(style.fontFamily, style.bold, style.italic, fontAliasSet);
         totalChildHeight += textCache.measure(doc, (child as any).data.trim(), fontFamily, style.fontSize, innerWidth);
@@ -316,7 +363,7 @@ export function estimateElementHeight(
 
   const marginTop = style.marginTop ?? 0;
   const marginBottom = style.marginBottom ?? 0;
-  return marginTop + padTop + totalChildHeight + padBottom + marginBottom;
+  return recordResult(marginTop + padTop + totalChildHeight + padBottom + marginBottom);
 }
 
 /**

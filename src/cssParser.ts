@@ -1,5 +1,6 @@
 import type { Cheerio, CheerioAPI } from 'cheerio';
 import type { Element } from 'domhandler';
+import { LruCache } from './core/lruCache.js';
 import type { CssRule, FontFace, PageZones, PageZoneProperties } from './types.js';
 
 // --- Pre-compiled regex constants (compiled once at module load) ---
@@ -98,9 +99,9 @@ export function stripFontFaceBlocks(css: string): string {
 }
 
 const MAX_CSS_CACHE = 128;
-const _fontFacesCache = new Map<string, FontFace[]>();
-const _cssRulesCache = new Map<string, CssRule[]>();
-const _pageRuleCache = new Map<string, PageZones | null>();
+const _fontFacesCache = new LruCache<string, FontFace[]>(MAX_CSS_CACHE);
+const _cssRulesCache = new LruCache<string, CssRule[]>(MAX_CSS_CACHE);
+const _pageRuleCache = new LruCache<string, PageZones | null>(MAX_CSS_CACHE);
 
 export function parseFontFaces(css: string): FontFace[] {
   if (!css || typeof css !== 'string') return [];
@@ -130,9 +131,6 @@ export function parseFontFaces(css: string): FontFace[] {
     });
   }
 
-  if (_fontFacesCache.size >= MAX_CSS_CACHE) {
-    _fontFacesCache.clear();
-  }
   _fontFacesCache.set(css, faces);
   return faces;
 }
@@ -171,9 +169,6 @@ export function parseCssRules(css: string): CssRule[] {
     }
   }
 
-  if (_cssRulesCache.size >= MAX_CSS_CACHE) {
-    _cssRulesCache.clear();
-  }
   _cssRulesCache.set(css, rules);
   return rules;
 }
@@ -219,6 +214,142 @@ export function elementMatchesSelector(element: Element, selector: string): bool
   return false;
 }
 
+export interface IndexedSelector {
+  order: number;
+  selector: string;
+  styleString: string;
+  type: 'id' | 'class' | 'tag' | 'tag#id' | 'tag.class' | 'complex';
+  tagName?: string;
+  id?: string;
+  className?: string;
+  extraClasses?: string[];
+}
+
+export interface CssRuleIndex {
+  byId: Map<string, IndexedSelector[]>;
+  byClass: Map<string, IndexedSelector[]>;
+  byTag: Map<string, IndexedSelector[]>;
+  complex: IndexedSelector[];
+}
+
+export function buildCssRuleIndex(rules: CssRule[]): CssRuleIndex {
+  const byId = new Map<string, IndexedSelector[]>();
+  const byClass = new Map<string, IndexedSelector[]>();
+  const byTag = new Map<string, IndexedSelector[]>();
+  const complex: IndexedSelector[] = [];
+
+  const addToMap = (map: Map<string, IndexedSelector[]>, key: string, item: IndexedSelector) => {
+    let list = map.get(key);
+    if (!list) {
+      list = [];
+      map.set(key, list);
+    }
+    list.push(item);
+  };
+
+  for (let order = 0; order < rules.length; order++) {
+    const rule = rules[order]!;
+    const styleString = Object.entries(rule.properties)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('; ');
+    if (!styleString) continue;
+
+    const rawSelectors = rule.selector
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    for (const sel of rawSelectors) {
+      // If complex: contains spaces (descendant), >, +, ~, [, :, *
+      if (/[\s>+~[:*]/.test(sel)) {
+        complex.push({ order, selector: sel, styleString, type: 'complex' });
+        continue;
+      }
+
+      // 1. Pure ID: #myId
+      const idMatch = sel.match(/^#([a-zA-Z0-9_-]+)$/);
+      if (idMatch && idMatch[1]) {
+        addToMap(byId, idMatch[1], {
+          order,
+          selector: sel,
+          styleString,
+          type: 'id',
+          id: idMatch[1],
+        });
+        continue;
+      }
+
+      // 2. Tag with ID: tag#myId (e.g. div#main)
+      const tagIdMatch = sel.match(/^([a-zA-Z0-9]+)#([a-zA-Z0-9_-]+)$/);
+      if (tagIdMatch && tagIdMatch[1] && tagIdMatch[2]) {
+        addToMap(byId, tagIdMatch[2], {
+          order,
+          selector: sel,
+          styleString,
+          type: 'tag#id',
+          tagName: tagIdMatch[1].toLowerCase(),
+          id: tagIdMatch[2],
+        });
+        continue;
+      }
+
+      // 3. Pure Class: .myClass
+      const classMatch = sel.match(/^\.([a-zA-Z0-9_-]+)$/);
+      if (classMatch && classMatch[1]) {
+        addToMap(byClass, classMatch[1], {
+          order,
+          selector: sel,
+          styleString,
+          type: 'class',
+          className: classMatch[1],
+        });
+        continue;
+      }
+
+      // 4. Tag with Class(es): tag.myClass or tag.cls1.cls2 or .cls1.cls2
+      const compoundClassMatch = sel.match(/^([a-zA-Z0-9]*)(\.[a-zA-Z0-9_-]+)+$/);
+      if (compoundClassMatch) {
+        const tagName = compoundClassMatch[1] ? compoundClassMatch[1].toLowerCase() : undefined;
+        const classPart = compoundClassMatch[1] ? sel.slice(compoundClassMatch[1].length) : sel;
+        const classes = classPart.split('.').filter(Boolean);
+        const primaryClass = classes[0];
+        if (primaryClass) {
+          const extraClasses = classes.slice(1);
+          addToMap(byClass, primaryClass, {
+            order,
+            selector: sel,
+            styleString,
+            type: tagName ? 'tag.class' : 'class',
+            tagName,
+            className: primaryClass,
+            extraClasses: extraClasses.length > 0 ? extraClasses : undefined,
+          });
+          continue;
+        }
+      }
+
+      // 5. Pure Tag: tag (e.g. h1, p, td, table)
+      const tagMatch = sel.match(/^([a-zA-Z0-9]+)$/);
+      if (tagMatch && tagMatch[1]) {
+        addToMap(byTag, tagMatch[1].toLowerCase(), {
+          order,
+          selector: sel,
+          styleString,
+          type: 'tag',
+          tagName: tagMatch[1].toLowerCase(),
+        });
+        continue;
+      }
+
+      // Otherwise, fallback to complex
+      complex.push({ order, selector: sel, styleString, type: 'complex' });
+    }
+  }
+
+  return { byId, byClass, byTag, complex };
+}
+
 export function applyCssToElements($: CheerioAPI, css: string): void {
   if (!css || typeof css !== 'string') return;
 
@@ -232,40 +363,100 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
     }
   });
 
-  for (const rule of rules) {
-    const selector = rule.selector;
+  const index = buildCssRuleIndex(rules);
 
-    // Hoist: serialize the style string ONCE per rule, not per element
-    const newStyle = Object.entries(rule.properties)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('; ');
+  // Collect matches per element preserving rule order: Element -> Map<order, styleString>
+  const elementMatches = new Map<Element, Map<number, string>>();
 
-    if (!newStyle) continue;
+  const addMatch = (el: Element, order: number, styleString: string) => {
+    let map = elementMatches.get(el);
+    if (!map) {
+      map = new Map<number, string>();
+      elementMatches.set(el, map);
+    }
+    map.set(order, styleString);
+  };
 
-    const applyRule = (elements: Cheerio<any>) => {
+  // 1. Process complex selectors via Cheerio
+  for (const c of index.complex) {
+    const cleanSel = c.selector.trim();
+    if (!cleanSel) continue;
+
+    const applyComplex = (elements: Cheerio<any>) => {
       elements.each((_index: number, element: any) => {
         if (element.type === 'tag') {
-          const current = element.attribs?.style || '';
-          element.attribs.style = current ? current + '; ' + newStyle : newStyle;
+          addMatch(element as Element, c.order, c.styleString);
         }
       });
     };
 
-    const cleanSel = selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
-    if (!cleanSel) continue;
-
     try {
-      applyRule($(cleanSel));
+      applyComplex($(cleanSel));
     } catch {
       try {
         const fallbackSel = cleanSel.replace(ATTR_SELECTOR_REGEX, '').replace(PSEUDO_SELECTOR_REGEX, '').trim();
-
         if (fallbackSel) {
-          applyRule($(fallbackSel));
+          applyComplex($(fallbackSel));
         }
       } catch {
         // Skip unsupported selectors
       }
+    }
+  }
+
+  // 2. Single-pass traversal of DOM to match indexed rules in O(1)
+  $('*').each((_index, element) => {
+    if (element.type !== 'tag') return;
+    const el = element as Element;
+    const tagName = el.name ? el.name.toLowerCase() : '';
+    const id = el.attribs?.id;
+    const classAttr = el.attribs?.class;
+
+    // Match byTag
+    if (tagName) {
+      const tagRules = index.byTag.get(tagName);
+      if (tagRules) {
+        for (const r of tagRules) {
+          addMatch(el, r.order, r.styleString);
+        }
+      }
+    }
+
+    // Match byId
+    if (id) {
+      const idRules = index.byId.get(id);
+      if (idRules) {
+        for (const r of idRules) {
+          if (!r.tagName || r.tagName === tagName) {
+            addMatch(el, r.order, r.styleString);
+          }
+        }
+      }
+    }
+
+    // Match byClass
+    if (classAttr) {
+      const classes = classAttr.split(WHITESPACE_REGEX).filter(Boolean);
+      for (const cls of classes) {
+        const classRules = index.byClass.get(cls);
+        if (classRules) {
+          for (const r of classRules) {
+            if (r.tagName && r.tagName !== tagName) continue;
+            if (r.extraClasses && !r.extraClasses.every((c) => classes.includes(c))) continue;
+            addMatch(el, r.order, r.styleString);
+          }
+        }
+      }
+    }
+  });
+
+  // 3. Apply matches in order of appearance in the CSS
+  for (const [el, matches] of elementMatches) {
+    const sortedOrders = Array.from(matches.keys()).sort((a, b) => a - b);
+    const combinedStyle = sortedOrders.map((o) => matches.get(o)!).join('; ');
+    if (combinedStyle) {
+      const current = el.attribs?.style || '';
+      el.attribs.style = current ? current + '; ' + combinedStyle : combinedStyle;
     }
   }
 
@@ -310,10 +501,6 @@ export function parsePageRule(css: string): PageZones | null {
 
   const pageBody = extractPageBlock(css);
   if (!pageBody) {
-    if (_pageRuleCache.size >= MAX_CSS_CACHE) {
-      const firstKey = _pageRuleCache.keys().next().value;
-      if (firstKey !== undefined) _pageRuleCache.delete(firstKey);
-    }
     _pageRuleCache.set(css, null);
     return null;
   }
@@ -345,9 +532,6 @@ export function parsePageRule(css: string): PageZones | null {
   }
 
   const result = Object.keys(zones).length === 0 ? null : (zones as PageZones);
-  if (_pageRuleCache.size >= MAX_CSS_CACHE) {
-    _pageRuleCache.clear();
-  }
   _pageRuleCache.set(css, result);
   return result;
 }

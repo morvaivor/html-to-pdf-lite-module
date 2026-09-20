@@ -1,3 +1,4 @@
+import { LruCache } from './lruCache.js';
 import type { TextStyle } from '../types.js';
 
 const DEFAULT_STYLE: TextStyle = {
@@ -12,12 +13,12 @@ const DEFAULT_STYLE: TextStyle = {
  * LRU Cache for PDFKit string height calculations.
  */
 export class TextMeasureCache {
-  cache: Map<string, number>;
+  cache: LruCache<string, number>;
   maxSize: number;
 
   constructor(maxSize: number = 512) {
-    this.cache = new Map<string, number>();
     this.maxSize = maxSize;
+    this.cache = new LruCache<string, number>(maxSize);
   }
 
   measure(
@@ -29,22 +30,14 @@ export class TextMeasureCache {
     lineGap?: number,
   ): number {
     const effectiveLineGap = lineGap ?? fontSize * 0.15;
-    const key =
-      text.length <= 80
-        ? `${fontFamily}|${fontSize}|${maxWidth}|${effectiveLineGap}|${text}`
-        : `${fontFamily}|${fontSize}|${maxWidth}|${effectiveLineGap}|${text.length}:${text.substring(0, 40)}`;
+    // Complete key avoids collision between different strings of identical length
+    const key = `${fontFamily}|${fontSize}|${maxWidth}|${effectiveLineGap}|${text}`;
     const cached = this.cache.get(key);
     if (cached !== undefined) return cached;
 
     doc.font(fontFamily).fontSize(fontSize);
     const height = doc.heightOfString(text, { width: maxWidth, lineGap: effectiveLineGap });
 
-    if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== undefined) {
-        this.cache.delete(firstKey);
-      }
-    }
     this.cache.set(key, height);
     return height;
   }
@@ -57,9 +50,9 @@ export class TextMeasureCache {
 // WeakMap inline style cache
 const _styleCache = new WeakMap<{ attribs?: { style?: string } }, Partial<TextStyle>>();
 
-// Fast Map cache for unique inline style attribute strings (avoids re-parsing identical strings)
-const _parsedStringStyleCache = new Map<string, Partial<TextStyle>>();
+// LRU Cache for unique inline style attribute strings (avoids periodic cache-thrashing from wholesale clear)
 const MAX_PARSED_STYLE_CACHE = 256;
+const _parsedStringStyleCache = new LruCache<string, Partial<TextStyle>>(MAX_PARSED_STYLE_CACHE);
 
 const NAMED_COLORS = new Set([
   'black',
@@ -360,9 +353,6 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
     }
   }
 
-  if (_parsedStringStyleCache.size >= MAX_PARSED_STYLE_CACHE) {
-    _parsedStringStyleCache.clear();
-  }
   _parsedStringStyleCache.set(styleAttr, style);
   _styleCache.set(element, style);
   return style;

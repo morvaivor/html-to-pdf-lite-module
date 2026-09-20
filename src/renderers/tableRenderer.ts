@@ -182,6 +182,13 @@ export async function renderTable(
   const borderWidth = defaultBorder ? defaultBorderWidth : 0;
   const borderColor = defaultBorder ? defaultBorderColor : undefined;
 
+  // Precompute column prefix sums for O(1) cell X and width calculations (Patch 05)
+  const columnX: number[] = [layout.leftMargin];
+  for (let c = 0; c < maxCols; c++) {
+    columnX.push((columnX[c] ?? layout.leftMargin) + (colWidths[c] ?? 0));
+  }
+  const colX = (col: number): number => columnX[col] ?? layout.leftMargin;
+
   {
     // Matrice 2D pour résoudre les positions des cellules en gérant colspan et rowspan
     const gridCells: (CellData | null)[][] = [];
@@ -233,7 +240,8 @@ export async function renderTable(
         const fontFamily = resolveFontFamily(cellStyle.fontFamily, cellStyle.bold, cellStyle.italic, fontAliasSet);
         const fontSize = cellStyle.fontSize;
 
-        const currentCellWidth = colWidths.slice(col, col + colspan).reduce((sum, w) => sum + w, 0);
+        // O(1) cell width using precomputed prefix sums
+        const currentCellWidth = colX(col + colspan) - colX(col);
         const textWidth = Math.max(10, currentCellWidth - padding * 2);
 
         const text = getCellText(cell);
@@ -377,6 +385,13 @@ export async function renderTable(
       return maxHeight + (borderWidth > 0 ? borderWidth : 0);
     });
 
+    // Precompute cumulative row heights for O(1) block height and cell position calculations (Patch 05)
+    const rowPrefix: number[] = [0];
+    for (let r = 0; r < allRows.length; r++) {
+      rowPrefix.push((rowPrefix[r] ?? 0) + (rowHeights[r] ?? 0));
+    }
+    const rowPre = (r: number): number => rowPrefix[r] ?? 0;
+
     // Découpage en blocs insécables : regroupe les lignes liées par des rowspan
     // pour éviter de scinder une cellule multi-lignes au milieu d'un saut de page
     const blocks: Array<{ start: number; end: number }> = [];
@@ -403,9 +418,8 @@ export async function renderTable(
     }
 
     for (const block of blocks) {
-      const blockHeight = rowHeights
-        .slice(block.start, block.end + 1)
-        .reduce((sumHeight, currentHeight) => sumHeight + currentHeight, 0);
+      // O(1) block height using precomputed prefix sums
+      const blockHeight = rowPre(block.end + 1) - rowPre(block.start);
       if (doc.y + blockHeight > layout.pageBottom) {
         doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
         doc.y = layout.contentTop;
@@ -413,25 +427,19 @@ export async function renderTable(
       }
 
       const blockY = doc.y;
-      const rowTop: number[] = Array.from({ length: allRows.length }, () => 0);
-      let offset = 0;
-      for (let rowIndex = block.start; rowIndex <= block.end; rowIndex++) {
-        rowTop[rowIndex] = blockY + offset;
-        offset += rowHeights[rowIndex] ?? 0;
-      }
+      const blockStartOffset = rowPre(block.start);
 
       for (let rowIndex = block.start; rowIndex <= block.end; rowIndex++) {
+        const cellY = blockY + (rowPre(rowIndex) - blockStartOffset);
         let col = 0;
         while (col < maxCols) {
           const cell = gridCells[rowIndex]?.[col];
           if (cell && cell.startRow === rowIndex) {
-            const cellWidth = colWidths
-              .slice(cell.startCol, cell.startCol + cell.colspan)
-              .reduce((sum, w) => sum + w, 0);
-            const cellX = layout.leftMargin + colWidths.slice(0, cell.startCol).reduce((sum, w) => sum + w, 0);
-            const cellY = rowTop[rowIndex] ?? 0;
+            // O(1) cell coordinates and width using precomputed prefix sums
+            const cellX = colX(cell.startCol);
+            const cellWidth = colX(cell.startCol + cell.colspan) - cellX;
             const endRow = Math.min(rowIndex + cell.rowspan - 1, allRows.length - 1);
-            const cellH = (rowTop[endRow] ?? 0) + (rowHeights[endRow] ?? 0) - cellY;
+            const cellH = rowPre(endRow + 1) - rowPre(rowIndex);
 
             if (cell.style.backgroundColor) {
               doc.fillColor(cell.style.backgroundColor).rect(cellX, cellY, cellWidth, cellH).fill();
@@ -564,8 +572,7 @@ export async function renderTable(
         }
       }
 
-      const endRowIdx = block.end;
-      doc.y = (rowTop[endRowIdx] ?? 0) + (rowHeights[endRowIdx] ?? 0);
+      doc.y = blockY + blockHeight;
     }
   }
 }

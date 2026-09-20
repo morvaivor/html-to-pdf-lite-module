@@ -1,7 +1,12 @@
 import { parseFontFaces } from '../cssParser.js';
 import { DEFAULT_STYLE } from './cacheManager.js';
 import { fetchRemoteResource, decodeDataUri } from './networkSecurity.js';
+import { AssetCache, defaultAssetCache } from './assetCache.js';
+import { LruCache } from './lruCache.js';
 import type { FontFace } from '../types.js';
+
+// WeakMap mapping fontAliasSet to direct O(1) font variant lookup index (Patch 07)
+const _aliasDirectIndex = new WeakMap<Set<string>, Map<string, string>>();
 
 /**
  * Registers custom @font-face rules with PDFKit, downloading remote fonts concurrently.
@@ -16,23 +21,35 @@ export async function registerFontFaces(
   const faces: FontFace[] = parseFontFaces(css ?? '');
   fontAliasSet.clear();
 
+  let directIndex = _aliasDirectIndex.get(fontAliasSet);
+  if (!directIndex) {
+    directIndex = new Map<string, string>();
+    _aliasDirectIndex.set(fontAliasSet, directIndex);
+  }
+  directIndex.clear();
+
   if (faces.length === 0) return;
 
   const aliasesByFamily = new Map<string, Array<{ alias: string; buffer: Buffer }>>();
 
-  // Concurrent font download
+  // Concurrent font download with cross-PDF caching and in-flight coalescing
   const downloadPromises = faces.map(async (face) => {
     if (fontBufferCache.has(face.url)) return;
-    if (face.url.startsWith('data:')) {
-      fontBufferCache.set(face.url, decodeDataUri(face.url));
-    } else {
+
+    const fontKey = AssetCache.buildFontKey(face.url, face.bold, face.italic);
+    const loader = async (): Promise<Buffer> => {
+      if (face.url.startsWith('data:')) {
+        return decodeDataUri(face.url);
+      }
       try {
-        const buffer = await fetchRemoteResource(face.url, allowedLocalIps);
-        fontBufferCache.set(face.url, buffer);
+        return await fetchRemoteResource(face.url, allowedLocalIps);
       } catch (err) {
         throw new Error(`Failed to load font from ${face.url}: ${(err as Error).message}`);
       }
-    }
+    };
+
+    const buffer = await defaultAssetCache.getFont(fontKey, loader);
+    fontBufferCache.set(face.url, buffer);
   });
 
   await Promise.all(downloadPromises);
@@ -47,6 +64,11 @@ export async function registerFontFaces(
     doc.registerFont(alias, buffer);
     fontAliasSet.add(alias);
 
+    // Build O(1) direct lookup index
+    const normFamily = face.family.toLowerCase();
+    directIndex.set(`${normFamily}|${face.bold ? 1 : 0}|${face.italic ? 1 : 0}`, alias);
+    directIndex.set(normFamily, face.family);
+
     if (!aliasesByFamily.has(face.family)) aliasesByFamily.set(face.family, []);
     aliasesByFamily.get(face.family)?.push({ alias, buffer });
   }
@@ -57,6 +79,7 @@ export async function registerFontFaces(
       if (firstAlias) {
         doc.registerFont(family, firstAlias.buffer);
         fontAliasSet.add(family);
+        directIndex.set(family.toLowerCase(), family);
       }
     }
   }
@@ -79,7 +102,7 @@ function normalizeBaseFont(fontFamily: string): string {
   return 'Helvetica';
 }
 
-const _fontResolutionCache = new Map<string, string>();
+const _fontResolutionCache = new LruCache<string, string>(512);
 
 /**
  * Resolves font family name considering bold/italic variants and custom @font-face aliases.
@@ -97,17 +120,43 @@ export function resolveFontFamily(
     if (cached !== undefined) return cached;
   }
 
-  let base = fontFamily?.trim() || DEFAULT_STYLE.fontFamily;
+  let directIndex: Map<string, string> | undefined;
+  const rawBase = fontFamily?.trim() || DEFAULT_STYLE.fontFamily;
+  const normBase = rawBase.toLowerCase();
+  const directKey = `${normBase}|${bold ? 1 : 0}|${italic ? 1 : 0}`;
 
-  const isCustomRegistered = fontAliasSet
-    ? fontAliasSet.has(base) || Array.from(fontAliasSet).some((a) => a.startsWith(base))
-    : false;
+  if (hasCustomAliases && fontAliasSet) {
+    directIndex = _aliasDirectIndex.get(fontAliasSet);
+    if (!directIndex) {
+      directIndex = new Map<string, string>();
+      _aliasDirectIndex.set(fontAliasSet, directIndex);
+      for (const alias of fontAliasSet) {
+        directIndex.set(alias.toLowerCase(), alias);
+      }
+    }
+    const directMatch = directIndex.get(directKey);
+    if (directMatch !== undefined) {
+      return directMatch;
+    }
+  }
+
+  let base = rawBase;
+
+  const isCustomRegistered =
+    hasCustomAliases && fontAliasSet
+      ? directIndex?.has(normBase) ||
+        fontAliasSet.has(base) ||
+        Array.from(fontAliasSet).some((a) => a.toLowerCase().startsWith(normBase))
+      : false;
 
   if (!isCustomRegistered) {
     base = normalizeBaseFont(base);
   }
 
   if (!bold && !italic) {
+    if (directIndex) {
+      directIndex.set(directKey, base);
+    }
     return base;
   }
 
@@ -146,7 +195,11 @@ export function resolveFontFamily(
     if (best) name = best;
   }
 
-  if (cacheKey && _fontResolutionCache.size < 256) {
+  if (directIndex) {
+    directIndex.set(directKey, name);
+  }
+
+  if (cacheKey) {
     _fontResolutionCache.set(cacheKey, name);
   }
 

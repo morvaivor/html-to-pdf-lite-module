@@ -9,7 +9,7 @@ import { createLogger, type Logger } from './core/logger.js';
 import { renderElement } from './renderers/registry.js';
 import { renderText } from './renderers/textRenderer.js';
 import { renderPageZone, renderHeaderFooterContent } from './renderers/headerFooterRenderer.js';
-import type { PdfGenerateOptions, RenderOptions, TextStyle } from './types.js';
+import type { PdfGenerateOptions, RenderOptions, TextStyle, ProfilingTimings } from './types.js';
 import type { Cheerio } from 'cheerio';
 import type { AnyNode, Element } from 'domhandler';
 
@@ -116,7 +116,14 @@ async function countPages(
 
 export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions = {}): Promise<Buffer> {
   const logger = createLogger(options);
+  const isDebugMode = Boolean(options.debug || logger.isEnabledFor('DEBUG'));
+  const isProfiling = Boolean(options.profiling || options.onProfile || isDebugMode);
   const startTime = performance.now();
+  let parseHtmlMs = 0;
+  let cssMs = 0;
+  let fontRegisterMs = 0;
+  let layoutRenderMs = 0;
+  let pdfAssemblyMs = 0;
 
   logger.info('Début de la tâche de génération du PDF');
 
@@ -130,8 +137,13 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
 
   try {
     // Single-pass AST parsing
+    const tParseStart = isProfiling ? performance.now() : 0;
     const $ = cheerio.load(html);
+    if (isProfiling) {
+      parseHtmlMs = performance.now() - tParseStart;
+    }
 
+    const tCssStart = isProfiling ? performance.now() : 0;
     const allowedCssIps = options.allowedCssIps ?? options.allowedLocalIps;
 
     // Extract external <link rel="stylesheet"> tags from HTML
@@ -204,6 +216,9 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     if (fullCss) {
       applyCssToElements($, fullCss);
     }
+    if (isProfiling) {
+      cssMs = performance.now() - tCssStart;
+    }
     const body = $('body').length > 0 ? $('body') : $(html);
 
     const pageZones = fullCss ? parsePageRule(fullCss) : null;
@@ -245,7 +260,11 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
       margin: 0,
     });
 
+    const tFontStart = isProfiling ? performance.now() : 0;
     await registerFontFaces(doc, fullCss, renderOptions._fontBufferCache, fontAliasSet, renderOptions.allowedLocalIps);
+    if (isProfiling) {
+      fontRegisterMs = performance.now() - tFontStart;
+    }
 
     doc.setMaxListeners(0);
 
@@ -387,6 +406,7 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
 
     const rootStyle: TextStyle = { ...DEFAULT_STYLE };
 
+    const tLayoutStart = isProfiling ? performance.now() : 0;
     for (const child of body.children().toArray()) {
       if ((child as any).type === 'tag') {
         await renderElement(
@@ -403,14 +423,44 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
         renderText(doc, (child as any).data.trim(), rootStyle, renderOptions, layout, textCache, fontAliasSet);
       }
     }
+    if (isProfiling) {
+      layoutRenderMs = performance.now() - tLayoutStart;
+    }
 
+    const tAssemblyStart = isProfiling ? performance.now() : 0;
     const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', reject);
       doc.end();
     });
+    if (isProfiling) {
+      pdfAssemblyMs = performance.now() - tAssemblyStart;
+    }
 
     const totalDuration = performance.now() - startTime;
+    if (isProfiling) {
+      const timings: ProfilingTimings = {
+        parseHtmlMs,
+        cssMs,
+        fontRegisterMs,
+        layoutRenderMs,
+        pdfAssemblyMs,
+        totalMs: totalDuration,
+      };
+      if (isDebugMode) {
+        const pct = (ms: number): string => ((ms / (totalDuration || 1)) * 100).toFixed(1);
+        logger.debug(
+          `[Sondes Profilage] HTML: ${parseHtmlMs.toFixed(2)} ms (${pct(parseHtmlMs)}%) | CSS: ${cssMs.toFixed(2)} ms (${pct(cssMs)}%) | Polices: ${fontRegisterMs.toFixed(2)} ms (${pct(fontRegisterMs)}%) | Layout & Rendu: ${layoutRenderMs.toFixed(2)} ms (${pct(layoutRenderMs)}%) | Assemblage PDF: ${pdfAssemblyMs.toFixed(2)} ms (${pct(pdfAssemblyMs)}%) | Total: ${totalDuration.toFixed(2)} ms`,
+        );
+      }
+      if (options.profiling) {
+        logger.info(
+          `[Profiling] parseHtml: ${parseHtmlMs.toFixed(2)}ms, css: ${cssMs.toFixed(2)}ms, fontRegister: ${fontRegisterMs.toFixed(2)}ms, layoutRender: ${layoutRenderMs.toFixed(2)}ms, pdfAssembly: ${pdfAssemblyMs.toFixed(2)}ms, total: ${totalDuration.toFixed(2)}ms`,
+        );
+      }
+      options.onProfile?.(timings);
+    }
+
     logger.debug(`Temps de production du html : ${totalDuration.toFixed(2)} ms`);
     logger.info(
       `Tâche de génération du PDF terminée avec succès (taille: ${pdfBuffer.length} octets, temps: ${totalDuration.toFixed(2)} ms)`,

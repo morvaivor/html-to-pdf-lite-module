@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) or [Release Please](https://github.com/googleapis/release-please) for automated commit specifications.
 
+## [2.4.0](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.2.0...v2.4.0) - 2026-09-20
+
+### 🚀 Features
+- **changelog**: add manual changelog generator and optimization patch plan ([8fe9ab8](https://github.com/morvaivor/html-to-pdf-lite-module/commit/8fe9ab8b427c964db791ae7d811df34422e183f1))
+- mise à jour de la version à 2.3.0 et ajout de nouveaux modèles HTML dans le changelog ([e126277](https://github.com/morvaivor/html-to-pdf-lite-module/commit/e126277265ddac125689b852c7d1a872cae2b102))
+- add legal contract template and generate heavy financial ledger script ([afd1284](https://github.com/morvaivor/html-to-pdf-lite-module/commit/afd1284a844c4e35d7aca57fd09ab065dd193300))
+
+### 📦 Build & Dependencies
+- **deps**: bump the dependencies group across 1 directory with 2 updates ([f188a10](https://github.com/morvaivor/html-to-pdf-lite-module/commit/f188a109506f14ab4c58c83f5b9a93e49a479379))
+- **deps-dev**: bump typescript from 5.9.3 to 7.0.2 ([5b484ae](https://github.com/morvaivor/html-to-pdf-lite-module/commit/5b484ae5d3bcb50590e7fb896c0df8d77c0b3e73))
+
+### 👷 CI/CD
+- **deps**: bump the actions group with 7 updates ([3fa5fbc](https://github.com/morvaivor/html-to-pdf-lite-module/commit/3fa5fbc9ae3d81b858e0aebf80af7ea9fd90cb2d))
+
+## [Unreleased](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.2.0...HEAD)
+
+### 🚀 Features
+- mise à jour de la version à 2.3.0 et ajout de nouveaux modèles HTML dans le changelog ([e126277](https://github.com/morvaivor/html-to-pdf-lite-module/commit/e126277265ddac125689b852c7d1a872cae2b102))
+- add legal contract template and generate heavy financial ledger script ([afd1284](https://github.com/morvaivor/html-to-pdf-lite-module/commit/afd1284a844c4e35d7aca57fd09ab065dd193300))
+
+### 📦 Build & Dependencies
+- **deps**: bump the dependencies group across 1 directory with 2 updates ([f188a10](https://github.com/morvaivor/html-to-pdf-lite-module/commit/f188a109506f14ab4c58c83f5b9a93e49a479379))
+- **deps-dev**: bump typescript from 5.9.3 to 7.0.2 ([5b484ae](https://github.com/morvaivor/html-to-pdf-lite-module/commit/5b484ae5d3bcb50590e7fb896c0df8d77c0b3e73))
+
+### 👷 CI/CD
+- **deps**: bump the actions group with 7 updates ([3fa5fbc](https://github.com/morvaivor/html-to-pdf-lite-module/commit/3fa5fbc9ae3d81b858e0aebf80af7ea9fd90cb2d))
+
 ## [2.3.0] - 2026-09-07
 
 ### 🎨 Showcase & Démonstrations Interactives
