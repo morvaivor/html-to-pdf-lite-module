@@ -32,7 +32,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- |
 | **Continuous Integration** | `.github/workflows/ci.yml` | `push` (main), `pull_request` | Runs TypeScript typecheck, oxlint, and unit/integration tests. |
 | **PR Title Validator** | `.github/workflows/semantic-pr-title.yml` | `pull_request_target` | Validates PR title adheres to Conventional Commits. |
-| **Release & Changelog** | `.github/workflows/release.yml` | `push` (main), `schedule` (monthly), `workflow_dispatch` | Runs Release Please to update `CHANGELOG.md` and manage release PRs. |
+| **Release & Changelog** | `.github/workflows/release.yml` | `workflow_dispatch` (manual) | On-demand Release Please workflow (automated triggers disabled in favor of `npm run changelog`). |
 | **GitHub Pages** | `.github/workflows/deploy-pages.yml` | `push` (main), `workflow_dispatch` | Builds and deploys demo showcase to GitHub Pages. |
 
 ---
@@ -69,18 +69,54 @@ This project follows **Semantic Versioning 2.0.0** (`MAJOR.MINOR.PATCH`):
 
 ---
 
-## 📄 Automated Changelog & Release Management
+## 📖 Manual Changelog Generation (`npm run changelog`)
 
-We use **Release Please** (`googleapis/release-please-action`):
+To provide full developer control and prevent automated GitHub Actions from generating conflicting or messy release PRs, changelog updates can be generated locally and on-demand using the dedicated script:
+
+```bash
+# Preview upcoming changes without modifying files (dry run)
+npm run changelog:check
+
+# Generate / update CHANGELOG.md with commits since the latest git tag
+npm run changelog
+
+# Target a specific release version (e.g. 2.4.0)
+npm run changelog -- --version 2.4.0
+
+# Generate an [Unreleased] section for pending commits
+npm run changelog -- --unreleased
+
+# Regenerate sections across all git tags
+npm run changelog:all
+```
+
+### Supported CLI Flags
+
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| `-d`, `--dry-run` | Preview changelog in terminal without touching `CHANGELOG.md` | `false` |
+| `-v`, `--version <ver>` | Specify the target release version | `package.json` version |
+| `-u`, `--unreleased` | Target `[Unreleased]` section | `false` |
+| `--from <tag>` | Start git ref or tag | Latest tag (`git tag -l`) |
+| `--to <ref>` | End git ref | `HEAD` |
+| `--date <YYYY-MM-DD>` | Release date in version header | Today's date |
+| `--force` | Overwrite existing section for the specified version | `false` |
+| `--append` | Append new entries to existing section | `false` |
+| `-a`, `--all` | Regenerate changelog across all tags in descending order | `false` |
+| `-h`, `--help` | Display usage instructions | - |
+
+### How It Works
+
+1. **Commit Parsing**: Inspects `git log` and parses Conventional Commits (`feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, and `!`/`BREAKING CHANGE`).
+2. **Categorization**: Groups commits into cleanly formatted sections with visual icons (`🚀 Features`, `🐛 Bug Fixes`, `⚡ Performance Improvements`, etc.).
+3. **Links**: Automatically generates clickable markdown links for PR references (`#15`) and commit hashes to the GitHub repository.
+4. **Safety & Preservation**: Existing curated notes (such as detailed French showcases or hand-written release highlights) are strictly preserved unless `--force` is explicitly provided.
+
+---
+
+## 📄 Automated Release Management (Optional)
+
+Automated PR generation via **Release Please** (`googleapis/release-please-action`):
 
 1. **Configuration**: Managed via `release-please-config.json` and `.release-please-manifest.json`.
-2. **Release PR**: On commits to `main` (or when triggered manually / monthly), Release Please maintains a draft **Release PR**.
-3. **Changelog**: The Release PR automatically compiles commit logs into [CHANGELOG.md](CHANGELOG.md) formatted by section (`Features`, `Bug Fixes`, `Performance Improvements`, etc.).
-4. **Publishing a Release**: Merging the Release PR automatically creates the git tag (e.g. `v2.1.0`), creates a GitHub Release, and updates package versions.
-
-### Triggering a Release Manually
-
-Maintainers can manually trigger release preparation at any time:
-1. Go to the **Actions** tab on GitHub.
-2. Select the **Release & Changelog** workflow.
-3. Click **Run workflow** and select the `main` branch.
+2. **On-Demand Dispatch**: The automatic push and schedule triggers are disabled. Maintainers can manually trigger release preparation via the **Actions** tab on GitHub (`Release & Changelog` workflow -> `Run workflow`).

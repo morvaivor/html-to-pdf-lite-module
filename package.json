@@ -45,6 +45,9 @@
     "test:soak:parallel": "tsx --expose-gc bench/soak-test-15k-parallel.ts",
     "test:soak:heavy": "tsx --expose-gc bench/soak-test-15k-heavy.ts",
     "build:demo": "tsx scripts/build-demo.ts",
+    "changelog": "tsx scripts/generate-changelog.ts",
+    "changelog:check": "tsx scripts/generate-changelog.ts --dry-run",
+    "changelog:all": "tsx scripts/generate-changelog.ts --all",
     "commitlint": "commitlint",
     "prepublishOnly": "npm run typecheck && npm run build"
   },
