@@ -1,5 +1,6 @@
 import SVGtoPDF from 'svg-to-pdfkit';
 import { decodeDataUri, fetchRemoteResource, readLocalFile } from '../core/networkSecurity.js';
+import { defaultAssetCache } from '../core/assetCache.js';
 import type { TextStyle, RenderOptions } from '../types.js';
 import type { PageLayout } from '../core/PageLayout.js';
 import type { TextMeasureCache } from '../core/cacheManager.js';
@@ -12,17 +13,23 @@ export async function loadImage(
 ): Promise<Buffer | undefined> {
   if (imageCache.has(src)) return imageCache.get(src);
 
-  let buffer: Buffer | undefined;
-  if (src.startsWith('data:')) {
-    buffer = decodeDataUri(src);
-  } else if (src.startsWith('http://') || src.startsWith('https://')) {
-    buffer = await fetchRemoteResource(src, allowedLocalIps);
-  } else {
-    buffer = readLocalFile(src);
-  }
+  const loader = async (): Promise<Buffer> => {
+    if (src.startsWith('data:')) {
+      return decodeDataUri(src);
+    } else if (src.startsWith('http://') || src.startsWith('https://')) {
+      return fetchRemoteResource(src, allowedLocalIps);
+    } else {
+      return readLocalFile(src);
+    }
+  };
 
-  if (buffer) imageCache.set(src, buffer);
-  return buffer;
+  try {
+    const buffer = await defaultAssetCache.getImage(src, loader);
+    if (buffer) imageCache.set(src, buffer);
+    return buffer;
+  } catch {
+    return undefined;
+  }
 }
 
 export function renderImage(

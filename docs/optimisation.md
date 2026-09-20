@@ -4,32 +4,24 @@
 
 ---
 
-## 📊 Bilan des Optimisations Natives (v2.1)
+## 📊 Bilan des Optimisations Natives (Patches 01 à 12 — v2.3.0)
 
 Toutes les optimisations suivantes sont implémentées en standard dans le code de production :
 
-| ID | Domaine | Statut | Gain Obtenu |
-|---|---|:---:|---|
-| **OPT-1** | Conditional Two-Pass Rendering | ✅ Appliqué | Élimine 100% de la passe de comptage si `counter(num-pages)` n'est pas utilisé dans le CSS. |
-| **OPT-2** | Partage de l'AST Cheerio | ✅ Appliqué | Le HTML n'est parsé qu'une seule fois au lieu de multiples traversées DOM. |
-| **OPT-3** | Cache `WeakMap` des Styles Inline | ✅ Appliqué | Élimine les parsings répétés d'attributs `style="..."` sur les nœuds du DOM. Libération automatique par V8 GC sans fuite mémoire. |
-| **OPT-4** | Cache LRU de Mesure de Texte (`TextMeasureCache`) | ✅ Appliqué | Évite les ré-exécutions coûteuses de `doc.heightOfString()` sur des textes identiques (borné à 512 entrées). |
-| **OPT-5** | Pré-compilation des Regex Module-Level | ✅ Appliqué | Supprime la re-compilation de regex dans les boucles CSS. |
-| **OPT-6** | Hoisting des Sérialisations CSS | ✅ Appliqué | La chaîne CSS d'une règle est sérialisée 1 fois par règle au lieu de N fois par élément. |
-| **OPT-7** | Chargement Parallèle I/O (`Promise.all`) | ✅ Appliqué | Téléchargement parallèle asynchrone des polices `@font-face` et images distantes avec timeouts stricts. |
-| **OPT-8** | Correction du Bug de Concurrence Typographique | ✅ Appliqué | Registre des polices scopé par document (Set thread-safe par génération de PDF). |
-| **OPT-9** | Classe `PageLayout` | ✅ Appliqué | Marges, hauteurs et limites géométriques de page pré-calculées une fois par page. |
-| **OPT-10**| Couverture de Tests >94% | ✅ Appliqué | **94.82% de lignes**, **97.04% de fonctions**, et **>85% sur chaque fichier** (133 tests automatisés et 47 tests manuels). |
-| **OPT-11**| Test d'Endurance Séquentiel (Soak Test) | ✅ Appliqué | 200 PDFs consécutifs exécutés sans dégradation de vitesse ni fuite mémoire Heap (`npm run test:soak`). |
-| **OPT-12**| Transfert Zéro-Copie (`Transferable ArrayBuffers`) | ✅ Appliqué | Transfert binaire IPC instantané sans copie d'octets entre les workers et le thread principal. |
-| **OPT-13**| Offloading Multi-Thread (Worker Pool Élastique) | ✅ Appliqué | **15 000 PDFs** traités en **56.03 s** (~267 PDFs/sec) avec concurrence régulée à 80% CPU (`npm run test:soak:parallel`). |
-| **OPT-14**| Élimination du Double-Rendu Flex/Grid | ✅ Appliqué | Pré-estimation de la hauteur du conteneur flex/grid pour peindre le fond et les bordures en amont, supprimant 100% de la passe de ré-émission des enfants. |
-| **OPT-15**| Pipeline de Tableau à Passe Unique & Mémoïsation | ✅ Appliqué | Fusion des passes de colonnes et lignes en 1 passe, mémoïsation de `textHeight`, `hasComplexChildren` et `badgeTag` dans `CellData`, et hoisting du parsing CSS de ligne/section. |
-| **OPT-16**| Cache de Style par Chaîne & Parsing Numérique Direct | ✅ Appliqué | Cache LRU `_parsedStringStyleCache` pour les attributs `style="..."` identiques, et élimination des regex au profit de `parseFloat` natif rapide. |
-| **OPT-17**| Mémoïsation LRU des Règles CSS & Sortie Anticipée | ✅ Appliqué | Caches LRU pour `parseCssRules`, `parsePageRule` et `parseFontFaces` évitant le re-parsing CSS sur documents récurrents, avec sortie immédiate si 0 règle. |
-| **OPT-18**| Cache Typographique Optimisé & Clé Compacte | ✅ Appliqué | Hachage compact des clés et éviction O(1) pour éliminer le thrashing sans surcoût mémoire sur charges extrêmes. |
-| **OPT-19**| Fast-Path Plain-Text Header/Footer & Cache Layout | ✅ Appliqué | Détection du texte brut dans `renderHeaderFooterContent` pour court-circuiter Cheerio, et réutilisation de l'instance immuable `PageLayout`. |
-| **OPT-20**| Véritable Transfert Zéro-Copie IPC sans `.slice()` | ✅ Appliqué | Détection du buffer sous-jacent complet dans le worker pour transférer l'ArrayBuffer natif sans duplication mémoire intermédiaire. |
+| Patch | Domaine | Statut | Gain & Description |
+|:---:|---|:---:|---|
+| **01** | Correctness `TextMeasureCache` | ✅ Actif | Clé composite intégrale (`fontFamily\|fontSize\|maxWidth\|lineGap\|text`) et rafraîchissement LRU lors d'un hit. Élimine les collisions sur chaînes de même longueur. |
+| **02** | Cache générique réutilisable `LruCache` | ✅ Actif | Éviction $O(1)$ par double liste chaînée + Map. Remplace les purges destructives `cache.clear()` sur les styles et le CSS, supprimant le cache-thrashing. |
+| **03** | Sélecteurs CSS indexés | ✅ Actif | Indexation des règles CSS par ID (`byId`), classe (`byClass`), balise (`byTag`) et sélecteurs complexes. Résolution en une seule passe DOM ($O(nodes)$ au lieu de $O(rules \times nodes)$). |
+| **04** | Cache d'actifs inter-PDF | ✅ Actif | `AssetCache` partagé avec déduplication des requêtes distantes en vol (*promise coalescing*). Les polices et images récurrentes ne sont téléchargées et décodées qu'une seule fois. |
+| **05** | Sommes préfixes de tableau en $O(1)$ | ✅ Actif | Calcul instantané des positions et largeurs de colonnes (`columnX`) et hauteurs de lignes (`rowPrefix`). Supprime les `.slice().reduce()` répétitifs dans les grands tableaux (ex: 1 000 lignes × 10 colonnes en ~378 ms). |
+| **06** | Mémoïsation du layout (`estimateElementHeight`) | ✅ Actif | Cache `WeakMap` de layout (`LayoutMeasurementCache`) associant élément DOM et contraintes de largeur pour court-circuiter les ré-estimations dans les conteneurs flex/grid. |
+| **07** | Indexation directe des polices | ✅ Actif | Indexation normalisée `family\|bold\|italic` dans `_aliasDirectIndex`. Résolution des variantes typographiques en $O(1)$ direct sans scan linéaire de `Set`. |
+| **08** | Bounded Backpressure & File bornée | ✅ Actif | `maxQueueSize` configurable (défaut `maxWorkers * 2`). En cas de surcharge, rejet immédiat avec `WorkerPoolBusyError` sans fuite mémoire ni tâche pendante. |
+| **09** | Seuil de workers chauds (`minWorkers`) | ✅ Actif | Maintien d'un plancher de threads chauds pré-initialisés pour éliminer la latence de démarrage à froid sur les requêtes initiales. |
+| **10** | Profilage par phase sans surcoût | ✅ Actif | Déclenchable via `debug: true` (ou `verbose: true` / `logLevel: 'DEBUG'`) pour afficher le log `[Sondes Profilage]`, ou via `profiling: true` et `onProfile(timings)` pour inspection programmatique. Zéro surcoût au repos. |
+| **11** | Matrice de benchmark étendue | ✅ Actif | Fixtures complètes dans `bench/benchmark.ts` (CSS scale, typographie répétée vs unique, tables massives, deep layout, matrices de concurrence 1 à 16). |
+| **12** | Documentation automatisée des performances | ✅ Actif | Génération dynamique de `docs/benchmark.md` avec horodatage, hash git, version exacte et caractéristiques matérielles. |
 
 ---
 
@@ -39,34 +31,35 @@ Pour consulter les mesures détaillées et actualisées sur machine physique, r�
 
 ### Synthèse des Débits par Document (Mono-Thread) :
 
-| Document / Modèle | Latence Moyenne | Débit Approximatif |
-|---|:---:|:---:|
-| **Certificat Paysage (A4)** | ~11.8 ms | **~85 docs / seconde** |
-| **Facture Professionnelle (A4)** | ~18.1 ms | **~55 docs / seconde** |
-| **Catalogue Produit (A4)** | ~21.2 ms | **~47 docs / seconde** |
-| **Rapport Éditorial (A4)** | ~25.6 ms | **~39 docs / seconde** |
-| **Dashboard Analytique (A4)** | ~26.1 ms | **~38 docs / seconde** |
-| **Document Texte Multi-pages (80 par.)** | ~29.1 ms | **~34 docs / seconde** |
-| **Grand Tableau (100 lignes × 5 cols)** | ~38.0 ms | **~26 docs / seconde** |
-| **Rapport Complet (Texte + Table + CSS `@page`)** | ~60.5 ms | **~16 docs / seconde** |
+| Document / Modèle | Latence Moyenne | Débit Mesuré | Taille PDF |
+|---|:---:|:---:|:---:|
+| **Certificat Paysage (A4)** | ~13.3 ms | **~75.0 docs / s** | 3.6 KB |
+| **Catalogue Produit (A4)** | ~20.2 ms | **~49.4 docs / s** | 5.9 KB |
+| **Facture Professionnelle (A4)** | ~20.9 ms | **~47.8 docs / s** | 4.1 KB |
+| **Rapport Éditorial (A4)** | ~23.9 ms | **~41.8 docs / s** | 5.3 KB |
+| **Table (100 lignes × 5 cols)** | ~26.6 ms | **~37.6 docs / s** | 7.2 KB |
+| **Dashboard Analytique (A4)** | ~29.6 ms | **~33.7 docs / s** | 7.2 KB |
+| **Typography (1000 par. répétés)** | ~105.5 ms | **~9.5 docs / s** | 38.6 KB |
+| **Table Massive (1000 lignes × 10 cols)** | ~378.4 ms | **~2.6 docs / s** | 102.3 KB |
 
 ---
 
-## 🔬 Test d'Endurance Multi-Thread (15 000 PDFs en 56s)
+## 🔬 Scalabilité Multi-Thread (Worker Pool)
 
-Exécution de 15 000 générations de PDF avec le pool de Worker Threads secondaires et *Transferable ArrayBuffers* (`bench/soak-test-15k-parallel.ts`) :
+Exécution concurrente avec le pool de Worker Threads secondaires et *Transferable ArrayBuffers* (`bench/benchmark.ts`) :
 
-- **Throughput Extrême** : **~267 PDFs / seconde** (3.74 ms / PDF en moyenne sous charge massive).
-- **Consommation CPU** : Plafonnée à **80% de la totalité des cœurs** processeur (mode paramétrable).
-- **Stabilité Mémoire (RSS)** : Mémoire RSS régulée à **~20.9 MB** sans explosion mémoire grâce à la queue de concurrence `maxWorkers * 2`.
-- **Auto-Extinction Élastique** : Extinction automatique des workers inactifs après 10s d'inactivité pour restituer la RAM à l'OS.
+- **Throughput de pointe** : **~60.6 PDFs / seconde** sur requêtes simultanées.
+- **Protection contre la surcharge** : Bounded queue avec rejet `WorkerPoolBusyError` au-delà de `maxQueueSize`.
+- **Zéro-Copie Binaire** : Transfert mémoire instantané via `ArrayBuffer.transfer` sans duplication de mémoire.
+- **Plancher de Workers Chauds** : Démarrage instantané dès la 1ère requête via `minWorkers: 2`.
+- **Auto-Extinction Élastique** : Extinction automatique des workers au-dessus du plancher après 10s d'inactivité.
 
 ---
 
 ## 🛠️ Exécuter les Benchmarks
 
 ```bash
-# Benchmark officiel unifié (Mono-Thread, Templates réels, WorkerPool 50 docs)
+# Benchmark officiel unifié (Mono-Thread, Microbenchmarks, Profilage, Concurrence)
 npm run benchmark
 
 # Test d'endurance séquentiel (200 docs)

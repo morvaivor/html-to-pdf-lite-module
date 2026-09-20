@@ -1,6 +1,19 @@
 import { Worker } from 'node:worker_threads';
 import { cpus, availableParallelism } from 'node:os';
+import fs from 'node:fs';
 import type { WorkerPoolStats, WorkerTask, WorkerResponse, PdfGenerateOptions } from '../types.js';
+
+function resolveDefaultWorkerScript(): URL {
+  try {
+    const candidate1 = new URL('./pdfWorker.js', import.meta.url);
+    if (fs.existsSync(candidate1)) return candidate1;
+  } catch {}
+  try {
+    const candidate2 = new URL('./workers/pdfWorker.js', import.meta.url);
+    if (fs.existsSync(candidate2)) return candidate2;
+  } catch {}
+  return new URL('./pdfWorker.js', import.meta.url);
+}
 
 /**
  * Calculates max worker count based on CPU core ratio (default 50% for moderate mode).
@@ -14,19 +27,32 @@ export function calculateMaxWorkers(cpuRatio: number = 0.5, explicitMax: number 
   return Math.max(1, Math.floor(totalCores * ratio));
 }
 
+export class WorkerPoolBusyError extends Error {
+  constructor(message: string = 'Worker pool task queue is full') {
+    super(message);
+    this.name = 'WorkerPoolBusyError';
+  }
+}
+
 export interface WorkerPoolOptions {
   cpuRatio?: number;
   maxWorkers?: number | null;
+  minWorkers?: number;
+  maxQueueSize?: number;
   idleTimeoutMs?: number;
+  workerScript?: URL;
 }
 
 /**
  * Dynamic On-Demand Elastic Worker Thread Pool.
  * Spawns workers dynamically on demand up to maxWorkers, and automatically
- * terminates idle workers after idleTimeoutMs to return memory to the OS.
+ * terminates idle workers after idleTimeoutMs to return memory to the OS,
+ * while maintaining a configurable warm-worker floor (minWorkers).
  */
 export class WorkerPool {
   readonly maxWorkers: number;
+  readonly minWorkers: number;
+  readonly maxQueueSize: number;
   private readonly idleTimeoutMs: number;
   private readonly workerScript: URL;
   private workers: Worker[] = [];
@@ -40,9 +66,17 @@ export class WorkerPool {
   constructor(options: WorkerPoolOptions = {}) {
     const cpuRatio = options.cpuRatio ?? 0.5; // Moderate mode default 50% CPU
     this.maxWorkers = calculateMaxWorkers(cpuRatio, options.maxWorkers);
+    this.minWorkers = Math.min(this.maxWorkers, Math.max(0, options.minWorkers ?? 0));
+    this.maxQueueSize = options.maxQueueSize !== undefined ? options.maxQueueSize : this.maxWorkers * 2;
     this.idleTimeoutMs = options.idleTimeoutMs ?? 10_000; // Auto-terminate idle workers after 10s
-    this.workerScript = new URL('./pdfWorker.js', import.meta.url);
-    // Note: 0 workers created at startup to keep baseline RAM at ~116 MB
+    this.workerScript = options.workerScript ?? resolveDefaultWorkerScript();
+
+    // Pre-spawn warm workers up to minWorkers floor
+    for (let i = 0; i < this.minWorkers; i++) {
+      const worker = this.createWorker();
+      this.freeWorkers.push(worker);
+      this.setIdleTimer(worker);
+    }
   }
 
   private createWorker(): Worker {
@@ -75,6 +109,11 @@ export class WorkerPool {
         }
       }
       this.removeWorker(worker);
+      if (!this.isTerminated && this.workers.length < this.minWorkers) {
+        const replacement = this.createWorker();
+        this.freeWorkers.push(replacement);
+        this.setIdleTimer(replacement);
+      }
     });
 
     this.workers.push(worker);
@@ -86,7 +125,8 @@ export class WorkerPool {
     this.clearIdleTimer(worker);
 
     const timer = setTimeout(() => {
-      if (this.freeWorkers.includes(worker) && this.taskQueue.length === 0) {
+      // Retain warm-worker floor: only terminate if worker count exceeds minWorkers
+      if (this.freeWorkers.includes(worker) && this.taskQueue.length === 0 && this.workers.length > this.minWorkers) {
         this.removeWorker(worker);
       }
     }, this.idleTimeoutMs);
@@ -143,6 +183,12 @@ export class WorkerPool {
       return Promise.reject(new Error('WorkerPool is terminated'));
     }
 
+    if (this.maxQueueSize > 0 && this.taskQueue.length >= this.maxQueueSize) {
+      return Promise.reject(
+        new WorkerPoolBusyError(`Worker pool task queue is full (${this.taskQueue.length}/${this.maxQueueSize})`),
+      );
+    }
+
     return new Promise<Buffer>((resolve, reject) => {
       const id = this.nextTaskId++;
       this.taskQueue.push({ id, html, options, resolve, reject });
@@ -157,12 +203,17 @@ export class WorkerPool {
       activeTasks: this.activeTasks.size,
       queuedTasks: this.taskQueue.length,
       maxWorkers: this.maxWorkers,
+      minWorkers: this.minWorkers,
+      maxQueueSize: this.maxQueueSize,
     };
   }
 
   async terminate(): Promise<void> {
     this.isTerminated = true;
-    this.taskQueue.length = 0;
+    while (this.taskQueue.length > 0) {
+      const task = this.taskQueue.shift();
+      task?.reject(new Error('WorkerPool is terminated'));
+    }
     for (const timer of this.idleTimers.values()) {
       clearTimeout(timer);
     }

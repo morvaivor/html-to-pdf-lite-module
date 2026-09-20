@@ -32,6 +32,8 @@ export interface WorkerPoolStats {
   readonly activeTasks: number;
   readonly queuedTasks: number;
   readonly maxWorkers: number;
+  readonly minWorkers?: number;
+  readonly maxQueueSize?: number;
 }
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'NONE';
@@ -49,6 +51,10 @@ export interface PdfGeneratorConfig {
   readonly cpuRatio?: number;
   /** Explicit max worker count override */
   readonly maxWorkers?: number;
+  /** Pre-warmed worker thread floor (default 0) */
+  readonly minWorkers?: number;
+  /** Maximum task queue size before rejecting tasks with WorkerPoolBusyError (default maxWorkers * 2) */
+  readonly maxQueueSize?: number;
   /** Auto-terminate idle workers after idleTimeoutMs (default 10000 ms) */
   readonly idleTimeoutMs?: number;
   /** Allowed local/internal IPs, CIDR ranges, or hostnames for loading remote resources (SSRF allowlist) */
@@ -63,6 +69,21 @@ export interface PdfGeneratorConfig {
   readonly logFile?: string;
   /** Whether CSS loading errors should throw instead of continuing with a WARN (default false) */
   readonly strictCss?: boolean;
+  /** Enable debug mode (activates DEBUG logging and detailed profiling probes) */
+  readonly debug?: boolean;
+  /** Enable phase-level performance profiling */
+  readonly profiling?: boolean;
+  /** Callback to receive phase-level timings when profiling is enabled */
+  readonly onProfile?: (timings: ProfilingTimings) => void;
+}
+
+export interface ProfilingTimings {
+  readonly parseHtmlMs: number;
+  readonly cssMs: number;
+  readonly fontRegisterMs: number;
+  readonly layoutRenderMs: number;
+  readonly pdfAssemblyMs: number;
+  readonly totalMs: number;
 }
 
 export interface PdfGenerateOptions {
@@ -84,6 +105,12 @@ export interface PdfGenerateOptions {
   readonly logFile?: string;
   /** Whether CSS loading errors should throw instead of continuing with a WARN (default false) */
   readonly strictCss?: boolean;
+  /** Enable debug mode (activates DEBUG logging and detailed profiling probes) */
+  readonly debug?: boolean;
+  /** Enable phase-level performance profiling */
+  readonly profiling?: boolean;
+  /** Callback to receive phase-level timings when profiling is enabled */
+  readonly onProfile?: (timings: ProfilingTimings) => void;
 }
 
 // ─── Internal Interfaces ───

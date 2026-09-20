@@ -9,6 +9,7 @@ import type {
   Orientation,
   PaperFormat,
   LogLevel,
+  ProfilingTimings,
 } from './types.js';
 
 const DEFAULT_FORMAT: PaperFormat = 'A4';
@@ -30,6 +31,8 @@ interface ResolvedConfig {
   readonly useWorkerPool: boolean;
   readonly cpuRatio: number;
   readonly maxWorkers: number | null;
+  readonly minWorkers: number;
+  readonly maxQueueSize?: number;
   readonly idleTimeoutMs: number;
   readonly allowedLocalIps?: readonly string[];
   readonly allowedCssIps?: readonly string[];
@@ -37,6 +40,9 @@ interface ResolvedConfig {
   readonly logLevel?: LogLevel;
   readonly logFile?: string;
   readonly strictCss?: boolean;
+  readonly debug?: boolean;
+  readonly profiling?: boolean;
+  readonly onProfile?: (timings: ProfilingTimings) => void;
 }
 
 export class PdfGenerator {
@@ -54,6 +60,8 @@ export class PdfGenerator {
       useWorkerPool: config.useWorkerPool ?? false,
       cpuRatio: config.cpuRatio ?? 0.5,
       maxWorkers: config.maxWorkers ?? null,
+      minWorkers: config.minWorkers ?? 0,
+      maxQueueSize: config.maxQueueSize,
       idleTimeoutMs: config.idleTimeoutMs ?? 10_000,
       allowedLocalIps: config.allowedLocalIps,
       allowedCssIps: config.allowedCssIps,
@@ -61,12 +69,17 @@ export class PdfGenerator {
       logLevel: config.logLevel,
       logFile: config.logFile,
       strictCss: config.strictCss,
+      debug: config.debug,
+      profiling: config.profiling,
+      onProfile: config.onProfile,
     };
 
     if (this.config.useWorkerPool) {
       this.workerPool = new WorkerPool({
         cpuRatio: this.config.cpuRatio,
         maxWorkers: this.config.maxWorkers,
+        minWorkers: this.config.minWorkers,
+        maxQueueSize: this.config.maxQueueSize,
         idleTimeoutMs: this.config.idleTimeoutMs,
       });
     }
@@ -107,6 +120,9 @@ export class PdfGenerator {
       logLevel: options.logLevel ?? this.config.logLevel,
       logFile: options.logFile ?? this.config.logFile,
       strictCss: options.strictCss ?? this.config.strictCss,
+      debug: options.debug ?? this.config.debug,
+      profiling: options.profiling ?? this.config.profiling,
+      onProfile: options.onProfile ?? this.config.onProfile,
     };
 
     if (this.workerPool) {

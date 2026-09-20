@@ -1,4 +1,4 @@
-# 🚀 HTML to PDF Lite Module (`pdf-generator`) — v2.1.0
+# 🚀 HTML to PDF Lite Module (`pdf-generator`) — v2.3.0
 
 > Moteur minimal, ultra-performant et modulaire de génération HTML → PDF sous Node.js (≥ 18.18.0, incluant Node.js 20, 22 et 24) sans dépendance headless lourde (Puppeteer/Playwright).
 > Développé en **TypeScript strict** et propulsé par la stack **OXC (The JavaScript Oxidation Compiler)** : `tsdown`, `oxlint`, `oxfmt`.
@@ -12,13 +12,14 @@
   - **SSRF Shield** : Blocage préventif des réseaux privés, IPs locales et endpoints de métadonnées cloud (AWS, GCP, Azure).
   - **Path Traversal Protection** : Résolution sécurisée bornée au répertoire de travail (`process.cwd()`).
   - **Déni de Service (DoS/OOM)** : Quotas de taille stricts (50 Mo HTTP, 10 Mo base64) et timeouts réseau (30s).
-- **⚡ Débit Extrême (~250-270 PDFs / sec)** : Traitement multi-thread déporté via `WorkerPool`.
-- **🛡️ RAM Élastique à la Demande** : **0 worker au repos** (~116 MB résiduel). Extinction automatique des threads inactifs après 10s pour rendre la mémoire à l'OS.
+- **⚡ Débit & Scalabilité Multi-Thread** : Traitement déporté via `WorkerPool` avec régulation de file (`maxQueueSize`, `WorkerPoolBusyError`) et plancher de threads chauds (`minWorkers`).
+- **🛡️ RAM Élastique & Bounded Backpressure** : Auto-extinction des workers inactifs après 10s pour rendre la mémoire à l'OS, et rejet immédiat en cas de saturation.
 - **🔄 Transfert Zéro-Copie (`ArrayBuffer.transfer` / `Transferable`)** : Aucun surcoût de sérialisation ou duplication mémoire lors du transfert inter-thread des flux PDF.
 - **⚙️ Offloading CPU Réglable (Défaut 50% CPU)** : Allocation dynamique de worker threads secondaires avec limitation CPU pour préserver l'Event Loop de votre serveur HTTP.
 - **🎯 AsyncDisposable (`await using`)** : Gestion moderne du cycle de vie des ressources (standard natif Node.js ≥ 22 & Node.js 24).
-- **🧠 Caches Optimisés (`WeakMap` & LRU)** : Caches de calculs typographiques et de styles CSS sans fuite mémoire.
-- **✅ Qualité & Conformité** : **133 tests automatisés** (couverture >94% de lignes et >85% sur chaque fichier), 47 tests manuels, typage strict (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`).
+- **🧠 Caches Optimisés (LRU $O(1)$ & WeakMap)** : Éviction LRU sans purge destructive, indexation CSS $O(1)$, cache d'actifs inter-PDF (`AssetCache`), sommes préfixes pour tableaux géants et index direct des polices.
+- **⏱️ Profilage par Phase Intégré** : Mesure non intrusive (`profiling: true`) des phases DOM, CSS, polices, layout et PDFKit avec zéro surcoût au repos.
+- **✅ Qualité & Conformité** : Tests unitaires complets pour chaque patch d'optimisation, 47 tests d'intégration, typage strict (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`).
 
 ---
 
@@ -255,23 +256,28 @@ console.log(generator.getWorkerStats());
 | `useWorkerPool` | `boolean` | `false` | Active le Worker Thread Pool à la demande |
 | `cpuRatio` | `number` | `0.5` | Ratio maximal de cœurs CPU utilisés (0.5 = 50% CPU) |
 | `maxWorkers` | `number` | `null` | Nombre d'unités d'exécution secondaires explicites |
-| `idleTimeoutMs` | `number` | `10000` | Délai avant auto-extinction des workers inactifs (ms) |
+| `minWorkers` | `number` | `0` | Plancher de workers chauds pré-démarrés maintenus en mémoire |
+| `maxQueueSize` | `number` | `maxWorkers * 2` | Taille maximale de la file d'attente avant rejet immédiat (`WorkerPoolBusyError`) |
+| `idleTimeoutMs` | `number` | `10000` | Délai avant auto-extinction des workers inactifs au-delà de `minWorkers` (ms) |
 | `allowedLocalIps` | `readonly string[]` | `undefined` | Liste d'adresses IP / plages CIDR locales autorisées (ex: `['192.168.1.50', '10.0.0.0/24']`) |
 | `allowedCssIps` | `readonly string[]` | `undefined` | Adresses IP locales autorisées spécifiquement pour le chargement du CSS |
 | `verbose` | `boolean \| LogLevel` | `false` | Active le mode verbose (`true` = DEBUG, ou niveau spécifique) |
 | `logLevel` | `'ERROR' \| 'WARN' \| 'INFO' \| 'DEBUG' \| 'NONE'` | `'NONE'` | Niveau explicite de journalisation |
 | `logFile` | `string` | `undefined` | Chemin du fichier où écrire les logs en plus de la sortie console |
 | `strictCss` | `boolean` | `false` | Si `true`, lève une erreur sur échec CSS au lieu d'avertir et continuer |
+| `debug` | `boolean` | `false` | Active le mode débug complet (logs DEBUG + sondes de profilage détaillées par phase) |
+| `profiling` | `boolean` | `false` | Active l'instrumentation de profilage par phase (parse, CSS, polices, layout, PDFKit) |
+| `onProfile` | `(timings: ProfilingTimings) => void` | `undefined` | Callback recevant les durées précises en millisecondes de chaque phase |
 
 ---
 
-### 📝 Mode Verbose & Niveaux de Log Natifs
+### 📝 Mode Verbose, Débug & Sondes de Profilage
 
-Le moteur intègre un système de logging **100% natif Node.js** (sans dépendance externe), avec colorisation ANSI et écriture simultanée optionnelle dans un fichier :
+Le moteur intègre un système de logging et de diagnostic **100% natif Node.js** (sans dépendance externe), avec colorisation ANSI et écriture simultanée optionnelle dans un fichier :
 
 ```typescript
 const generator = createPdfGenerator({
-  verbose: true, // ou 'INFO', 'WARN', 'ERROR', 'DEBUG'
+  debug: true, // Active les logs DEBUG et les sondes de profilage par phase
   logFile: './logs/generation.log', // Fichier de log optionnel (texte brut sans codes ANSI)
 });
 ```
@@ -280,7 +286,10 @@ const generator = createPdfGenerator({
 - **`ERROR` (Rouge)** : Échec critique de construction du PDF (`Echec de construction du pdf : ...`).
 - **`WARN` (Orange)** : Erreur de chargement d'une feuille de style CSS (`Erreur de chargement du CSS depuis ...`).
 - **`INFO` (Vert)** : Notification de début et de fin de tâche avec durée d'exécution.
-- **`DEBUG` (Bleu)** : Origine du CSS chargé (`<style>`, `<link>`, URL, `@import`), taille du HTML et temps de production.
+- **`DEBUG` (Bleu)** : Origine du CSS chargé (`<style>`, `<link>`, URL, `@import`), taille du HTML, temps total et **sondes de profilage détaillées** :
+  ```text
+  [DEBUG] [Sondes Profilage] HTML: 1.54 ms (6.5%) | CSS: 0.58 ms (2.5%) | Polices: 0.02 ms (0.1%) | Layout & Rendu: 18.36 ms (77.6%) | Assemblage PDF: 0.30 ms (1.3%) | Total: 23.65 ms
+  ```
 
 ## 🎨 Fonctionnalités HTML & CSS Supportées
 

@@ -25,6 +25,15 @@ describe('Logger unit tests', () => {
     assert.equal(logger.isEnabledFor('DEBUG'), true);
   });
 
+  test('debug: true activates DEBUG level', () => {
+    const logger = createLogger({ debug: true });
+    assert.equal(logger.level, 'DEBUG');
+    assert.equal(logger.isEnabledFor('ERROR'), true);
+    assert.equal(logger.isEnabledFor('WARN'), true);
+    assert.equal(logger.isEnabledFor('INFO'), true);
+    assert.equal(logger.isEnabledFor('DEBUG'), true);
+  });
+
   test('respects specific levels (ERROR, WARN, INFO, DEBUG)', () => {
     const errorLogger = createLogger({ verbose: 'ERROR' });
     assert.equal(errorLogger.level, 'ERROR');
