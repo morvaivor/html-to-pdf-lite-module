@@ -1,7 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import { cpus, availableParallelism } from 'node:os';
 import fs from 'node:fs';
-import type { WorkerPoolStats, WorkerTask, WorkerResponse, PdfGenerateOptions } from '../types.js';
+import type { WorkerPoolStats, WorkerTask, WorkerResponse, PdfGenerateOptions, GpuStats } from '../types.js';
 
 function resolveDefaultWorkerScript(): URL {
   try {
@@ -43,6 +43,17 @@ export interface WorkerPoolOptions {
   workerScript?: URL;
 }
 
+interface MutableGpuStats {
+  available: boolean;
+  adapterName: string | null;
+  tablesProcessedGpu: number;
+  tablesProcessedCpu: number;
+  gpuKernelTimeMs: number;
+  gpuUploadTimeMs: number;
+  gpuReadbackTimeMs: number;
+  fallbacks: number;
+}
+
 /**
  * Dynamic On-Demand Elastic Worker Thread Pool.
  * Spawns workers dynamically on demand up to maxWorkers, and automatically
@@ -62,6 +73,16 @@ export class WorkerPool {
   private nextTaskId: number = 1;
   private readonly activeTasks: Map<number, WorkerTask> = new Map();
   private isTerminated: boolean = false;
+  private readonly poolGpuStats: MutableGpuStats = {
+    available: false,
+    adapterName: null,
+    tablesProcessedGpu: 0,
+    tablesProcessedCpu: 0,
+    gpuKernelTimeMs: 0,
+    gpuUploadTimeMs: 0,
+    gpuReadbackTimeMs: 0,
+    fallbacks: 0,
+  };
 
   constructor(options: WorkerPoolOptions = {}) {
     const cpuRatio = options.cpuRatio ?? 0.5; // Moderate mode default 50% CPU
@@ -89,6 +110,24 @@ export class WorkerPool {
       if (task) {
         this.activeTasks.delete(id);
         if (success && 'result' in response) {
+          if (response.gpuStats) {
+            const gs = response.gpuStats;
+            this.poolGpuStats.available = this.poolGpuStats.available || gs.available;
+            if (gs.adapterName) this.poolGpuStats.adapterName = gs.adapterName;
+            this.poolGpuStats.tablesProcessedGpu += gs.tablesProcessedGpu;
+            this.poolGpuStats.tablesProcessedCpu += gs.tablesProcessedCpu;
+            this.poolGpuStats.gpuKernelTimeMs += gs.gpuKernelTimeMs;
+            this.poolGpuStats.gpuUploadTimeMs += gs.gpuUploadTimeMs;
+            this.poolGpuStats.gpuReadbackTimeMs += gs.gpuReadbackTimeMs;
+            this.poolGpuStats.fallbacks += gs.fallbacks;
+          }
+          if (response.profilingTimings && task.options.onProfile) {
+            try {
+              task.options.onProfile(response.profilingTimings);
+            } catch {
+              // Ignore profiling callback error
+            }
+          }
           // Zero-Copy conversion from ArrayBuffer to Buffer
           task.resolve(Buffer.from(response.result));
         } else if (!success && 'error' in response) {
@@ -206,6 +245,10 @@ export class WorkerPool {
       minWorkers: this.minWorkers,
       maxQueueSize: this.maxQueueSize,
     };
+  }
+
+  getGpuStats(): GpuStats {
+    return { ...this.poolGpuStats };
   }
 
   async terminate(): Promise<void> {

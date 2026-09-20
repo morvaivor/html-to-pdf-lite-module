@@ -10,7 +10,10 @@ import type {
   PaperFormat,
   LogLevel,
   ProfilingTimings,
+  GpuMode,
+  GpuStats,
 } from './types.js';
+import { gpuAccelerator } from './gpu/gpuAccelerator.js';
 
 const DEFAULT_FORMAT: PaperFormat = 'A4';
 const DEFAULT_ORIENTATION: Orientation = 'portrait';
@@ -43,6 +46,7 @@ interface ResolvedConfig {
   readonly debug?: boolean;
   readonly profiling?: boolean;
   readonly onProfile?: (timings: ProfilingTimings) => void;
+  readonly gpu?: GpuMode;
 }
 
 export class PdfGenerator {
@@ -72,6 +76,7 @@ export class PdfGenerator {
       debug: config.debug,
       profiling: config.profiling,
       onProfile: config.onProfile,
+      gpu: config.gpu ?? 'auto',
     };
 
     if (this.config.useWorkerPool) {
@@ -102,6 +107,16 @@ export class PdfGenerator {
     return this.workerPool.getStats();
   }
 
+  /**
+   * Returns current telemetry and statistics of the WebGPU acceleration engine.
+   */
+  getGpuStats(): GpuStats {
+    if (this.workerPool) {
+      return this.workerPool.getGpuStats();
+    }
+    return gpuAccelerator.getStats();
+  }
+
   async generate(html: string, options: PdfGenerateOptions = {}): Promise<Buffer> {
     const mergedOptions: PdfGenerateOptions = {
       format: options.format ?? this.config.defaultFormat,
@@ -123,6 +138,7 @@ export class PdfGenerator {
       debug: options.debug ?? this.config.debug,
       profiling: options.profiling ?? this.config.profiling,
       onProfile: options.onProfile ?? this.config.onProfile,
+      gpu: options.gpu ?? this.config.gpu,
     };
 
     if (this.workerPool) {

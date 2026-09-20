@@ -37,6 +37,18 @@ export interface WorkerPoolStats {
 }
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'NONE';
+export type GpuMode = boolean | 'auto';
+
+export interface GpuStats {
+  readonly available: boolean;
+  readonly adapterName: string | null;
+  readonly tablesProcessedGpu: number;
+  readonly tablesProcessedCpu: number;
+  readonly gpuKernelTimeMs: number;
+  readonly gpuUploadTimeMs: number;
+  readonly gpuReadbackTimeMs: number;
+  readonly fallbacks: number;
+}
 
 export interface PdfGeneratorConfig {
   readonly defaultFormat?: PaperFormat | (string & {});
@@ -75,6 +87,8 @@ export interface PdfGeneratorConfig {
   readonly profiling?: boolean;
   /** Callback to receive phase-level timings when profiling is enabled */
   readonly onProfile?: (timings: ProfilingTimings) => void;
+  /** WebGPU compute shader acceleration mode ('auto', true, or false) */
+  readonly gpu?: GpuMode;
 }
 
 export interface ProfilingTimings {
@@ -111,6 +125,8 @@ export interface PdfGenerateOptions {
   readonly profiling?: boolean;
   /** Callback to receive phase-level timings when profiling is enabled */
   readonly onProfile?: (timings: ProfilingTimings) => void;
+  /** WebGPU compute shader acceleration mode ('auto', true, or false) */
+  readonly gpu?: GpuMode;
 }
 
 // ─── Internal Interfaces ───
@@ -220,5 +236,11 @@ export interface WorkerMessage {
 
 /** Response from the worker thread — discriminated union on `success` */
 export type WorkerResponse =
-  | { readonly id: number; readonly success: true; readonly result: ArrayBuffer }
+  | {
+      readonly id: number;
+      readonly success: true;
+      readonly result: ArrayBuffer;
+      readonly gpuStats?: GpuStats;
+      readonly profilingTimings?: ProfilingTimings;
+    }
   | { readonly id: number; readonly success: false; readonly error: string };
