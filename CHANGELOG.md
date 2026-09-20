@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) or [Release Please](https://github.com/googleapis/release-please) for automated commit specifications.
 
+## [2.5.0](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.4.0...v2.5.0) - 2026-09-20
+
+### 🚀 Features
+- mise à jour des workflows CI/CD, suppression de la gestion automatisée des versions et des benchmarks ([d2b562d](https://github.com/morvaivor/html-to-pdf-lite-module/commit/d2b562d84f79c062fafc0eee3c20f3bc91104959))
+- **gpu**: implement WebGPU-based table row height reduction ([d77c973](https://github.com/morvaivor/html-to-pdf-lite-module/commit/d77c973d279f541e439742be73f876c29ad31c6c))
+- implement AssetCache for cross-PDF asset caching with LRU eviction and request coalescing ([5074620](https://github.com/morvaivor/html-to-pdf-lite-module/commit/50746209d19f19d1be118f1c0c7583553c944957))
+- **changelog**: add manual changelog generator and optimization patch plan ([8fe9ab8](https://github.com/morvaivor/html-to-pdf-lite-module/commit/8fe9ab8b427c964db791ae7d811df34422e183f1))
+
 ## [2.4.0](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.2.0...v2.4.0) - 2026-09-20
 
 ### 🚀 Features
