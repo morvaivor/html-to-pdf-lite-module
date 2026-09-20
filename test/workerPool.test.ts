@@ -52,6 +52,7 @@ describe('WorkerPool & Elastic On-Demand Scaling', () => {
     const generator = createPdfGenerator({
       useWorkerPool: true,
       cpuRatio: 0.5,
+      maxQueueSize: 50,
     });
 
     const tasks = Array.from({ length: 10 }, (_, i) =>

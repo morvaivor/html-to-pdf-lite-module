@@ -65,7 +65,7 @@ export interface PdfGeneratorConfig {
   readonly maxWorkers?: number;
   /** Pre-warmed worker thread floor (default 0) */
   readonly minWorkers?: number;
-  /** Maximum task queue size before rejecting tasks with WorkerPoolBusyError (default maxWorkers * 2) */
+  /** Maximum task queue size before rejecting tasks with WorkerPoolBusyError (default max(64, maxWorkers * 4)) */
   readonly maxQueueSize?: number;
   /** Auto-terminate idle workers after idleTimeoutMs (default 10000 ms) */
   readonly idleTimeoutMs?: number;

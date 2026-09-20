@@ -88,7 +88,7 @@ export class WorkerPool {
     const cpuRatio = options.cpuRatio ?? 0.5; // Moderate mode default 50% CPU
     this.maxWorkers = calculateMaxWorkers(cpuRatio, options.maxWorkers);
     this.minWorkers = Math.min(this.maxWorkers, Math.max(0, options.minWorkers ?? 0));
-    this.maxQueueSize = options.maxQueueSize !== undefined ? options.maxQueueSize : this.maxWorkers * 2;
+    this.maxQueueSize = options.maxQueueSize !== undefined ? options.maxQueueSize : Math.max(64, this.maxWorkers * 4);
     this.idleTimeoutMs = options.idleTimeoutMs ?? 10_000; // Auto-terminate idle workers after 10s
     this.workerScript = options.workerScript ?? resolveDefaultWorkerScript();
 
