@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) or [Release Please](https://github.com/googleapis/release-please) for automated commit specifications.
 
+## [2.6.1](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.6.0...v2.6.1) - 2026-09-22
+
+### 🐛 Bug Fixes
+- mise à jour de la branche dans le rapport de métadonnées et restriction pages sur main ([8e0966f](https://github.com/morvaivor/html-to-pdf-lite-module/commit/8e0966f89db8f410c9e8c6bf5b38648c713b2a82))
+
 ## [2.6.0](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.5.0...v2.6.0) - 2026-09-22
 
 ### 🚀 Features
