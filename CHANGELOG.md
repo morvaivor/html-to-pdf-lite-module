@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) or [Release Please](https://github.com/googleapis/release-please) for automated commit specifications.
 
+## [2.6.0](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.5.0...v2.6.0) - 2026-09-22
+
+### 🚀 Features
+- **core**: single-pass layout, streaming pdf, formule ssqi et durcissement zero-trust ([#18](https://github.com/morvaivor/html-to-pdf-lite-module/pull/18)) ([fd4d3ad](https://github.com/morvaivor/html-to-pdf-lite-module/commit/fd4d3ad96d6085fdc47103e13ebebc826cf0131a))
+
 ## [2.5.0](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.4.0...v2.5.0) - 2026-09-20
 
 ### 🚀 Features
