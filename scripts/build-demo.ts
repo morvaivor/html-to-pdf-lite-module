@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync, copyFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { execSync } from 'node:child_process';
 import { createPdfGenerator, verifyRenderingQuality } from '../src/index.js';
 
 interface TemplateConfig {
@@ -119,15 +120,33 @@ async function buildDemo(): Promise<void> {
   mkdirSync(pdfsOutDir, { recursive: true });
   mkdirSync(testPdfsOutDir, { recursive: true });
 
+  // Detect Git branch and commit
+  let branch = 'main';
+  try {
+    branch =
+      process.env.GITHUB_HEAD_REF ||
+      process.env.GITHUB_REF_NAME ||
+      execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+  } catch {}
+
+  let commit = 'unknown';
+  try {
+    commit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+  } catch {}
+
   // 2. Copy static site assets
   console.log('📦 Copie des fichiers d\'interface (site statique)...');
-  copyFileSync('demo/site/index.html', join(outDir, 'index.html'));
+  let indexHtml = readFileSync('demo/site/index.html', 'utf8');
+  indexHtml = indexHtml
+    .replace(/<span id="branch-name">[^<]*<\/span>/, `<span id="branch-name">${branch}</span>`)
+    .replace(/sur la branche active <b>[^<]*<\/b>/, `sur la branche active <b>${branch}</b>`);
+  writeFileSync(join(outDir, 'index.html'), indexHtml, 'utf8');
   copyFileSync('demo/site/styles.css', join(outDir, 'styles.css'));
   copyFileSync('demo/site/app.js', join(outDir, 'app.js'));
 
   // Add .nojekyll for GitHub Pages
   writeFileSync(join(outDir, '.nojekyll'), '');
-  console.log('   ✔ Fichiers site copiés + .nojekyll généré\n');
+  console.log(`   ✔ Fichiers site copiés (branche: ${branch} @ ${commit}) + .nojekyll généré\n`);
 
   // 3. Process each template & generate PDFs
   const generator = createPdfGenerator();
@@ -203,14 +222,16 @@ async function buildDemo(): Promise<void> {
 
   // 5. Generate metadata manifest
   const report = {
-    branch: 'feat/test-github-io',
+    branch,
+    commit,
     generatedAt: new Date().toISOString(),
-    totalIntegrationTests: 45,
-    totalUnitTests: 85,
+    totalIntegrationTests: 47,
+    totalUnitTests: 217,
     demonstrationExamples: manifest,
     testFiles: testMap,
   };
   writeFileSync(join(outDir, 'test-results.json'), JSON.stringify(report, null, 2));
+  console.log(`   ✔ Manifeste de métadonnées généré (branche: ${branch}, commit: ${commit})`);
 
   console.log('\n====================================================');
   console.log('  ✨ Démo prête pour GitHub Pages dans ./dist-demo !');

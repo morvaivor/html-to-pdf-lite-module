@@ -143,6 +143,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     const res = await fetch('test-results.json');
     if (res.ok) {
       const data = await res.json();
+      if (data.branch) {
+        const branchEl = document.getElementById('branch-name');
+        if (branchEl) branchEl.textContent = data.branch;
+        const branchTextEl = document.getElementById('branch-text');
+        if (branchTextEl) branchTextEl.textContent = data.branch;
+      }
+      if (data.totalIntegrationTests) {
+        const totalPassedEl = document.getElementById('stat-total-passed');
+        if (totalPassedEl) totalPassedEl.textContent = `${data.totalIntegrationTests} / ${data.totalIntegrationTests}`;
+      }
+      if (data.totalUnitTests) {
+        const unitPassedEl = document.getElementById('stat-unit-passed');
+        if (unitPassedEl) unitPassedEl.textContent = `${data.totalUnitTests} / ${data.totalUnitTests}`;
+      }
       if (data.testFiles) {
         TEST_CASES.forEach((tc) => {
           if (data.testFiles[tc.id]) {

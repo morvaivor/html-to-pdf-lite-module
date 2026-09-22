@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 
 const scriptFile = fileURLToPath(import.meta.url);
 const scriptDir = path.dirname(scriptFile);
@@ -86,9 +87,20 @@ async function runVolet1Benchmarks() {
   const cpuModel = cpus[0]?.model ?? 'Inconnu';
   const cpuCount = cpus.length;
 
+  let gitCommit = 'unknown';
+  let gitBranch = 'unknown';
+  try {
+    gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    gitBranch =
+      process.env.GITHUB_HEAD_REF ||
+      process.env.GITHUB_REF_NAME ||
+      execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+  } catch {}
+
   console.log('================================================================================');
-  console.log('🚀 BENCHMARK COMPARATIF : VOLET 1 (INNOVATIONS DE PRODUCTION PDF)');
+  console.log(`🚀 BENCHMARK COMPARATIF : VOLET 1 (INNOVATIONS DE PRODUCTION PDF) [${gitBranch}#${gitCommit}]`);
   console.log('================================================================================');
+  console.log(`📌 Branche    : ${gitBranch} (Commit: ${gitCommit})`);
   console.log(`📌 Processeur : ${cpuModel} (${cpuCount} threads)`);
   console.log(`📌 Node.js    : ${process.version} | ${os.type()} ${os.arch()}\n`);
 

@@ -267,15 +267,20 @@ async function runBenchmarks() {
   const cpuCount = cpus.length;
 
   let gitCommit = 'unknown';
+  let gitBranch = 'unknown';
   try {
     gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    gitBranch =
+      process.env.GITHUB_HEAD_REF ||
+      process.env.GITHUB_REF_NAME ||
+      execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
   } catch {}
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf-8'));
   const version = pkg.version ?? '2.3.0';
 
   console.log('====================================================================');
-  console.log(`🚀 BENCHMARK SUITE : html-to-pdf-lite-module (${version} @ ${gitCommit})`);
+  console.log(`🚀 BENCHMARK SUITE : html-to-pdf-lite-module (${version} @ ${gitBranch}#${gitCommit})`);
   console.log('====================================================================');
   console.log(`📌 Environnement : Node.js ${process.version} | ${os.type()} ${os.arch()}`);
   console.log(`📌 Processeur    : ${cpuModel} (${cpuCount} threads logiques)`);
@@ -745,6 +750,7 @@ async function runBenchmarks() {
     {
       version,
       gitCommit,
+      gitBranch,
       cpuModel,
       cpuCount,
       nodeVersion: process.version,
@@ -765,6 +771,7 @@ function generateBenchmarkReport(
   sysInfo: {
     version: string;
     gitCommit: string;
+    gitBranch: string;
     cpuModel: string;
     cpuCount: number;
     nodeVersion: string;
@@ -788,7 +795,7 @@ function generateBenchmarkReport(
   let md = `# 📊 Rapport de Benchmark & Performances — v${sysInfo.version}
 
 > **Date d'exécution** : ${date}  
-> **Version du module** : \`pdf-generator@${sysInfo.version}\` (Commit: \`${sysInfo.gitCommit}\`)  
+> **Version du module** : \`pdf-generator@${sysInfo.version}\` (Branche: \`${sysInfo.gitBranch}\` @ \`${sysInfo.gitCommit}\`)  
 > **Environnement Système** : Node.js ${sysInfo.nodeVersion} — ${sysInfo.osPlatform}  
 > **Processeur Hôte** : ${sysInfo.cpuModel} (${sysInfo.cpuCount} cœurs logiques)  
 > **Mémoire Système** : ${sysInfo.totalMemoryGb} GB RAM  
