@@ -268,6 +268,27 @@ console.log(generator.getWorkerStats());
 | `debug` | `boolean` | `false` | Active le mode débug complet (logs DEBUG + sondes de profilage détaillées par phase) |
 | `profiling` | `boolean` | `false` | Active l'instrumentation de profilage par phase (parse, CSS, polices, layout, PDFKit) |
 | `onProfile` | `(timings: ProfilingTimings) => void` | `undefined` | Callback recevant les durées précises en millisecondes de chaque phase |
+| `gpu` | `boolean \| 'auto'` | `'auto'` | Accélération native WebGPU compute (seuil automatique $\ge 4096$ cellules avec fallback CPU) |
+
+---
+
+### ⚡ Accélération Native WebGPU (WGSL Headless Compute)
+
+Le moteur intègre un pipeline de calcul GPU natif s'appuyant sur le standard W3C WebGPU et des **Compute Shaders en WGSL** sans aucune interface graphique :
+
+```typescript
+const generator = createPdfGenerator({
+  gpu: 'auto', // Active l'accélération WebGPU pour les grands tableaux (>= 4096 cellules)
+});
+
+// Diagnostic et télémétrie GPU en temps réel
+console.log(generator.getGpuStats());
+// { available: true, adapterName: 'NVIDIA GeForce RTX...', tablesProcessedGpu: 12, ... }
+```
+
+- **0 Dépendance obligatoire** : Détecte nativement `navigator.gpu` (W3C standard) avec bascule CPU 100% transparente en cas d'absence de carte graphique ou de driver compatible.
+- **Seuil d'amortissement PCIe (`GPU_TABLE_MIN_CELLS = 4096`)** : Les tableaux de taille modeste restent sur CPU pour éliminer toute latence de transfert mémoire.
+- **Buffers réutilisables & Zero-Copy** : Mutualisation des allocations VRAM pour un débit maximal sans fuite mémoire.
 
 ---
 
@@ -330,8 +351,11 @@ npm run test:coverage
 # 6. Tests manuels d'intégration (47 scénarios)
 npm test
 
-# 7. Benchmarks
-npm run benchmark
+# 7. Benchmarks & Tests de Charge
+npm run benchmark               # Matrice complète de performance (CSS, typo, layout, WebGPU)
+npm run test:soak:parallel      # Test d'endurance 15 000 documents en flux continu
+npm run test:soak:80k           # Banc d'essai extrême 80 000 tables/PDFs lourds (CPU vs WebGPU)
+npm run test:soak:80k:quick     # Version rapide de validation (1 000 documents lourds)
 ```
 
 ---

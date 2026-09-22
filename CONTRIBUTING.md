@@ -66,14 +66,13 @@ npm run commitlint
 
 ## 🚀 Release Lifecycle & Changelog
 
-1. **Automated Changelog**: Releases are managed automatically via **Release Please** (`googleapis/release-please-action`).
-2. **Release PRs**:
-   - Release Please automatically aggregates commits on `main` and maintains a Release PR.
-   - The Release PR updates `package.json` version and appends to `CHANGELOG.md`.
-3. **Monthly & Manual Execution**:
-   - **Monthly Schedule**: Release PR checks and Dependabot updates execute automatically on a monthly schedule.
-   - **Manual Trigger**: Maintainers can manually trigger a release check anytime via GitHub Actions (`Actions` tab -> `Release & Changelog` -> `Run workflow`).
-4. **Publishing**: Merging the Release PR automatically tags the repository (e.g., `v2.1.0`) and creates the GitHub Release.
+1. **Changelog**: Generated on demand using `npm run changelog` (or previewed via `npm run changelog:check`).
+2. **Version Bump**: Follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
+3. **Release & Tagging**:
+   - Create a release commit: `git commit -am "chore(release): vX.Y.Z"`
+   - Tag the release: `git tag vX.Y.Z`
+   - Push to GitHub: `git push origin main --tags`
+4. **Publishing**: `npm publish` (runs `prepublishOnly` to typecheck and build distribution).
 
 ---
 

@@ -52,6 +52,7 @@ describe('WorkerPool & Elastic On-Demand Scaling', () => {
     const generator = createPdfGenerator({
       useWorkerPool: true,
       cpuRatio: 0.5,
+      maxQueueSize: 50,
     });
 
     const tasks = Array.from({ length: 10 }, (_, i) =>
@@ -77,8 +78,11 @@ describe('WorkerPool & Elastic On-Demand Scaling', () => {
     await generator.generate('<h1>Fast Idle Test</h1>');
     assert.ok(generator.getWorkerStats().totalWorkers >= 1);
 
-    // Wait for idle timeout (100ms + 50ms buffer)
-    await new Promise((r) => setTimeout(r, 200));
+    // Wait for idle timeout with retry polling (avoids timing jitter on slow CI VMs)
+    const deadline = Date.now() + 3000;
+    while (generator.getWorkerStats().totalWorkers > 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
 
     const statsAfterIdle = generator.getWorkerStats();
     assert.equal(statsAfterIdle.totalWorkers, 0);
@@ -86,14 +90,18 @@ describe('WorkerPool & Elastic On-Demand Scaling', () => {
     await generator.terminateWorkerPool();
   });
 
-  test('PdfGenerator supports AsyncDisposable (await using / Symbol.asyncDispose) in Node.js 24', async () => {
-    let statsInside: number = 0;
-    {
-      await using gen = createPdfGenerator({ useWorkerPool: true });
-      const buf = await gen.generate('<h1>AsyncDisposable Test</h1>');
-      assert.ok(buf.toString('latin1').startsWith('%PDF'));
-      statsInside = gen.getWorkerStats().totalWorkers;
-      assert.ok(statsInside >= 1);
-    }
-  });
+  test(
+    'PdfGenerator supports AsyncDisposable (await using / Symbol.asyncDispose) in Node.js 24',
+    { skip: typeof Symbol.asyncDispose !== 'symbol' || parseInt(process.versions.node.split('.')[0] ?? '0', 10) < 24 },
+    async () => {
+      let statsInside: number = 0;
+      {
+        await using gen = createPdfGenerator({ useWorkerPool: true });
+        const buf = await gen.generate('<h1>AsyncDisposable Test</h1>');
+        assert.ok(buf.toString('latin1').startsWith('%PDF'));
+        statsInside = gen.getWorkerStats().totalWorkers;
+        assert.ok(statsInside >= 1);
+      }
+    },
+  );
 });
