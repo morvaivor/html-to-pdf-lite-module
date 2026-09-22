@@ -149,6 +149,19 @@ export class PdfGenerator {
   }
 
   /**
+   * Generates a PDF as a standard Web ReadableStream<Uint8Array> for progressive HTTP streaming.
+   */
+  async generateStream(html: string, options: PdfGenerateOptions = {}): Promise<ReadableStream<Uint8Array>> {
+    const buffer = await this.generate(html, options);
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
+        controller.close();
+      },
+    });
+  }
+
+  /**
    * Audits the rendering quality and fidelity of a generated PDF against the input HTML.
    */
   async auditQuality(html: string, options?: QualityCheckOptions): Promise<QualityAuditResult> {

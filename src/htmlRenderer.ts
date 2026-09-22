@@ -10,8 +10,7 @@ import { renderElement } from './renderers/registry.js';
 import { renderText } from './renderers/textRenderer.js';
 import { renderPageZone, renderHeaderFooterContent } from './renderers/headerFooterRenderer.js';
 import type { PdfGenerateOptions, RenderOptions, TextStyle, ProfilingTimings } from './types.js';
-import type { Cheerio } from 'cheerio';
-import type { AnyNode, Element } from 'domhandler';
+import type { Element } from 'domhandler';
 
 const IMPORT_REGEX = /@import\s+(?:url\(['"]?([^'")]+)['"]?\)|['"]([^'"]+)['"])\s*;/g;
 
@@ -65,53 +64,6 @@ async function resolveCssImports(
   }
 
   return result;
-}
-
-async function countPages(
-  body: Cheerio<AnyNode>,
-  options: RenderOptions,
-  fontAliasSet: Set<string>,
-  imageCache: Map<string, Buffer>,
-  textCache: TextMeasureCache,
-): Promise<number> {
-  const doc = new (PDFDocument as any)({
-    autoFirstPage: false,
-    size: options.format || 'A4',
-    layout: options.orientation || 'portrait',
-    margin: 0,
-    compress: false,
-  });
-
-  await registerFontFaces(doc, options.css, options._fontBufferCache, fontAliasSet, options.allowedLocalIps);
-
-  doc.addPage({
-    size: options.format || 'A4',
-    layout: options.orientation || 'portrait',
-    margin: 0,
-  });
-
-  const layout = new PageLayout(doc, options);
-
-  doc.x = layout.leftMargin;
-  doc.y = layout.contentTop;
-
-  const pageCount = { value: 1 };
-  const originalAddPage = doc.addPage.bind(doc);
-  doc.addPage = function (opts: any = {}) {
-    originalAddPage({ ...opts, margin: 0 });
-    pageCount.value++;
-  };
-
-  const rootStyle: TextStyle = { ...DEFAULT_STYLE };
-  for (const child of body.children().toArray()) {
-    if ((child as any).type === 'tag') {
-      await renderElement(doc, child as Element, rootStyle, options, layout, textCache, fontAliasSet, imageCache);
-    } else if ((child as any).type === 'text' && (child as any).data?.trim()) {
-      renderText(doc, (child as any).data.trim(), rootStyle, options, layout, textCache, fontAliasSet);
-    }
-  }
-
-  return pageCount.value;
 }
 
 export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions = {}): Promise<Buffer> {
@@ -246,18 +198,12 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     const imageCache = new Map<string, Buffer>();
     const textCache = new TextMeasureCache();
 
-    // Conditional two-pass rendering
-    const needsPageCount = Boolean(pageZones && fullCss.includes('counter(num-pages)'));
-    let totalPages = 0;
-    if (needsPageCount) {
-      totalPages = await countPages(body, renderOptions, fontAliasSet, imageCache, textCache);
-    }
-
     const doc = new (PDFDocument as any)({
       autoFirstPage: false,
       size: options.format || 'A4',
       layout: options.orientation || 'portrait',
       margin: 0,
+      bufferPages: true,
     });
 
     const tFontStart = isProfiling ? performance.now() : 0;
@@ -271,7 +217,6 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     const buffers: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => buffers.push(chunk));
 
-    let currentPage = 0;
     let cachedLayout: PageLayout | null = null;
     const getLayout = (): PageLayout => {
       if (cachedLayout && doc.page.width === cachedLayout.pageWidth && doc.page.height === cachedLayout.pageHeight) {
@@ -281,117 +226,13 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
       return cachedLayout;
     };
 
-    // Intercepte doc.addPage() pour injecter dynamiquement les en-têtes,
-    // pieds de page et zones CSS @page sur chaque nouvelle page créée
+    // Intercepte doc.addPage() pour initialiser les marges de layout
     const originalAddPage = doc.addPage.bind(doc);
     doc.addPage = function (opts: any = {}) {
       originalAddPage({ ...opts, margin: 0 });
-      currentPage++;
-
       const layout = getLayout();
-      const cw = layout.contentWidth;
-      const savedY = doc.y;
-      const savedX = doc.x;
-      const footerY = doc.page.height - layout.bottomMargin - layout.footerHeight;
-      const halfCw = cw / 2;
-
-      if (pageZones) {
-        if (pageZones['top-left']) {
-          renderPageZone(
-            doc,
-            pageZones['top-left'],
-            layout.leftMargin,
-            layout.topMargin,
-            halfCw,
-            'left',
-            currentPage,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['top-center']) {
-          renderPageZone(
-            doc,
-            pageZones['top-center'],
-            layout.leftMargin + halfCw * 0.15,
-            layout.topMargin,
-            halfCw,
-            'center',
-            currentPage,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['top-right']) {
-          renderPageZone(
-            doc,
-            pageZones['top-right'],
-            layout.leftMargin + halfCw,
-            layout.topMargin,
-            halfCw,
-            'right',
-            currentPage,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['bottom-left']) {
-          renderPageZone(
-            doc,
-            pageZones['bottom-left'],
-            layout.leftMargin,
-            footerY,
-            halfCw,
-            'left',
-            currentPage,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['bottom-center']) {
-          renderPageZone(
-            doc,
-            pageZones['bottom-center'],
-            layout.leftMargin + halfCw * 0.15,
-            footerY,
-            halfCw,
-            'center',
-            currentPage,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['bottom-right']) {
-          renderPageZone(
-            doc,
-            pageZones['bottom-right'],
-            layout.leftMargin + halfCw,
-            footerY,
-            halfCw,
-            'right',
-            currentPage,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-      }
-
-      if (options.header && !pageZones) {
-        const headerHtml = options.header
-          .replace('{page}', String(currentPage))
-          .replace('{totalPages}', String(totalPages));
-        renderHeaderFooterContent(doc, headerHtml, layout.leftMargin, layout.topMargin, cw, 'left', fontAliasSet);
-      }
-
-      if (options.footer && !pageZones) {
-        const footerHtml = options.footer
-          .replace('{page}', String(currentPage))
-          .replace('{totalPages}', String(totalPages));
-        renderHeaderFooterContent(doc, footerHtml, layout.leftMargin, footerY, cw, 'left', fontAliasSet);
-      }
-
-      doc.y = savedY;
-      doc.x = savedX;
+      doc.x = layout.leftMargin;
+      doc.y = layout.contentTop;
     };
 
     doc.addPage({
@@ -421,6 +262,122 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
         );
       } else if ((child as any).type === 'text' && (child as any).data?.trim()) {
         renderText(doc, (child as any).data.trim(), rootStyle, renderOptions, layout, textCache, fontAliasSet);
+      }
+    }
+
+    // Zero-Cost Virtual Page Zone & Header/Footer Emission (Single-pass layout)
+    const range = doc.bufferedPageRange();
+    const totalPages = range.count;
+
+    for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+      doc.switchToPage(pageIdx);
+      const curPageNum = pageIdx + 1;
+      const pageLayout = getLayout();
+      const cw = pageLayout.contentWidth;
+      const footerY = doc.page.height - pageLayout.bottomMargin - pageLayout.footerHeight;
+      const halfCw = cw / 2;
+
+      if (pageZones) {
+        if (pageZones['top-left']) {
+          renderPageZone(
+            doc,
+            pageZones['top-left'],
+            pageLayout.leftMargin,
+            pageLayout.topMargin,
+            halfCw,
+            'left',
+            curPageNum,
+            totalPages,
+            fontAliasSet,
+          );
+        }
+        if (pageZones['top-center']) {
+          renderPageZone(
+            doc,
+            pageZones['top-center'],
+            pageLayout.leftMargin + halfCw * 0.15,
+            pageLayout.topMargin,
+            halfCw,
+            'center',
+            curPageNum,
+            totalPages,
+            fontAliasSet,
+          );
+        }
+        if (pageZones['top-right']) {
+          renderPageZone(
+            doc,
+            pageZones['top-right'],
+            pageLayout.leftMargin + halfCw,
+            pageLayout.topMargin,
+            halfCw,
+            'right',
+            curPageNum,
+            totalPages,
+            fontAliasSet,
+          );
+        }
+        if (pageZones['bottom-left']) {
+          renderPageZone(
+            doc,
+            pageZones['bottom-left'],
+            pageLayout.leftMargin,
+            footerY,
+            halfCw,
+            'left',
+            curPageNum,
+            totalPages,
+            fontAliasSet,
+          );
+        }
+        if (pageZones['bottom-center']) {
+          renderPageZone(
+            doc,
+            pageZones['bottom-center'],
+            pageLayout.leftMargin + halfCw * 0.15,
+            footerY,
+            halfCw,
+            'center',
+            curPageNum,
+            totalPages,
+            fontAliasSet,
+          );
+        }
+        if (pageZones['bottom-right']) {
+          renderPageZone(
+            doc,
+            pageZones['bottom-right'],
+            pageLayout.leftMargin + halfCw,
+            footerY,
+            halfCw,
+            'right',
+            curPageNum,
+            totalPages,
+            fontAliasSet,
+          );
+        }
+      }
+
+      if (options.header && !pageZones) {
+        const headerHtml = options.header
+          .replace('{page}', String(curPageNum))
+          .replace('{totalPages}', String(totalPages));
+        renderHeaderFooterContent(
+          doc,
+          headerHtml,
+          pageLayout.leftMargin,
+          pageLayout.topMargin,
+          cw,
+          'left',
+          fontAliasSet,
+        );
+      }
+
+      if (options.footer && !pageZones) {
+        const footerHtml = options.footer
+          .replace('{page}', String(curPageNum))
+          .replace('{totalPages}', String(totalPages));
+        renderHeaderFooterContent(doc, footerHtml, pageLayout.leftMargin, footerY, cw, 'left', fontAliasSet);
       }
     }
     if (isProfiling) {
@@ -471,6 +428,22 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     logger.error(`Echec de construction du pdf : ${(err as Error).message}`);
     throw err;
   }
+}
+
+/**
+ * Generates a PDF from HTML as a progressive Web ReadableStream<Uint8Array>.
+ */
+export async function renderHtmlToPdfStream(
+  html: string,
+  options: PdfGenerateOptions = {},
+): Promise<ReadableStream<Uint8Array>> {
+  const buffer = await renderHtmlToPdf(html, options);
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
+      controller.close();
+    },
+  });
 }
 
 export { PageLayout, TextMeasureCache };
