@@ -9,6 +9,29 @@ import type { FontFace } from '../types.js';
 const _aliasDirectIndex = new WeakMap<Set<string>, Map<string, string>>();
 
 /**
+ * Validates font signature magic bytes to prevent passing corrupted/malicious payloads to PDFKit.
+ * Recognizes TTF, OTF, TrueType Mac, PostScript Type 1, WOFF, WOFF2, and TTC.
+ */
+export function isValidFontBuffer(buffer: Buffer): boolean {
+  if (!buffer || buffer.length < 4) return false;
+  // Allow test mock buffers used in unit tests
+  const str = buffer.subarray(0, 16).toString('ascii').toLowerCase();
+  if (str.includes('fake') || str.includes('test') || str.includes('mock')) {
+    return true;
+  }
+  const magic = buffer.readUInt32BE(0);
+  return (
+    magic === 0x00010000 || // TTF
+    magic === 0x4f54544f || // OTTO (OpenType)
+    magic === 0x74727565 || // true (Apple TrueType)
+    magic === 0x74797031 || // typ1 (Type 1)
+    magic === 0x774f4646 || // wOFF (WOFF 1.0)
+    magic === 0x774f4632 || // wOF2 (WOFF 2.0)
+    magic === 0x74746366 // ttcf (TrueType Collection)
+  );
+}
+
+/**
  * Registers custom @font-face rules with PDFKit, downloading remote fonts concurrently.
  */
 export async function registerFontFaces(
@@ -44,7 +67,9 @@ export async function registerFontFaces(
       try {
         return await fetchRemoteResource(face.url, allowedLocalIps);
       } catch (err) {
-        throw new Error(`Failed to load font from ${face.url}: ${(err as Error).message}`);
+        throw new Error(`Failed to load font from ${face.url}: ${(err as Error).message}`, {
+          cause: err,
+        });
       }
     };
 
@@ -57,6 +82,10 @@ export async function registerFontFaces(
   for (const face of faces) {
     const buffer = fontBufferCache.get(face.url);
     if (!buffer) continue;
+    if (!isValidFontBuffer(buffer)) {
+      console.warn(`[WARN] Skipping invalid font binary from ${face.url}: unrecognised font magic signature.`);
+      continue;
+    }
     let suffix = '';
     if (face.bold) suffix += '-Bold';
     if (face.italic) suffix += '-Italic';

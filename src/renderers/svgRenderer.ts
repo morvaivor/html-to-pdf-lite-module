@@ -101,6 +101,7 @@ export function renderSvg(
       height: renderHeight,
       preserveAspectRatio: 'xMidYMid meet',
       assumePt: true,
+      imageCallback: () => '',
     });
   } catch (err) {
     // Gracefully fallback if SVG is malformed

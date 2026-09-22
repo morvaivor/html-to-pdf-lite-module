@@ -42,6 +42,7 @@
     "test:unit": "tsx --test \"test/*.test.ts\"",
     "test:coverage": "node --import tsx --experimental-test-coverage --test \"test/*.test.ts\"",
     "benchmark": "tsx bench/benchmark.ts",
+    "benchmark:volet1": "tsx bench/benchmark-volet1.ts",
     "test:soak": "tsx --expose-gc bench/soak-test.ts",
     "test:soak:parallel": "tsx --expose-gc bench/soak-test-15k-parallel.ts",
     "test:soak:heavy": "tsx --expose-gc bench/soak-test-15k-heavy.ts",

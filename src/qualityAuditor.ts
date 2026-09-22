@@ -24,6 +24,8 @@ export interface QualityAuditResult {
     totalHtmlWords: number;
     foundInPdfWords: number;
     rate: number; // 0.0 to 1.0
+    sequenceAlignmentRate: number; // 0.0 to 1.0 via ROUGE-L / LCS
+    lcsLength: number;
     missingSnippets: string[];
   };
   /** Structural elements audit */
@@ -42,6 +44,16 @@ export interface QualityAuditResult {
     multiColumnExpected: boolean;
     multiColumnDetected: boolean;
     distinctXPositionsCount: number;
+    collisionsCount: number;
+    marginViolationsCount: number;
+  };
+  /** Spatial & Sequence Quality Index (SSQI) components */
+  ssqi: {
+    sequenceScore: number;
+    spatialScore: number;
+    typoScore: number;
+    structScore: number;
+    criticalGatingFactor: number;
   };
   /** Warnings and improvement opportunities */
   warnings: string[];
@@ -49,9 +61,21 @@ export interface QualityAuditResult {
   durationMs: number;
 }
 
+interface PdfTextItem {
+  streamIndex: number;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  width: number;
+  height: number;
+}
+
 interface PdfExtractedData {
   pageCount: number;
   fullRawText: string;
+  orderedWords: string[];
+  textItems: PdfTextItem[];
   hasImages: boolean;
   rectCount: number;
   lineCount: number;
@@ -61,7 +85,48 @@ interface PdfExtractedData {
 }
 
 /**
- * Decompresses and extracts text and vector drawing commands from a PDF buffer.
+ * Computes the Longest Common Subsequence length between two word arrays using O(min(M, N)) memory.
+ */
+export function computeLcsLength(seq1: readonly string[], seq2: readonly string[]): number {
+  const m = seq1.length;
+  const n = seq2.length;
+  if (m === 0 || n === 0) return 0;
+
+  // Bound maximum tokens for LCS to prevent quadratic memory/time spikes
+  const maxTokens = 1500;
+  const s1 = m > maxTokens ? seq1.slice(0, maxTokens) : seq1;
+  const s2 = n > maxTokens ? seq2.slice(0, maxTokens) : seq2;
+
+  const [short, long] = s1.length < s2.length ? [s1, s2] : [s2, s1];
+  const sLen = short.length;
+  const lLen = long.length;
+
+  let prev = new Uint32Array(sLen + 1);
+  let curr = new Uint32Array(sLen + 1);
+
+  for (let i = 1; i <= lLen; i++) {
+    const item = long[i - 1];
+    for (let j = 1; j <= sLen; j++) {
+      if (item === short[j - 1]) {
+        curr[j] = prev[j - 1]! + 1;
+      } else {
+        const up = prev[j]!;
+        const left = curr[j - 1]!;
+        curr[j] = up > left ? up : left;
+      }
+    }
+    const temp = prev;
+    prev = curr;
+    curr = temp;
+    curr.fill(0);
+  }
+
+  const factor = m > maxTokens ? m / maxTokens : 1;
+  return Math.min(m, Math.round(prev[sLen]! * factor));
+}
+
+/**
+ * Decompresses and extracts text and vector drawing commands from a PDF buffer safely with zip-bomb protection.
  */
 function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
   const binaryString = pdfBuffer.toString('binary');
@@ -77,7 +142,7 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
     latinString.includes('/Subtype/Image') ||
     latinString.includes('/XObject');
 
-  // 3. Decompress all streams
+  // 3. Decompress all streams with maxOutputLength to prevent decompression bombs (Zip bomb)
   const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
   let streamMatch: RegExpExecArray | null;
   const decompressedStreams: string[] = [];
@@ -86,7 +151,9 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
     const rawStream = streamMatch[1];
     if (!rawStream) continue;
     try {
-      const decompressed = zlib.inflateSync(Buffer.from(rawStream, 'binary')).toString('latin1');
+      const decompressed = zlib
+        .inflateSync(Buffer.from(rawStream, 'binary'), { maxOutputLength: 20 * 1024 * 1024 })
+        .toString('latin1');
       decompressedStreams.push(decompressed);
     } catch {
       // In case stream is uncompressed or uses another filter
@@ -94,45 +161,104 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
     }
   }
 
-  // 4. Extract text from TJ arrays and Tj operators
+  // 4. Extract text items, positions, and vector commands
   let fullRawText = '';
+  const orderedWords: string[] = [];
+  const textItems: PdfTextItem[] = [];
   let rectCount = 0;
   let lineCount = 0;
   let curveCount = 0;
   let hasColorOperators = false;
+  const distinctXSet = new Set<number>();
 
-  for (const stream of decompressedStreams) {
-    // TJ array extraction
-    const tjArrayRegex = /\[([\s\S]*?)\]\s*TJ/g;
-    let tjMatch: RegExpExecArray | null;
-    while ((tjMatch = tjArrayRegex.exec(stream)) !== null) {
-      const content = tjMatch[1];
-      if (!content) continue;
+  for (let streamIndex = 0; streamIndex < decompressedStreams.length; streamIndex++) {
+    const stream = decompressedStreams[streamIndex]!;
+    let curFontSize = 12;
+    let curX = 0;
+    let curY = 0;
 
-      let segmentText = '';
-      // Matches both hex strings <...> and literal strings (...)
-      const tokenRegex = /<([0-9a-fA-F]+)>|\(([^)]*)\)/g;
-      let tokenMatch: RegExpExecArray | null;
-      while ((tokenMatch = tokenRegex.exec(content)) !== null) {
-        if (tokenMatch[1]) {
-          // Hex string
-          segmentText += Buffer.from(tokenMatch[1], 'hex').toString('latin1');
-        } else if (tokenMatch[2] !== undefined) {
-          // Literal string
-          segmentText += tokenMatch[2];
-        }
+    // Single-pass scanner across font, matrix, and text operators
+    const opRegex =
+      /(?:\/([A-Za-z0-9_-]+)\s+([0-9.]+)\s+Tf)|(?:([0-9.-]+)\s+([0-9.-]+)\s+([0-9.-]+)\s+([0-9.-]+)\s+([0-9.-]+)\s+([0-9.-]+)\s+Tm)|(?:\[([\s\S]*?)\]\s*TJ)|(?:(?:\(([\s\S]*?)\)|<([0-9a-fA-F]+)>)\s*Tj)/g;
+
+    let opMatch: RegExpExecArray | null;
+    while ((opMatch = opRegex.exec(stream)) !== null) {
+      // 1. Tf operator (Font size)
+      if (opMatch[2]) {
+        const sizeVal = parseFloat(opMatch[2]);
+        if (!isNaN(sizeVal) && sizeVal > 0) curFontSize = sizeVal;
+        continue;
       }
-      fullRawText += ' ' + segmentText;
-    }
 
-    // Tj single operation extraction
-    const tjSingleRegex = /(?:\(([\s\S]*?)\)|<([0-9a-fA-F]+)>)\s*Tj/g;
-    let singleMatch: RegExpExecArray | null;
-    while ((singleMatch = tjSingleRegex.exec(stream)) !== null) {
-      if (singleMatch[2]) {
-        fullRawText += ' ' + Buffer.from(singleMatch[2], 'hex').toString('latin1');
-      } else if (singleMatch[1]) {
-        fullRawText += ' ' + singleMatch[1];
+      // 2. Tm operator (Text Matrix)
+      if (opMatch[7] !== undefined && opMatch[8] !== undefined) {
+        const xVal = parseFloat(opMatch[7]);
+        const yVal = parseFloat(opMatch[8]);
+        if (!isNaN(xVal)) {
+          curX = xVal;
+          if (xVal > 10) {
+            distinctXSet.add(Math.round(xVal / 25) * 25);
+          }
+        }
+        if (!isNaN(yVal)) curY = yVal;
+        continue;
+      }
+
+      // 3. TJ Array
+      if (opMatch[9] !== undefined) {
+        const content = opMatch[9];
+        let segmentText = '';
+        const tokenRegex = /<([0-9a-fA-F]+)>|\(([^)]*)\)/g;
+        let tokenMatch: RegExpExecArray | null;
+        while ((tokenMatch = tokenRegex.exec(content)) !== null) {
+          if (tokenMatch[1]) {
+            segmentText += Buffer.from(tokenMatch[1], 'hex').toString('latin1');
+          } else if (tokenMatch[2] !== undefined) {
+            segmentText += tokenMatch[2];
+          }
+        }
+
+        if (segmentText.trim()) {
+          fullRawText += ' ' + segmentText;
+          const words = normalizeWords(segmentText);
+          for (const w of words) orderedWords.push(w);
+          textItems.push({
+            streamIndex,
+            text: segmentText,
+            x: curX,
+            y: curY,
+            fontSize: curFontSize,
+            width: segmentText.length * curFontSize * 0.52,
+            height: curFontSize * 1.15,
+          });
+        }
+        continue;
+      }
+
+      // 4. Tj single string
+      if (opMatch[10] !== undefined || opMatch[11] !== undefined) {
+        let singleText = '';
+        if (opMatch[11]) {
+          singleText = Buffer.from(opMatch[11], 'hex').toString('latin1');
+        } else if (opMatch[10]) {
+          singleText = opMatch[10];
+        }
+
+        if (singleText.trim()) {
+          fullRawText += ' ' + singleText;
+          const words = normalizeWords(singleText);
+          for (const w of words) orderedWords.push(w);
+          textItems.push({
+            streamIndex,
+            text: singleText,
+            x: curX,
+            y: curY,
+            fontSize: curFontSize,
+            width: singleText.length * curFontSize * 0.52,
+            height: curFontSize * 1.15,
+          });
+        }
+        continue;
       }
     }
 
@@ -143,7 +269,7 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
     const lines = stream.match(/[0-9.-]+\s+[0-9.-]+\s+l\b/g);
     if (lines) lineCount += lines.length;
 
-    const curves = stream.match(/[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+c\b/g);
+    const curves = stream.match(/[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+c\b/g);
     if (curves) curveCount += curves.length;
 
     if (stream.includes(' rg') || stream.includes(' RG') || stream.includes(' scn') || stream.includes(' SCN')) {
@@ -151,24 +277,11 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
     }
   }
 
-  // Collect distinct horizontal text positions (Tm operators: e = Tm[4])
-  const distinctXSet = new Set<number>();
-  for (const stream of decompressedStreams) {
-    const tmRegex = /[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+[0-9.-]+\s+([0-9.-]+)\s+[0-9.-]+\s+Tm/g;
-    let tmMatch: RegExpExecArray | null;
-    while ((tmMatch = tmRegex.exec(stream)) !== null) {
-      const xVal = parseFloat(tmMatch[1] || '0');
-      if (!isNaN(xVal) && xVal > 10) {
-        // Quantifier par tranches de 25pt
-        const bucket = Math.round(xVal / 25) * 25;
-        distinctXSet.add(bucket);
-      }
-    }
-  }
-
   return {
     pageCount,
     fullRawText,
+    orderedWords,
+    textItems,
     hasImages,
     rectCount,
     lineCount,
@@ -181,7 +294,7 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
 /**
  * Normalizes text for comparison by collapsing whitespaces and removing punctuation.
  */
-function normalizeWords(text: string): string[] {
+export function normalizeWords(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[«»"'.,;:!?()[\]{}•/\\|—–_-]/g, ' ')
@@ -191,12 +304,7 @@ function normalizeWords(text: string): string[] {
 }
 
 /**
- * Verifies the rendering quality and fidelity of a generated PDF against the input HTML.
- *
- * @param html The source HTML document string.
- * @param pdfBufferOrOptions The generated PDF Buffer or quality check options.
- * @param options Additional quality audit options.
- * @returns QualityAuditResult with fidelity score (0-100), letter grade, and component metrics.
+ * Verifies the rendering quality and fidelity of a generated PDF against the input HTML using SSQI.
  */
 export async function verifyRenderingQuality(
   html: string,
@@ -257,9 +365,13 @@ export async function verifyRenderingQuality(
   const svgsCount = $('svg').length;
 
   const headingWords: string[] = [];
+  const headingWordSet = new Set<string>();
   $('h1, h2, h3, h4, h5, h6').each((_i, el) => {
     const words = normalizeWords($(el).text());
-    if (words[0]) headingWords.push(words[0]);
+    if (words[0]) {
+      headingWords.push(words[0]);
+      headingWordSet.add(words[0]);
+    }
   });
 
   // Ensure whitespace between adjacent block/cell elements
@@ -268,7 +380,7 @@ export async function verifyRenderingQuality(
   // Strip style and script for clean text analysis
   $('style, script, head, meta, link').remove();
 
-  // Extract all textual content from body
+  // Extract all textual content from body in natural DOM order
   const bodyText = $('body').text().trim() || $.root().text().trim();
   const htmlWords = normalizeWords(bodyText);
 
@@ -280,7 +392,7 @@ export async function verifyRenderingQuality(
   const pdfData = extractPdfData(pdfBuffer);
   const pdfTextNormalized = pdfData.fullRawText.toLowerCase();
 
-  // 3. Text Completeness Audit
+  // 3. Text Completeness & Sequence Alignment Audit (ROUGE-L / LCS)
   let foundWords = 0;
   const missingSnippets: string[] = [];
 
@@ -301,7 +413,89 @@ export async function verifyRenderingQuality(
   const totalUniqueWords = checkedWords.size;
   const textRecallRate = totalUniqueWords > 0 ? foundWords / totalUniqueWords : 1.0;
 
-  // 4. Feature Audits
+  // Compute Longest Common Subsequence between HTML tokens and PDF tokens in reading order
+  const uniqueHtmlSequence: string[] = [];
+  const seenUnique = new Set<string>();
+  for (const word of htmlWords) {
+    if (!seenUnique.has(word)) {
+      seenUnique.add(word);
+      uniqueHtmlSequence.push(word);
+    }
+  }
+
+  const seenPdf = new Set<string>();
+  const uniquePdfSequence: string[] = [];
+  for (const word of pdfData.orderedWords) {
+    if (seenUnique.has(word) && !seenPdf.has(word)) {
+      seenPdf.add(word);
+      uniquePdfSequence.push(word);
+    }
+  }
+
+  const lcsLength = computeLcsLength(uniqueHtmlSequence, uniquePdfSequence);
+  const sequenceAlignmentRate = uniqueHtmlSequence.length > 0 ? lcsLength / uniqueHtmlSequence.length : 1.0;
+
+  // 4. Spatial Layout, Collisions, and Margin Violations
+  let collisionsCount = 0;
+  let marginViolationsCount = 0;
+  const items = pdfData.textItems;
+
+  for (let i = 0; i < items.length; i++) {
+    const itemA = items[i]!;
+    if (!itemA.text.trim()) continue;
+
+    // Detect margin clipping (PDF coordinate bounds)
+    if (itemA.x < -10 || itemA.x > 750 || itemA.y < -20 || itemA.y > 1000) {
+      marginViolationsCount++;
+    }
+
+    // Check collision with nearby text items on the same page/stream
+    for (let j = i + 1; j < Math.min(i + 15, items.length); j++) {
+      const itemB = items[j]!;
+      if (!itemB.text.trim()) continue;
+      if (itemA.streamIndex !== itemB.streamIndex) continue;
+
+      const yDiff = Math.abs(itemA.y - itemB.y);
+      const minFont = Math.min(itemA.fontSize, itemB.fontSize);
+
+      // On same vertical baseline
+      if (yDiff < minFont * 0.35) {
+        const xOverlap = Math.min(itemA.x + itemA.width, itemB.x + itemB.width) - Math.max(itemA.x, itemB.x);
+        if (xOverlap > Math.min(itemA.width, itemB.width) * 0.5 && xOverlap > 25 && itemA.text !== itemB.text) {
+          collisionsCount++;
+        }
+      }
+    }
+  }
+
+  // 5. Typographic Hierarchy Check
+  const headingSizes: number[] = [];
+  const bodySizes: number[] = [];
+
+  for (const item of items) {
+    const words = normalizeWords(item.text);
+    const isHeading = words.some((w) => headingWordSet.has(w));
+    if (isHeading) {
+      headingSizes.push(item.fontSize);
+    } else {
+      bodySizes.push(item.fontSize);
+    }
+  }
+
+  let headingMaxFontSize = 0;
+  let bodyMedianFontSize = 12;
+
+  if (headingSizes.length > 0) {
+    headingMaxFontSize = Math.max(...headingSizes);
+  }
+  if (bodySizes.length > 0) {
+    bodySizes.sort((a, b) => a - b);
+    bodyMedianFontSize = bodySizes[Math.floor(bodySizes.length / 2)] ?? 12;
+  }
+
+  const typoHierarchyOk = headingsCount === 0 || headingMaxFontSize >= bodyMedianFontSize * 1.05;
+
+  // 6. Feature Audits
   const warnings: string[] = [];
 
   // Headings
@@ -313,6 +507,9 @@ export async function verifyRenderingQuality(
   }
   const headingsOk = headingsCount === 0 || headingsFound >= headingsCount * 0.9;
   if (!headingsOk) warnings.push(`Certains titres (h1-h6) semblent manquer ou être tronqués.`);
+  if (!typoHierarchyOk && headingsCount > 0) {
+    warnings.push(`Hiérarchie typographique faible : les titres n'ont pas une taille nettement supérieure au texte.`);
+  }
 
   // Tables
   let tablesFound = 0;
@@ -362,7 +559,7 @@ export async function verifyRenderingQuality(
     warnings.push(`${svgsCount} graphique(s) SVG attendu(s), mais les tracés vectoriels semblent incomplets.`);
   }
 
-  // Box Model Decorations (vérification rigoureuse du ratio de rectangles)
+  // Box Model Decorations
   const boxesFound = Math.min(boxesCount, pdfData.rectCount);
   const boxesOk = boxesCount === 0 || boxesFound >= Math.ceil(boxesCount * 0.7);
   if (boxesCount > 0 && !boxesOk) {
@@ -401,7 +598,6 @@ export async function verifyRenderingQuality(
   });
 
   const distinctXCount = pdfData.distinctXPositions.length;
-  // Détecté si au moins 2 positions X distinctes trouvées dans les streams
   const multiColumnDetected = distinctXCount >= 2;
   const multiColumnOk = !multiColumnExpected || multiColumnDetected;
   if (!multiColumnOk) {
@@ -410,14 +606,36 @@ export async function verifyRenderingQuality(
     );
   }
 
-  // 5. Score Calculation (Weighted - 100 points)
-  // - Text Completeness: 35 points
-  const textScore = textRecallRate * 35;
+  if (collisionsCount > 0) {
+    warnings.push(`${collisionsCount} collision(s) ou chevauchement(s) de texte détecté(s) dans le PDF.`);
+  }
+  if (marginViolationsCount > 0) {
+    warnings.push(`${marginViolationsCount} bloc(s) de texte hors marges imprimables détecté(s).`);
+  }
+  if (sequenceAlignmentRate < 0.55) {
+    warnings.push(
+      `Continuité séquentielle dégradée (${Math.round(sequenceAlignmentRate * 100)}%) : texte tronqué ou ordre de lecture perturbé.`,
+    );
+  }
 
-  // - Structural Features: 20 points
+  // 7. SSQI Score Calculation (Spatial & Sequence Quality Index)
+  // - Sequence Score: 35 points (combination of unique word recall & ordered sequence alignment)
+  const combinedTextRecall = textRecallRate * 0.7 + sequenceAlignmentRate * 0.3;
+  const sequenceScore = combinedTextRecall * 35;
+
+  // - Spatial Score: 30 points (no collisions, bounds respect, column balance)
+  const collisionPenalty = Math.min(1.0, collisionsCount * 0.15);
+  const marginPenalty = Math.min(1.0, marginViolationsCount * 0.25);
+  const spatialScore = (1 - collisionPenalty) * (1 - marginPenalty) * (multiColumnOk ? 30 : 22);
+
+  // - Typographic & Colors Score: 15 points
+  const typoHierarchyRatio = typoHierarchyOk ? 1.0 : 0.7;
+  const colorBonus = pdfData.hasColorOperators ? 1.0 : 0.85;
+  const typoScore = typoHierarchyRatio * colorBonus * 15;
+
+  // - Structural Features Score: 20 points
   let featureTotal = 0;
   let featureEarned = 0;
-
   const checkFeatureWeight = (weight: number, isOk: boolean, isPresent: boolean) => {
     if (isPresent) {
       featureTotal += weight;
@@ -430,30 +648,34 @@ export async function verifyRenderingQuality(
   checkFeatureWeight(4, listsOk, listsCount > 0);
   checkFeatureWeight(3, imagesOk, imagesCount > 0);
   checkFeatureWeight(3, svgsOk, svgsCount > 0);
+  checkFeatureWeight(4, boxesOk, boxesCount > 0);
 
-  const featureScore = featureTotal > 0 ? (featureEarned / featureTotal) * 20 : 20;
+  const structScore = featureTotal > 0 ? (featureEarned / featureTotal) * 20 : 20;
 
-  // - Box Model & Colors: 25 points
-  let boxScore = 25;
-  if (boxesCount > 0) {
-    const boxRatio = boxesFound / boxesCount;
-    boxScore = Math.round(boxRatio * 20) + (pdfData.hasColorOperators ? 5 : 0);
+  // - Critical Gating Factor (Γ)
+  let criticalGatingFactor = 1.0;
+  if (textRecallRate < 0.65 || sequenceAlignmentRate < 0.4) {
+    criticalGatingFactor *= 0.4;
+  } else if (textRecallRate < 0.8 || sequenceAlignmentRate < 0.55) {
+    criticalGatingFactor *= 0.8;
   }
 
-  // - Layout Integrity & Multi-Column: 20 points
-  let layoutScore = 20;
+  if (collisionsCount >= 3) {
+    criticalGatingFactor *= 0.7;
+  } else if (collisionsCount >= 1) {
+    criticalGatingFactor *= 0.9;
+  }
+
+  if (marginViolationsCount >= 2) {
+    criticalGatingFactor *= 0.85;
+  }
+
   if (pdfData.pageCount < 1) {
-    layoutScore -= 10;
+    criticalGatingFactor *= 0.2;
     warnings.push(`Aucune page PDF valide générée.`);
   }
-  if (!multiColumnOk) {
-    layoutScore -= 7;
-  }
-  if (hasPageZonesExpected && !pageZonesOk) {
-    layoutScore -= 3;
-  }
 
-  const rawScore = textScore + featureScore + boxScore + layoutScore;
+  const rawScore = (sequenceScore + spatialScore + typoScore + structScore) * criticalGatingFactor;
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
   // Grade assignment
@@ -474,6 +696,8 @@ export async function verifyRenderingQuality(
       totalHtmlWords: totalUniqueWords,
       foundInPdfWords: foundWords,
       rate: Math.round(textRecallRate * 1000) / 1000,
+      sequenceAlignmentRate: Math.round(sequenceAlignmentRate * 1000) / 1000,
+      lcsLength,
       missingSnippets,
     },
     features: {
@@ -490,6 +714,15 @@ export async function verifyRenderingQuality(
       multiColumnExpected,
       multiColumnDetected,
       distinctXPositionsCount: distinctXCount,
+      collisionsCount,
+      marginViolationsCount,
+    },
+    ssqi: {
+      sequenceScore: Math.round(sequenceScore * 10) / 10,
+      spatialScore: Math.round(spatialScore * 10) / 10,
+      typoScore: Math.round(typoScore * 10) / 10,
+      structScore: Math.round(structScore * 10) / 10,
+      criticalGatingFactor: Math.round(criticalGatingFactor * 100) / 100,
     },
     warnings,
     durationMs,
