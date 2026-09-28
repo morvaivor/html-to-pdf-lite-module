@@ -26,7 +26,15 @@ export function parseLengthPt(value: string | undefined | null): number | null {
   const num = parseFloat(match[1] ?? '');
   if (Number.isNaN(num)) return null;
   const unit = (match[2] ?? '').toLowerCase();
-  if (unit === '' || unit === 'px' || unit === 'pt' || unit === 'cm' || unit === 'mm' || unit === 'in' || unit === 'pc') {
+  if (
+    unit === '' ||
+    unit === 'px' ||
+    unit === 'pt' ||
+    unit === 'cm' ||
+    unit === 'mm' ||
+    unit === 'in' ||
+    unit === 'pc'
+  ) {
     return num * (UNIT_FACTORS[unit] ?? 1);
   }
   return null;

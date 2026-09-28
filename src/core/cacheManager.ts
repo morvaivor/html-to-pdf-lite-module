@@ -95,7 +95,10 @@ function isValidColor(c: string): boolean {
 }
 
 function parseBoxSpacing(val: string): { top: number; right: number; bottom: number; left: number } {
-  const parts = val.trim().split(/\s+/).map((p) => parseLengthPt(p) ?? 0);
+  const parts = val
+    .trim()
+    .split(/\s+/)
+    .map((p) => parseLengthPt(p) ?? 0);
   if (parts.length === 1) {
     const v = parts[0] ?? 0;
     return { top: v, right: v, bottom: v, left: v };

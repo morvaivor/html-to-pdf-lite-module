@@ -50,7 +50,8 @@ export function renderImage(
   let imgWidth = parseInt(attribs['width'] ?? '', 10) || 0;
   let imgHeight = parseInt(attribs['height'] ?? '', 10) || 0;
   if (imgWidth === 0) imgWidth = Math.round(parseLengthPt(cssStyle.width == null ? null : String(cssStyle.width)) ?? 0);
-  if (imgHeight === 0) imgHeight = Math.round(parseLengthPt(cssStyle.height == null ? null : String(cssStyle.height)) ?? 0);
+  if (imgHeight === 0)
+    imgHeight = Math.round(parseLengthPt(cssStyle.height == null ? null : String(cssStyle.height)) ?? 0);
   const spacing = 8;
 
   if (!src) return Promise.resolve();

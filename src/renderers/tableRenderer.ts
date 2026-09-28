@@ -438,7 +438,7 @@ export async function renderTable(
       }
     }
 
-   // Le thead est répété en haut de chaque nouvelle page (display: table-header-group)
+    // Le thead est répété en haut de chaque nouvelle page (display: table-header-group)
     let theadBlockCount = 0;
     while (theadBlockCount < blocks.length && blocks[theadBlockCount]!.end < theadCount) {
       theadBlockCount++;
@@ -599,7 +599,7 @@ export async function renderTable(
         }
       }
 
-     doc.y = blockY + (rowPre(endRow + 1) - blockStartOffset);
+      doc.y = blockY + (rowPre(endRow + 1) - blockStartOffset);
     };
 
     // Rendre d'abord le thead, puis les blocs du corps
