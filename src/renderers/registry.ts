@@ -142,6 +142,57 @@ function hasOnlyInlineChildren(element: Element): boolean {
   return tagChildren.every((c) => ['b', 'strong', 'i', 'em', 'span', 'a', 'small', 'code'].includes(c.name));
 }
 
+/**
+ * Computed-style sharing (as in browser engines): computed styles are pure functions of the parent's
+ * computed style, the element's parsed inline style and its tag. Parsed inline styles are already
+ * shared per style string, so memoizing on those identities lets siblings (table rows, list items,
+ * repeated paragraphs...) share one computed style object instead of allocating ~45-property objects
+ * per element and per pass. Keys are weak: the chain is released with the document's root style.
+ * Styles are never mutated after creation, which makes sharing safe.
+ */
+type StyleShareCache = WeakMap<object, WeakMap<object, Map<string, TextStyle>>>;
+
+function sharedStyle(
+  cache: StyleShareCache,
+  parentStyle: TextStyle,
+  inlineStyle: Partial<TextStyle>,
+): Map<string, TextStyle> {
+  let byInline = cache.get(parentStyle);
+  if (byInline === undefined) {
+    byInline = new WeakMap();
+    cache.set(parentStyle, byInline);
+  }
+  let byTag = byInline.get(inlineStyle);
+  if (byTag === undefined) {
+    byTag = new Map();
+    byInline.set(inlineStyle, byTag);
+  }
+  return byTag;
+}
+
+const _inlineRunStyleCache: StyleShareCache = new WeakMap();
+const _inheritedStyleCache: StyleShareCache = new WeakMap();
+
+function inlineRunStyle(parentStyle: TextStyle, el: Element): TextStyle {
+  const childInline = parseInlineStyle(el);
+  const byTag = sharedStyle(_inlineRunStyleCache, parentStyle, childInline);
+  let childStyle = byTag.get(el.name);
+  if (childStyle === undefined) {
+    const isBold = el.name === 'b' || el.name === 'strong' || childInline.bold;
+    const isItalic = el.name === 'i' || el.name === 'em' || childInline.italic;
+    childStyle = {
+      ...parentStyle,
+      ...childInline,
+      bold: Boolean(isBold || parentStyle.bold),
+      italic: Boolean(isItalic || parentStyle.italic),
+      fontSize: childInline.fontSize ?? parentStyle.fontSize,
+      color: childInline.color ?? parentStyle.color,
+    };
+    byTag.set(el.name, childStyle);
+  }
+  return childStyle;
+}
+
 function collectInlineRuns(element: Element, parentStyle: TextStyle): Array<{ text: string; style: TextStyle }> {
   const runs: Array<{ text: string; style: TextStyle }> = [];
 
@@ -153,19 +204,7 @@ function collectInlineRuns(element: Element, parentStyle: TextStyle): Array<{ te
       }
     } else if (child.type === 'tag') {
       const el = child as Element;
-      const childInline = parseInlineStyle(el);
-      const isBold = el.name === 'b' || el.name === 'strong' || childInline.bold;
-      const isItalic = el.name === 'i' || el.name === 'em' || childInline.italic;
-      const childStyle: TextStyle = {
-        ...parentStyle,
-        ...childInline,
-        bold: Boolean(isBold || parentStyle.bold),
-        italic: Boolean(isItalic || parentStyle.italic),
-        fontSize: childInline.fontSize ?? parentStyle.fontSize,
-        color: childInline.color ?? parentStyle.color,
-      };
-
-      const innerRuns = collectInlineRuns(el, childStyle);
+      const innerRuns = collectInlineRuns(el, inlineRunStyle(parentStyle, el));
       runs.push(...innerRuns);
     }
   }
@@ -174,6 +213,16 @@ function collectInlineRuns(element: Element, parentStyle: TextStyle): Array<{ te
 }
 
 function inheritStyle(parentStyle: TextStyle, inlineStyle: Partial<TextStyle>, tagName: string): TextStyle {
+  const byTag = sharedStyle(_inheritedStyleCache, parentStyle, inlineStyle);
+  let style = byTag.get(tagName);
+  if (style === undefined) {
+    style = computeInheritedStyle(parentStyle, inlineStyle, tagName);
+    byTag.set(tagName, style);
+  }
+  return style;
+}
+
+function computeInheritedStyle(parentStyle: TextStyle, inlineStyle: Partial<TextStyle>, tagName: string): TextStyle {
   return {
     // Propriétés CSS héritables (typographie & texte)
     fontFamily: inlineStyle.fontFamily ?? parentStyle.fontFamily,

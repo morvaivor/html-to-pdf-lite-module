@@ -6,6 +6,7 @@ import { TextMeasureCache, DEFAULT_STYLE } from './core/cacheManager.js';
 import { registerFontFaces } from './core/fontManager.js';
 import { fetchRemoteResource, decodeDataUri, readLocalFile } from './core/networkSecurity.js';
 import { createLogger, type Logger } from './core/logger.js';
+import { ensurePdfKitAccelerator } from './core/pdfkitAccelerator.js';
 import { renderElement } from './renderers/registry.js';
 import { renderText } from './renderers/textRenderer.js';
 import { renderPageZone, renderHeaderFooterContent } from './renderers/headerFooterRenderer.js';
@@ -13,6 +14,8 @@ import type { PdfGenerateOptions, RenderOptions, TextStyle, ProfilingTimings } f
 import type { Element } from 'domhandler';
 
 const IMPORT_REGEX = /@import\s+(?:url\(['"]?([^'")]+)['"]?\)|['"]([^'"]+)['"])\s*;/g;
+const LINK_TAG_REGEX = /<link\b/i;
+const STYLE_TAG_REGEX = /<style\b/i;
 
 async function resolveCssImports(
   css: string,
@@ -67,6 +70,7 @@ async function resolveCssImports(
 }
 
 export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions = {}): Promise<Buffer> {
+  ensurePdfKitAccelerator();
   const logger = createLogger(options);
   const isDebugMode = Boolean(options.debug || logger.isEnabledFor('DEBUG'));
   const isProfiling = Boolean(options.profiling || options.onProfile || isDebugMode);
@@ -98,8 +102,11 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     const tCssStart = isProfiling ? performance.now() : 0;
     const allowedCssIps = options.allowedCssIps ?? options.allowedLocalIps;
 
-    // Extract external <link rel="stylesheet"> tags from HTML
-    const linkElements = $('link[rel="stylesheet"], link[rel="alternate stylesheet"]').toArray();
+    // Extract external <link rel="stylesheet"> tags from HTML. Each query is a full DOM traversal, so it
+    // is skipped when the source cannot contain the tag (the parser only creates it from a literal tag).
+    const linkElements = LINK_TAG_REGEX.test(html)
+      ? $('link[rel="stylesheet"], link[rel="alternate stylesheet"]').toArray()
+      : [];
     const externalStyles: string[] = await Promise.all(
       linkElements.map(async (element) => {
         const href = $(element).attr('href')?.trim();
@@ -128,18 +135,18 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
         }
       }),
     );
-    $('link[rel="stylesheet"], link[rel="alternate stylesheet"]').remove();
+    if (linkElements.length > 0) {
+      $(linkElements).remove();
+    }
 
     // Extract internal <style> blocks from HTML
-    const internalStyles: string[] = [];
-    $('style').each((_index, element) => {
-      internalStyles.push($(element).text());
-    });
+    const styleElements = STYLE_TAG_REGEX.test(html) ? $('style').toArray() : [];
+    const internalStyles: string[] = styleElements.map((element) => $(element).text());
     if (internalStyles.length > 0) {
       logger.debug(`CSS chargé à partir de <style> interne (${internalStyles.length} bloc(s))`);
+      // Remove <style> elements from DOM so their CSS text is not rendered as document text
+      $(styleElements).remove();
     }
-    // Remove <style> elements from DOM so their CSS text is not rendered as document text
-    $('style').remove();
 
     // Handle options.css if it is a remote URL or direct CSS string
     let optionsCss = options.css || '';
@@ -171,7 +178,8 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     if (isProfiling) {
       cssMs = performance.now() - tCssStart;
     }
-    const body = $('body').length > 0 ? $('body') : $(html);
+    const bodyElements = $('body');
+    const body = bodyElements.length > 0 ? bodyElements : $(html);
 
     const pageZones = fullCss ? parsePageRule(fullCss) : null;
     const hasPageHeader = Boolean(
@@ -198,12 +206,17 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     const imageCache = new Map<string, Buffer>();
     const textCache = new TextMeasureCache();
 
+    // Page zones and headers/footers need the final page count, so pages stay buffered until the end.
+    // Otherwise each page is compressed and released as soon as the next one starts: O(1) pages held in
+    // memory instead of O(pages).
+    const needsPageBuffer = Boolean(pageZones) || Boolean(options.header) || Boolean(options.footer);
+
     const doc = new (PDFDocument as any)({
       autoFirstPage: false,
       size: options.format || 'A4',
       layout: options.orientation || 'portrait',
       margin: 0,
-      bufferPages: true,
+      bufferPages: needsPageBuffer,
     });
 
     const tFontStart = isProfiling ? performance.now() : 0;
@@ -266,8 +279,7 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
     }
 
     // Zero-Cost Virtual Page Zone & Header/Footer Emission (Single-pass layout)
-    const range = doc.bufferedPageRange();
-    const totalPages = range.count;
+    const totalPages = needsPageBuffer ? doc.bufferedPageRange().count : 0;
 
     for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
       doc.switchToPage(pageIdx);

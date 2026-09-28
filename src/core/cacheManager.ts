@@ -48,11 +48,17 @@ export class TextMeasureCache {
 }
 
 // WeakMap inline style cache
-const _styleCache = new WeakMap<{ attribs?: { style?: string } }, Partial<TextStyle>>();
+const _styleCache = new WeakMap<object, Partial<TextStyle>>();
 
 // LRU Cache for unique inline style attribute strings (avoids periodic cache-thrashing from wholesale clear)
-const MAX_PARSED_STYLE_CACHE = 256;
+const MAX_PARSED_STYLE_CACHE = 1024;
 const _parsedStringStyleCache = new LruCache<string, Partial<TextStyle>>(MAX_PARSED_STYLE_CACHE);
+
+/**
+ * Shared (frozen) style of every element without a `style` attribute. A single identity lets the
+ * computed-style memoization in the renderers share results between unstyled siblings.
+ */
+export const EMPTY_INLINE_STYLE: Readonly<Partial<TextStyle>> = Object.freeze({});
 
 const NAMED_COLORS = new Set([
   'black',
@@ -143,15 +149,26 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
   if (cached !== undefined) return cached;
 
   const styleAttr = element.attribs?.style;
-  if (!styleAttr) {
-    const empty: Partial<TextStyle> = {};
-    _styleCache.set(element, empty);
-    return empty;
-  }
+  const style = styleAttr ? parseStyleString(styleAttr) : EMPTY_INLINE_STYLE;
+  _styleCache.set(element, style);
+  return style;
+}
 
+/**
+ * Records the already-parsed style of an element whose `style` attribute was just rewritten, so that
+ * `parseInlineStyle` does not have to hash and re-parse the (long, per-element) attribute string.
+ * `style` must be the result of `parseStyleString(element.attribs.style)`.
+ */
+export function primeInlineStyle(element: object, style: Partial<TextStyle>): void {
+  _styleCache.set(element, style);
+}
+
+/**
+ * Parses a CSS declaration string (inline `style` attribute syntax), memoized by string.
+ */
+export function parseStyleString(styleAttr: string): Partial<TextStyle> {
   const cachedByString = _parsedStringStyleCache.get(styleAttr);
   if (cachedByString !== undefined) {
-    _styleCache.set(element, cachedByString);
     return cachedByString;
   }
 
@@ -354,7 +371,6 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
   }
 
   _parsedStringStyleCache.set(styleAttr, style);
-  _styleCache.set(element, style);
   return style;
 }
 

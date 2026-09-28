@@ -1,9 +1,9 @@
-import { parseInlineStyle } from '../core/cacheManager.js';
+import { parseInlineStyle, EMPTY_INLINE_STYLE } from '../core/cacheManager.js';
 import { resolveFontFamily } from '../core/fontManager.js';
 import type { TextStyle, RenderOptions } from '../types.js';
 import type { PageLayout } from '../core/PageLayout.js';
 import type { TextMeasureCache } from '../core/cacheManager.js';
-import type { Element, ChildNode } from 'domhandler';
+import type { Element } from 'domhandler';
 import { gpuAccelerator } from '../gpu/gpuAccelerator.js';
 
 const FONT_SIZES_TABLE: Record<string, number> = { td: 12, th: 12 };
@@ -28,26 +28,75 @@ function getCellText(element: Element): string {
   return result.trim();
 }
 
-function getCellNestedTables(element: Element): Element[] {
-  const tables: Element[] = [];
+const NO_NESTED_TABLES: readonly Element[] = Object.freeze([]);
+
+function getCellNestedTables(element: Element): readonly Element[] {
+  let tables: Element[] | null = null;
   for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
     const child = element.children[childIndex];
     if (child && child.type === 'tag' && (child as Element).name === 'table') {
-      tables.push(child as Element);
+      (tables ??= []).push(child as Element);
     }
   }
-  return tables;
+  return tables ?? NO_NESTED_TABLES;
 }
 
-function getCellNonTableChildren(element: Element): ChildNode[] {
-  const children: ChildNode[] = [];
-  for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
-    const child = element.children[childIndex];
-    if (!child) continue;
-    if (child.type === 'tag' && (child as Element).name === 'table') continue;
-    children.push(child);
+/**
+ * Cell styles shared across cells with identical inherited inputs (see computed-style sharing in the
+ * element registry): keyed by the identities of the parent, section, row and cell styles and the tag.
+ */
+const _cellStyleCache = new WeakMap<
+  object,
+  WeakMap<object, WeakMap<object, WeakMap<object, Map<string, TextStyle>>>>
+>();
+
+function resolveCellStyle(
+  parentStyle: TextStyle,
+  sectionInlineStyle: Partial<TextStyle>,
+  rowInlineStyle: Partial<TextStyle>,
+  cellInlineStyle: Partial<TextStyle>,
+  cellName: string,
+): TextStyle {
+  let bySection = _cellStyleCache.get(parentStyle);
+  if (bySection === undefined) {
+    bySection = new WeakMap();
+    _cellStyleCache.set(parentStyle, bySection);
   }
-  return children;
+  let byRow = bySection.get(sectionInlineStyle);
+  if (byRow === undefined) {
+    byRow = new WeakMap();
+    bySection.set(sectionInlineStyle, byRow);
+  }
+  let byCell = byRow.get(rowInlineStyle);
+  if (byCell === undefined) {
+    byCell = new WeakMap();
+    byRow.set(rowInlineStyle, byCell);
+  }
+  let byName = byCell.get(cellInlineStyle);
+  if (byName === undefined) {
+    byName = new Map();
+    byCell.set(cellInlineStyle, byName);
+  }
+  let cellStyle = byName.get(cellName);
+  if (cellStyle === undefined) {
+    const inheritedBg =
+      cellInlineStyle.backgroundColor || rowInlineStyle.backgroundColor || sectionInlineStyle.backgroundColor;
+    const inheritedColor =
+      cellInlineStyle.color || rowInlineStyle.color || sectionInlineStyle.color || parentStyle.color;
+
+    cellStyle = {
+      ...parentStyle,
+      ...sectionInlineStyle,
+      ...rowInlineStyle,
+      ...cellInlineStyle,
+      backgroundColor: inheritedBg,
+      color: inheritedColor,
+      fontSize: cellInlineStyle.fontSize ?? FONT_SIZES_TABLE[cellName] ?? parentStyle.fontSize,
+      bold: cellName === 'th' || cellInlineStyle.bold || rowInlineStyle.bold || parentStyle.bold,
+    };
+    byName.set(cellName, cellStyle);
+  }
+  return cellStyle;
 }
 
 interface CellData {
@@ -60,8 +109,7 @@ interface CellData {
   height: number;
   colspan: number;
   rowspan: number;
-  nestedTables: Element[];
-  nonTableChildren: ChildNode[];
+  nestedTables: readonly Element[];
   rawCell: Element;
   startRow: number;
   startCol: number;
@@ -195,7 +243,8 @@ export async function renderTable(
     const gridCells: (CellData | null)[][] = [];
 
     for (let rowIdx = 0; rowIdx < allRows.length; rowIdx++) {
-      const data: (CellData | null)[] = Array.from({ length: maxCols }, () => null);
+      const data: (CellData | null)[] = [];
+      for (let c = 0; c < maxCols; c++) data.push(null);
       // Étape 1 : Propager les cellules des lignes précédentes qui ont un rowspan actif
       if (rowIdx > 0) {
         for (let col = 0; col < maxCols; col++) {
@@ -208,10 +257,10 @@ export async function renderTable(
       let col = 0;
       const currentCells = rowCells[rowIdx] ?? [];
       const currentRow = allRows[rowIdx];
-      const rowInlineStyle = currentRow ? parseInlineStyle(currentRow) : {};
+      const rowInlineStyle = currentRow ? parseInlineStyle(currentRow) : EMPTY_INLINE_STYLE;
       const parentSection =
         currentRow?.parent && (currentRow.parent as any).type === 'tag' ? (currentRow.parent as Element) : null;
-      const sectionInlineStyle = parentSection ? parseInlineStyle(parentSection) : {};
+      const sectionInlineStyle = parentSection ? parseInlineStyle(parentSection) : EMPTY_INLINE_STYLE;
 
       // Étape 2 : Placer chaque cellule dans la première colonne libre
       for (const cell of currentCells) {
@@ -220,22 +269,13 @@ export async function renderTable(
         const colspan = Math.min(parseInt(cell.attribs['colspan'] || '1', 10), maxCols - col);
         const rowspan = Math.max(1, Math.min(parseInt(cell.attribs['rowspan'] || '1', 10), allRows.length - rowIdx));
 
-        const cellInlineStyle = parseInlineStyle(cell);
-        const inheritedBg =
-          cellInlineStyle.backgroundColor || rowInlineStyle.backgroundColor || sectionInlineStyle.backgroundColor;
-        const inheritedColor =
-          cellInlineStyle.color || rowInlineStyle.color || sectionInlineStyle.color || parentStyle.color;
-
-        const cellStyle: TextStyle = {
-          ...parentStyle,
-          ...sectionInlineStyle,
-          ...rowInlineStyle,
-          ...cellInlineStyle,
-          backgroundColor: inheritedBg,
-          color: inheritedColor,
-          fontSize: cellInlineStyle.fontSize ?? FONT_SIZES_TABLE[cell.name] ?? parentStyle.fontSize,
-          bold: cell.name === 'th' || cellInlineStyle.bold || rowInlineStyle.bold || parentStyle.bold,
-        };
+        const cellStyle = resolveCellStyle(
+          parentStyle,
+          sectionInlineStyle,
+          rowInlineStyle,
+          parseInlineStyle(cell),
+          cell.name,
+        );
 
         const padding = cellStyle.padding ?? defaultPadding;
         const fontFamily = resolveFontFamily(cellStyle.fontFamily, cellStyle.bold, cellStyle.italic, fontAliasSet);
@@ -358,7 +398,6 @@ export async function renderTable(
           colspan,
           rowspan,
           nestedTables,
-          nonTableChildren: getCellNonTableChildren(cell),
           rawCell: cell,
           startRow: rowIdx,
           startCol: col,

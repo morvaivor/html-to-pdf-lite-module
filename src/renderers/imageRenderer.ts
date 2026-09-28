@@ -32,6 +32,31 @@ export async function loadImage(
   }
 }
 
+// PDFKit only reuses images opened from string paths (`_imageRegistry`); a Buffer is decoded,
+// re-compressed and embedded again for every <img>. Opened images are memoized per document by buffer
+// identity (loadImage hands out one Buffer per source), so repeated logos and icons share one XObject.
+/** Subset of PDFKit's opened image object (not covered by @types/pdfkit) used for layout. */
+interface OpenedImage {
+  readonly width: number;
+  readonly height: number;
+}
+
+const _openedImages = new WeakMap<object, WeakMap<Buffer, OpenedImage>>();
+
+function openImageOnce(doc: PDFKit.PDFDocument, buffer: Buffer): OpenedImage {
+  let opened = _openedImages.get(doc);
+  if (opened === undefined) {
+    opened = new WeakMap();
+    _openedImages.set(doc, opened);
+  }
+  let image = opened.get(buffer);
+  if (image === undefined) {
+    image = (doc as unknown as { openImage(src: Buffer): OpenedImage }).openImage(buffer);
+    opened.set(buffer, image);
+  }
+  return image;
+}
+
 export function renderImage(
   doc: PDFKit.PDFDocument,
   element: Element,
@@ -90,7 +115,7 @@ export function renderImage(
       return;
     }
 
-    const img = (doc as any).openImage(imgBuffer);
+    const img = openImageOnce(doc, imgBuffer);
 
     let renderWidth = imgWidth || img.width;
     let renderHeight = imgHeight || img.height;
@@ -118,7 +143,8 @@ export function renderImage(
       doc.x = layout.leftMargin;
     }
 
-    doc.image(img, doc.x, doc.y, { width: renderWidth, height: renderHeight });
+    // PDFKit's image() accepts an already opened image, which its typings do not declare.
+    doc.image(img as unknown as PDFKit.Mixins.ImageSrc, doc.x, doc.y, { width: renderWidth, height: renderHeight });
     doc.y += renderHeight + spacing;
     doc.x = layout.leftMargin;
   });

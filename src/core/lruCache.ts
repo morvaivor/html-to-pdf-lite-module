@@ -1,13 +1,26 @@
 /**
  * src/core/lruCache.ts
  *
- * Generic, high-performance Least-Recently-Used (LRU) Cache backed by ES Map.
- * Provides O(1) get, set, has, and delete with automatic eviction of the
- * least-recently-accessed entry when maxSize is exceeded.
+ * Generic, high-performance Least-Recently-Used (LRU) Cache.
+ * A Map indexes intrusive doubly-linked nodes ordered from least to most recently used:
+ * a hit is one Map lookup plus pointer relinking (no Map delete/re-insert, which leaves holes that
+ * force V8 to periodically rehash the backing table), and eviction recycles the evicted node, so a
+ * full cache performs no allocation per insertion.
  */
 
+interface LruNode<K, V> {
+  key: K;
+  value: V;
+  prev: LruNode<K, V> | null;
+  next: LruNode<K, V> | null;
+}
+
 export class LruCache<K, V> {
-  private readonly items: Map<K, V>;
+  private readonly items: Map<K, LruNode<K, V>>;
+  /** Least recently used node. */
+  private head: LruNode<K, V> | null = null;
+  /** Most recently used node. */
+  private tail: LruNode<K, V> | null = null;
   readonly maxSize: number;
 
   constructor(maxSize: number) {
@@ -15,21 +28,22 @@ export class LruCache<K, V> {
       throw new Error(`LruCache maxSize must be greater than 0, got ${maxSize}`);
     }
     this.maxSize = maxSize;
-    this.items = new Map<K, V>();
+    this.items = new Map<K, LruNode<K, V>>();
   }
 
   /**
    * Retrieves an item by key and marks it as most recently used.
    */
   get(key: K): V | undefined {
-    const value = this.items.get(key);
-    if (value === undefined) {
+    const node = this.items.get(key);
+    if (node === undefined || node.value === undefined) {
       return undefined;
     }
-    // Refresh recency: remove and re-insert at tail
-    this.items.delete(key);
-    this.items.set(key, value);
-    return value;
+    if (node !== this.tail) {
+      this.unlink(node);
+      this.append(node);
+    }
+    return node.value;
   }
 
   /**
@@ -37,16 +51,27 @@ export class LruCache<K, V> {
    * Evicts the least-recently used entry if size exceeds maxSize.
    */
   set(key: K, value: V): void {
-    if (this.items.has(key)) {
-      this.items.delete(key);
-    } else if (this.items.size >= this.maxSize) {
-      // Evict least-recently used item (first item in Map)
-      const oldestKey = this.items.keys().next().value;
-      if (oldestKey !== undefined) {
-        this.items.delete(oldestKey);
+    let node = this.items.get(key);
+    if (node !== undefined) {
+      node.value = value;
+      if (node !== this.tail) {
+        this.unlink(node);
+        this.append(node);
       }
+      return;
     }
-    this.items.set(key, value);
+    if (this.items.size >= this.maxSize && this.head !== null) {
+      // Recycle the least-recently used node for the new entry.
+      node = this.head;
+      this.unlink(node);
+      this.items.delete(node.key);
+      node.key = key;
+      node.value = value;
+    } else {
+      node = { key, value, prev: null, next: null };
+    }
+    this.append(node);
+    this.items.set(key, node);
   }
 
   /**
@@ -60,6 +85,9 @@ export class LruCache<K, V> {
    * Deletes an item from the cache. Returns true if removed, false otherwise.
    */
   delete(key: K): boolean {
+    const node = this.items.get(key);
+    if (node === undefined) return false;
+    this.unlink(node);
     return this.items.delete(key);
   }
 
@@ -68,6 +96,8 @@ export class LruCache<K, V> {
    */
   clear(): void {
     this.items.clear();
+    this.head = null;
+    this.tail = null;
   }
 
   /**
@@ -80,25 +110,42 @@ export class LruCache<K, V> {
   /**
    * Returns an iterator of keys in least-to-most recently used order.
    */
-  keys(): IterableIterator<K> {
-    return this.items.keys();
+  *keys(): IterableIterator<K> {
+    for (let node = this.head; node !== null; node = node.next) yield node.key;
   }
 
   /**
    * Returns an iterator of values in least-to-most recently used order.
    */
-  values(): IterableIterator<V> {
-    return this.items.values();
+  *values(): IterableIterator<V> {
+    for (let node = this.head; node !== null; node = node.next) yield node.value;
   }
 
   /**
-   * Returns an iterator of [key, value] pairs.
+   * Returns an iterator of [key, value] pairs in least-to-most recently used order.
    */
-  entries(): IterableIterator<[K, V]> {
-    return this.items.entries();
+  *entries(): IterableIterator<[K, V]> {
+    for (let node = this.head; node !== null; node = node.next) yield [node.key, node.value];
   }
 
   [Symbol.iterator](): IterableIterator<[K, V]> {
-    return this.items.entries();
+    return this.entries();
+  }
+
+  private unlink(node: LruNode<K, V>): void {
+    if (node.prev !== null) node.prev.next = node.next;
+    else this.head = node.next;
+    if (node.next !== null) node.next.prev = node.prev;
+    else this.tail = node.prev;
+    node.prev = null;
+    node.next = null;
+  }
+
+  private append(node: LruNode<K, V>): void {
+    node.prev = this.tail;
+    node.next = null;
+    if (this.tail !== null) this.tail.next = node;
+    else this.head = node;
+    this.tail = node;
   }
 }

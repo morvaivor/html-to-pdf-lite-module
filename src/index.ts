@@ -3,6 +3,7 @@ export { renderHtmlToPdf, renderHtmlToPdfStream } from './htmlRenderer.js';
 export { WorkerPool, WorkerPoolBusyError, calculateMaxWorkers, type WorkerPoolOptions } from './workers/workerPool.js';
 export { verifyRenderingQuality, type QualityAuditResult, type QualityCheckOptions } from './qualityAuditor.js';
 export { Logger, createLogger, type LoggerOptions } from './core/logger.js';
+export { ensurePdfKitAccelerator, type PdfKitAcceleratorStatus } from './core/pdfkitAccelerator.js';
 export {
   gpuAccelerator,
   GpuAccelerator,
