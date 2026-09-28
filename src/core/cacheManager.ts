@@ -1,5 +1,6 @@
 import { LruCache } from './lruCache.js';
 import type { TextStyle } from '../types.js';
+import { parseLengthPt, parseRatio } from './units.js';
 
 const DEFAULT_STYLE: TextStyle = {
   color: '#000000',
@@ -94,10 +95,7 @@ function isValidColor(c: string): boolean {
 }
 
 function parseBoxSpacing(val: string): { top: number; right: number; bottom: number; left: number } {
-  const parts = val
-    .trim()
-    .split(/\s+/)
-    .map((p) => parseFloat(p) || 0);
+  const parts = val.trim().split(/\s+/).map((p) => parseLengthPt(p) ?? 0);
   if (parts.length === 1) {
     const v = parts[0] ?? 0;
     return { top: v, right: v, bottom: v, left: v };
@@ -173,9 +171,11 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
       case 'background-color':
         style.backgroundColor = isValidColor(value) ? value : undefined;
         break;
-      case 'font-size':
-        style.fontSize = parseFloat(value) || DEFAULT_STYLE.fontSize;
+      case 'font-size': {
+        const fs = parseLengthPt(value) ?? parseRatio(value);
+        style.fontSize = fs && fs > 0 ? fs : DEFAULT_STYLE.fontSize;
         break;
+      }
       case 'font-weight':
         style.bold = value === 'bold' || parseInt(value, 10) >= 700;
         break;
@@ -207,7 +207,7 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         style.borderColor = isValidColor(value) ? value : '#000000';
         break;
       case 'border-width':
-        style.borderWidth = parseFloat(value) || 1;
+        style.borderWidth = parseLengthPt(value) ?? 1;
         break;
       case 'border-left': {
         const bl = parseBorderShorthand(value);
@@ -243,16 +243,16 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         break;
       }
       case 'padding-top':
-        style.paddingTop = parseFloat(value) || 0;
+        style.paddingTop = parseLengthPt(value) ?? 0;
         break;
       case 'padding-bottom':
-        style.paddingBottom = parseFloat(value) || 0;
+        style.paddingBottom = parseLengthPt(value) ?? 0;
         break;
       case 'padding-left':
-        style.paddingLeft = parseFloat(value) || 0;
+        style.paddingLeft = parseLengthPt(value) ?? 0;
         break;
       case 'padding-right':
-        style.paddingRight = parseFloat(value) || 0;
+        style.paddingRight = parseLengthPt(value) ?? 0;
         break;
       case 'margin': {
         const m = parseBoxSpacing(value);
@@ -264,24 +264,24 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         break;
       }
       case 'margin-top':
-        style.marginTop = parseFloat(value) || 0;
+        style.marginTop = parseLengthPt(value) ?? 0;
         break;
       case 'margin-bottom':
-        style.marginBottom = parseFloat(value) || 0;
+        style.marginBottom = parseLengthPt(value) ?? 0;
         break;
       case 'margin-left':
-        style.marginLeft = parseFloat(value) || 0;
+        style.marginLeft = parseLengthPt(value) ?? 0;
         break;
       case 'margin-right':
-        style.marginRight = parseFloat(value) || 0;
+        style.marginRight = parseLengthPt(value) ?? 0;
         break;
       case 'line-height': {
-        const lh = parseFloat(value);
-        if (!isNaN(lh)) style.lineHeight = lh;
+        const lh = parseRatio(value);
+        if (lh !== null) style.lineHeight = lh;
         break;
       }
       case 'letter-spacing': {
-        const ls = parseFloat(value);
+        const ls = parseLengthPt(value) ?? parseFloat(value);
         if (!isNaN(ls)) style.letterSpacing = ls;
         break;
       }
@@ -308,8 +308,8 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         }
         break;
       case 'gap': {
-        const g = parseFloat(value);
-        if (!isNaN(g)) style.gap = g;
+        const g = parseLengthPt(value);
+        if (g !== null) style.gap = g;
         break;
       }
       case 'justify-content': {
@@ -336,20 +336,24 @@ export function parseInlineStyle(element: { attribs?: { style?: string } }): Par
         style.height = value;
         break;
       case 'min-width': {
-        const mw = parseFloat(value);
-        if (!isNaN(mw)) style.minWidth = mw;
+        const mw = parseLengthPt(value);
+        if (mw !== null) style.minWidth = mw;
         break;
       }
       case 'max-width': {
-        const mxw = parseFloat(value);
-        if (!isNaN(mxw)) style.maxWidth = mxw;
+        const mxw = parseLengthPt(value);
+        if (mxw !== null) style.maxWidth = mxw;
         break;
       }
       case 'border-radius': {
-        const br = parseFloat(value);
-        if (!isNaN(br)) style.borderRadius = br;
+        const br = parseLengthPt(value);
+        if (br !== null) style.borderRadius = br;
         break;
       }
+      case 'vertical-align':
+        if (value === 'top' || value === 'bottom') style.verticalAlign = value;
+        else if (value === 'middle' || value === 'center') style.verticalAlign = 'middle';
+        break;
     }
   }
 

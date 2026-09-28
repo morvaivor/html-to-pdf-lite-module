@@ -4,6 +4,8 @@ output/
 *.pdf
 coverage/
 dist-demo/
+.tmp/
 *.log
 *.txt
 .oxc_cache/
+exemple/

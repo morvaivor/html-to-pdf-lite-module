@@ -880,6 +880,45 @@ async function runTests() {
   await savePdf('output/test47-css-margin.pdf', pdf47With);
   console.log('  Saved output/test47-css-margin.pdf\n');
 
+  console.log('=== Test 48: thead répété sur chaque page ===');
+  const zlib48 = await import('node:zlib');
+  const pdf48 = await generator.generate(`
+    <table style="border: 1px solid #000; border-collapse: collapse;">
+      <thead>
+        <tr><th style="border: 1px solid #000; background-color: #CCCCCC;">ENTETE_COLONNE_A</th>
+            <th style="border: 1px solid #000; background-color: #CCCCCC;">ENTETE_COLONNE_B</th></tr>
+      </thead>
+      <tbody>
+        ${Array.from({ length: 80 }, (_, i) => `<tr><td style="border: 1px solid #000;">Ligne ${i + 1}</td><td style="border: 1px solid #000;">Valeur ${i + 1}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  `);
+  const decodeHexText = (str: string): string =>
+    str.replace(/<([0-9a-fA-F]+)>/g, (_, h: string) => {
+      let out = '';
+      for (let i = 0; i < h.length; i += 2) out += String.fromCharCode(parseInt(h.slice(i, i + 2), 16));
+      return out;
+    });
+  const streams48 = pdf48.toString('binary').match(/stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g) ?? [];
+  const pages48 = streams48
+    .map((s) => {
+      const body = s.replace(/^stream[\r\n]+/, '').replace(/[\r\n]+endstream$/, '');
+      try {
+        return decodeHexText(zlib48.inflateSync(Buffer.from(body, 'binary')).toString('latin1'));
+      } catch {
+        return body;
+      }
+    })
+    .filter((s) => s.includes('Tm'));
+  const headerPages48 = pages48.filter((s) => s.includes('ENTETE_COLONNE_A'));
+  console.log('  pages de contenu: ' + pages48.length + ', pages avec le thead: ' + headerPages48.length);
+  if (pages48.length < 2) throw new Error('thead repeat: expected at least 2 pages, got ' + pages48.length);
+  if (headerPages48.length !== pages48.length)
+    throw new Error('thead repeat: expected thead on all ' + pages48.length + ' pages, got ' + headerPages48.length);
+
+  await savePdf('output/test48-table-thead-repeat.pdf', pdf48);
+  console.log('  Saved output/test48-table-thead-repeat.pdf\n');
+
   console.log('\n=== All tests passed ===');
 }
 

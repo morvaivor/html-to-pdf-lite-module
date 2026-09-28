@@ -70,6 +70,38 @@ export function stripPageBlocks(css: string): string {
   return result;
 }
 
+/**
+ * Supprime les blocs @media (et les @supports) du CSS pour le parsing des règles normales.
+ * Utilise un compteur de profondeur d'accolades équilibrées pour éviter les ReDoS regex.
+ */
+export function stripMediaBlocks(css: string): string {
+  let result = css;
+
+  while (true) {
+    const at = result.search(/@(media|supports)\b/i);
+    if (at === -1) break;
+
+    const braceStart = result.indexOf('{', at);
+    if (braceStart === -1) break;
+
+    let depth = 0;
+    let blockEnd = -1;
+    for (let charIndex = braceStart; charIndex < result.length; charIndex++) {
+      if (result[charIndex] === '{') depth++;
+      if (result[charIndex] === '}') depth--;
+      if (depth === 0) {
+        blockEnd = charIndex;
+        break;
+      }
+    }
+    if (blockEnd === -1) break;
+
+    result = result.substring(0, at) + result.substring(blockEnd + 1);
+  }
+
+  return result;
+}
+
 export function stripFontFaceBlocks(css: string): string {
   let result = css;
 
@@ -141,7 +173,7 @@ export function parseCssRules(css: string): CssRule[] {
   const cached = _cssRulesCache.get(css);
   if (cached !== undefined) return cached;
 
-  const cssWithoutPage = stripCssComments(stripFontFaceBlocks(stripPageBlocks(css)));
+  const cssWithoutPage = stripCssComments(stripFontFaceBlocks(stripPageBlocks(stripMediaBlocks(css))));
 
   const rules: CssRule[] = [];
   RULE_REGEX.lastIndex = 0;

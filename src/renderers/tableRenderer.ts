@@ -97,6 +97,7 @@ export async function renderTable(
   const defaultBorderWidth = tableStyle.borderWidth ?? 1;
 
   const allRows: Element[] = [];
+  const rowIsThead: boolean[] = [];
   for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
     const child = element.children[childIndex];
     if (child && child.type === 'tag') {
@@ -106,15 +107,22 @@ export async function renderTable(
           const grandChild = el.children[grandChildIndex];
           if (grandChild && grandChild.type === 'tag' && (grandChild as Element).name === 'tr') {
             allRows.push(grandChild as Element);
+            rowIsThead.push(el.name === 'thead');
           }
         }
       } else if (el.name === 'tr') {
         allRows.push(el);
+        rowIsThead.push(false);
       }
     }
   }
 
   if (allRows.length === 0) return;
+
+  let theadCount = 0;
+  while (theadCount < rowIsThead.length && rowIsThead[theadCount]) {
+    theadCount++;
+  }
 
   // Single-pass extraction of rowCells and calculation of maxCols
   let maxCols = 0;
@@ -430,19 +438,19 @@ export async function renderTable(
       }
     }
 
-    for (const block of blocks) {
-      // O(1) block height using precomputed prefix sums
-      const blockHeight = rowPre(block.end + 1) - rowPre(block.start);
-      if (doc.y + blockHeight > layout.pageBottom) {
-        doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
-        doc.y = layout.contentTop;
-        doc.x = layout.leftMargin;
-      }
+   // Le thead est répété en haut de chaque nouvelle page (display: table-header-group)
+    let theadBlockCount = 0;
+    while (theadBlockCount < blocks.length && blocks[theadBlockCount]!.end < theadCount) {
+      theadBlockCount++;
+    }
+    const theadBlockValid =
+      theadCount > 0 && theadBlockCount > 0 && blocks[theadBlockCount - 1]!.end === theadCount - 1;
 
+    const renderRowRange = async (startRow: number, endRow: number): Promise<void> => {
       const blockY = doc.y;
-      const blockStartOffset = rowPre(block.start);
+      const blockStartOffset = rowPre(startRow);
 
-      for (let rowIndex = block.start; rowIndex <= block.end; rowIndex++) {
+      for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
         const cellY = blockY + (rowPre(rowIndex) - blockStartOffset);
         let col = 0;
         while (col < maxCols) {
@@ -469,9 +477,12 @@ export async function renderTable(
             doc.font(cell.fontFamily).fontSize(cell.fontSize).fillColor(cell.style.color);
 
             const textX = cellX + cell.padding;
-            const textY = cellY + cell.padding + cell.fontSize;
+            let textY = cellY + cell.padding + cell.fontSize;
             const textWidth = Math.max(10, cellWidth - cell.padding * 2);
             const textH = cell.textHeight;
+            if (cell.style.verticalAlign === 'middle' && textH > 0) {
+              textY = cellY + (cellH - textH) / 2;
+            }
 
             if (cell.hasComplexChildren) {
               const cellLayout = Object.create(layout);
@@ -560,7 +571,10 @@ export async function renderTable(
             if (cell.nestedTables.length > 0) {
               const savedX = doc.x;
               const savedY = doc.y;
-              doc.x = cellX;
+              const nestedLayout = Object.create(layout);
+              nestedLayout.leftMargin = textX;
+              nestedLayout.contentWidth = textWidth;
+              doc.x = textX;
               doc.y = cellY + cell.padding;
               for (const nestedTable of cell.nestedTables) {
                 await renderElementFn(
@@ -568,7 +582,7 @@ export async function renderTable(
                   nestedTable,
                   cell.style,
                   options,
-                  layout,
+                  nestedLayout,
                   textCache,
                   fontAliasSet,
                   imageCache,
@@ -585,7 +599,41 @@ export async function renderTable(
         }
       }
 
-      doc.y = blockY + blockHeight;
+     doc.y = blockY + (rowPre(endRow + 1) - blockStartOffset);
+    };
+
+    // Rendre d'abord le thead, puis les blocs du corps
+    if (theadBlockValid) {
+      const theadHeight = rowPre(theadCount) - rowPre(0);
+      if (doc.y + theadHeight > layout.pageBottom) {
+        doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
+        doc.y = layout.contentTop;
+        doc.x = layout.leftMargin;
+      }
+      await renderRowRange(0, theadCount - 1);
+      let theadOnCurrentPage = true;
+
+      for (const block of blocks.slice(theadBlockCount)) {
+        const blockHeight = rowPre(block.end + 1) - rowPre(block.start);
+        if (!theadOnCurrentPage || doc.y + blockHeight > layout.pageBottom) {
+          doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
+          doc.y = layout.contentTop;
+          doc.x = layout.leftMargin;
+          await renderRowRange(0, theadCount - 1);
+          theadOnCurrentPage = true;
+        }
+        await renderRowRange(block.start, block.end);
+      }
+    } else {
+      for (const block of blocks) {
+        const blockHeight = rowPre(block.end + 1) - rowPre(block.start);
+        if (doc.y + blockHeight > layout.pageBottom) {
+          doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
+          doc.y = layout.contentTop;
+          doc.x = layout.leftMargin;
+        }
+        await renderRowRange(block.start, block.end);
+      }
     }
   }
 }

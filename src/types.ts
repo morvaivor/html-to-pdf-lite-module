@@ -194,6 +194,7 @@ export interface TextStyle {
   alignItems?: 'flex-start' | 'center' | 'flex-end' | 'stretch';
   gap?: number;
   gridTemplateColumns?: string;
+  verticalAlign?: 'top' | 'middle' | 'bottom';
   width?: string | number;
   height?: string | number;
   minWidth?: number;

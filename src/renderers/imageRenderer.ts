@@ -1,4 +1,6 @@
 import SVGtoPDF from 'svg-to-pdfkit';
+import { parseInlineStyle } from '../core/cacheManager.js';
+import { parseLengthPt } from '../core/units.js';
 import { decodeDataUri, fetchRemoteResource, readLocalFile } from '../core/networkSecurity.js';
 import { defaultAssetCache } from '../core/assetCache.js';
 import type { TextStyle, RenderOptions } from '../types.js';
@@ -44,8 +46,11 @@ export function renderImage(
 ): Promise<void> {
   const attribs = element.attribs || {};
   const src = attribs['src'] || '';
-  const imgWidth = parseInt(attribs['width'] ?? '', 10) || 0;
-  const imgHeight = parseInt(attribs['height'] ?? '', 10) || 0;
+  const cssStyle = parseInlineStyle(element);
+  let imgWidth = parseInt(attribs['width'] ?? '', 10) || 0;
+  let imgHeight = parseInt(attribs['height'] ?? '', 10) || 0;
+  if (imgWidth === 0) imgWidth = Math.round(parseLengthPt(cssStyle.width == null ? null : String(cssStyle.width)) ?? 0);
+  if (imgHeight === 0) imgHeight = Math.round(parseLengthPt(cssStyle.height == null ? null : String(cssStyle.height)) ?? 0);
   const spacing = 8;
 
   if (!src) return Promise.resolve();
