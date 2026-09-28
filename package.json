@@ -1,6 +1,6 @@
 {
   "name": "pdf-generator",
-  "version": "2.6.1",
+  "version": "2.7.0",
   "description": "Minimal HTML to PDF generator using pdfkit + cheerio",
   "type": "module",
   "main": "./dist/index.js",
@@ -61,15 +61,15 @@
     "svg-to-pdfkit": "^0.1.8"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.2.2",
-    "@commitlint/config-conventional": "^21.2.2",
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@types/pdfkit": "^0.17.6",
     "@types/svg-to-pdfkit": "^0.1.4",
     "domhandler": "^6.0.1",
-    "oxfmt": "^0.66.0",
-    "oxlint": "^1.81.0",
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0",
     "tsdown": "^0.23.0",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
