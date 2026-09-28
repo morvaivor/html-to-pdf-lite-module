@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) or [Release Please](https://github.com/googleapis/release-please) for automated commit specifications.
 
+## [2.7.0](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.6.1...v2.7.0) - 2026-09-28
+
+### 🚀 Features
+- parsing unités CSS, thead répété, vertical-align et wrap des grilles ([ff46a96](https://github.com/morvaivor/html-to-pdf-lite-module/commit/ff46a963fc531a37aa98b61035af2a16e5723a99))
+
 ## [2.6.1](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.6.0...v2.6.1) - 2026-09-22
 
 ### 🐛 Bug Fixes
