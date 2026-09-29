@@ -1,8 +1,27 @@
 import { resolveFontFamily } from '../core/fontManager.js';
+import { applyMarginBottom, applyMarginTop } from '../core/blockFlow.js';
 import type { TextStyle, RenderOptions } from '../types.js';
 import type { PageLayout } from '../core/PageLayout.js';
 import type { TextMeasureCache } from '../core/cacheManager.js';
 import type { ChildNode } from 'domhandler';
+
+/**
+ * Extra spacing added by PDFKit between lines so that a line box matches the CSS `line-height`.
+ * Measurement and rendering must use the same value, otherwise estimated boxes disagree with the text.
+ */
+export function lineGapFor(style: TextStyle): number {
+  return style.lineHeight !== undefined
+    ? Math.max(0, style.fontSize * (style.lineHeight - 1.15))
+    : style.fontSize * 0.15;
+}
+
+/** Applies CSS `text-transform` the way the renderers draw the text. */
+export function transformText(text: string, style: TextStyle): string {
+  if (style.textTransform === 'uppercase') return text.toUpperCase();
+  if (style.textTransform === 'lowercase') return text.toLowerCase();
+  if (style.textTransform === 'capitalize') return text.replace(/\b\w/g, (c) => c.toUpperCase());
+  return text;
+}
 
 export function renderText(
   doc: PDFKit.PDFDocument,
@@ -13,23 +32,13 @@ export function renderText(
   textCache: TextMeasureCache,
   fontAliasSet: Set<string>,
 ): void {
-  let formattedText = text;
-  if (style.textTransform === 'uppercase') {
-    formattedText = text.toUpperCase();
-  } else if (style.textTransform === 'lowercase') {
-    formattedText = text.toLowerCase();
-  } else if (style.textTransform === 'capitalize') {
-    formattedText = text.replace(/\b\w/g, (c) => c.toUpperCase());
-  }
+  const formattedText = transformText(text, style);
 
   const fontFamily = resolveFontFamily(style.fontFamily, style.bold, style.italic, fontAliasSet);
   const fontSize = style.fontSize;
 
-  const marginTop = style.marginTop ?? 0;
   const marginBottom = style.marginBottom ?? 0;
-  if (marginTop > 0) {
-    doc.y += marginTop;
-  }
+  applyMarginTop(doc, style.marginTop ?? 0);
 
   const marginLeft = style.marginLeft ?? 0;
   const marginRight = style.marginRight ?? 0;
@@ -39,7 +48,7 @@ export function renderText(
   doc.font(fontFamily).fontSize(fontSize).fillColor(style.color);
   doc.x = targetX;
 
-  const lineGap = style.lineHeight !== undefined ? Math.max(0, fontSize * (style.lineHeight - 1.15)) : fontSize * 0.15;
+  const lineGap = lineGapFor(style);
 
   const textOpts: PDFKit.Mixins.TextOptions = {
     width: availableWidth,
@@ -58,7 +67,15 @@ export function renderText(
     textOpts.strike = true;
   }
 
-  const textHeight = textCache.measure(doc, formattedText, fontFamily, fontSize, availableWidth, lineGap);
+  const textHeight = textCache.measure(
+    doc,
+    formattedText,
+    fontFamily,
+    fontSize,
+    availableWidth,
+    lineGap,
+    style.letterSpacing,
+  );
 
   if (doc.y + textHeight > layout.pageBottom) {
     doc.addPage({
@@ -84,9 +101,7 @@ export function renderText(
     doc.y = borderY + 2;
   }
 
-  if (marginBottom > 0) {
-    doc.y += marginBottom;
-  }
+  applyMarginBottom(doc, marginBottom);
 }
 
 export function renderInlineRuns(
@@ -103,15 +118,11 @@ export function renderInlineRuns(
   const marginRight = blockStyle.marginRight ?? 0;
   const availableWidth = layout.contentWidth - marginLeft - marginRight;
   const startX = layout.leftMargin + marginLeft;
-  const marginTop = blockStyle.marginTop ?? 0;
   const marginBottom = blockStyle.marginBottom ?? 0;
 
-  if (marginTop > 0) doc.y += marginTop;
+  applyMarginTop(doc, blockStyle.marginTop ?? 0);
 
-  const lineGap =
-    blockStyle.lineHeight !== undefined
-      ? Math.max(0, blockStyle.fontSize * (blockStyle.lineHeight - 1.15))
-      : blockStyle.fontSize * 0.15;
+  const lineGap = lineGapFor(blockStyle);
 
   const baseTextOpts: PDFKit.Mixins.TextOptions = {
     width: availableWidth,
@@ -139,10 +150,7 @@ export function renderInlineRuns(
     const fontFamily = resolveFontFamily(run.style.fontFamily, run.style.bold, run.style.italic, fontAliasSet);
     doc.font(fontFamily).fontSize(run.style.fontSize).fillColor(run.style.color);
 
-    let txt = run.text;
-    if (run.style.textTransform === 'uppercase') txt = txt.toUpperCase();
-    else if (run.style.textTransform === 'lowercase') txt = txt.toLowerCase();
-    else if (run.style.textTransform === 'capitalize') txt = txt.replace(/\b\w/g, (c) => c.toUpperCase());
+    const txt = transformText(run.text, run.style);
 
     const opts: PDFKit.Mixins.TextOptions = {
       ...baseTextOpts,
@@ -175,7 +183,7 @@ export function renderInlineRuns(
     doc.y = borderY + 2;
   }
 
-  if (marginBottom > 0) doc.y += marginBottom;
+  applyMarginBottom(doc, marginBottom);
 }
 
 export async function processChildren(

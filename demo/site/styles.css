@@ -111,6 +111,18 @@ body {
   color: #34d399;
 }
 
+.badge-warning {
+  background-color: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.badge-danger {
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
 .pulse-dot {
   width: 8px;
   height: 8px;

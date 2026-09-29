@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import zlib from 'node:zlib';
 import { renderHtmlToPdf } from './htmlRenderer.js';
 import { parseInlineStyle } from './core/cacheManager.js';
+import { decodeWinAnsi } from './core/winAnsiText.js';
 import { parsePageRule, applyCssToElements } from './cssParser.js';
 import type { RenderOptions } from './types.js';
 
@@ -85,6 +86,12 @@ interface PdfExtractedData {
 }
 
 /**
+ * TJ adjustment (thousandths of an em) at or below which the pen moves right by at least a narrow space.
+ * Kerning only tightens (positive values) or loosens by a few units, while a word gap is ~250.
+ */
+const TJ_WORD_BREAK_THRESHOLD = -150;
+
+/**
  * Computes the Longest Common Subsequence length between two word arrays using O(min(M, N)) memory.
  */
 export function computeLcsLength(seq1: readonly string[], seq2: readonly string[]): number {
@@ -143,7 +150,10 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
     latinString.includes('/XObject');
 
   // 3. Decompress all streams with maxOutputLength to prevent decompression bombs (Zip bomb)
-  const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
+  // Exactly one EOL on each side: matching `[\r\n]+` would also eat compressed bytes equal to 0x0A/0x0D
+  // (e.g. the last byte of the Adler-32 checksum, ~1 stream in 128), and inflate would then reject
+  // the whole page.
+  const streamRegex = /stream(?:\r\n|\n|\r)([\s\S]*?)(?:\r\n|\n|\r)?endstream/g;
   let streamMatch: RegExpExecArray | null;
   const decompressedStreams: string[] = [];
 
@@ -152,7 +162,11 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
     if (!rawStream) continue;
     try {
       const decompressed = zlib
-        .inflateSync(Buffer.from(rawStream, 'binary'), { maxOutputLength: 20 * 1024 * 1024 })
+        .inflateSync(Buffer.from(rawStream, 'binary'), {
+          maxOutputLength: 20 * 1024 * 1024,
+          // Tolerates an ambiguous final EOL (data ending in "\r" before "\nendstream").
+          finishFlush: zlib.constants.Z_SYNC_FLUSH,
+        })
         .toString('latin1');
       decompressedStreams.push(decompressed);
     } catch {
@@ -208,13 +222,22 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
       if (opMatch[9] !== undefined) {
         const content = opMatch[9];
         let segmentText = '';
-        const tokenRegex = /<([0-9a-fA-F]+)>|\(([^)]*)\)/g;
+        const tokenRegex = /<([0-9a-fA-F]+)>|\(([^)]*)\)|(-?\d*\.?\d+)/g;
         let tokenMatch: RegExpExecArray | null;
         while ((tokenMatch = tokenRegex.exec(content)) !== null) {
           if (tokenMatch[1]) {
-            segmentText += Buffer.from(tokenMatch[1], 'hex').toString('latin1');
+            segmentText += decodeWinAnsi(Buffer.from(tokenMatch[1], 'hex'));
           } else if (tokenMatch[2] !== undefined) {
             segmentText += tokenMatch[2];
+          } else if (
+            tokenMatch[3] !== undefined &&
+            parseFloat(tokenMatch[3]) <= TJ_WORD_BREAK_THRESHOLD &&
+            segmentText &&
+            !segmentText.endsWith(' ')
+          ) {
+            // Justified text has no space glyphs: the gap is a negative adjustment (thousandths of an
+            // em), which PDF text extractors (pdf.js, Poppler) read as a word break.
+            segmentText += ' ';
           }
         }
 
@@ -239,7 +262,7 @@ function extractPdfData(pdfBuffer: Buffer): PdfExtractedData {
       if (opMatch[10] !== undefined || opMatch[11] !== undefined) {
         let singleText = '';
         if (opMatch[11]) {
-          singleText = Buffer.from(opMatch[11], 'hex').toString('latin1');
+          singleText = decodeWinAnsi(Buffer.from(opMatch[11], 'hex'));
         } else if (opMatch[10]) {
           singleText = opMatch[10];
         }

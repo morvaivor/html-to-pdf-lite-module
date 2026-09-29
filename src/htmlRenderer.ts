@@ -1,16 +1,22 @@
 import * as cheerio from 'cheerio';
 import PDFDocument from 'pdfkit';
-import { applyCssToElements, parsePageRule } from './cssParser.js';
+import { applyCssToElements, parsePageMargins, parsePageRule } from './cssParser.js';
 import { PageLayout } from './core/PageLayout.js';
-import { TextMeasureCache, DEFAULT_STYLE } from './core/cacheManager.js';
+import { TextMeasureCache, parseInlineStyle } from './core/cacheManager.js';
 import { registerFontFaces } from './core/fontManager.js';
 import { fetchRemoteResource, decodeDataUri, readLocalFile } from './core/networkSecurity.js';
 import { createLogger, type Logger } from './core/logger.js';
 import { ensurePdfKitAccelerator } from './core/pdfkitAccelerator.js';
-import { renderElement } from './renderers/registry.js';
+import {
+  cssNeedsUnicodeTextLayer,
+  markupNeedsUnicodeTextLayer,
+  needsUnicodeTextLayer,
+  useWinAnsiStandardFonts,
+} from './core/winAnsiText.js';
+import { renderElement, computeRootStyle } from './renderers/registry.js';
 import { renderText } from './renderers/textRenderer.js';
-import { renderPageZone, renderHeaderFooterContent } from './renderers/headerFooterRenderer.js';
-import type { PdfGenerateOptions, RenderOptions, TextStyle, ProfilingTimings } from './types.js';
+import { renderPageZoneRow, renderHeaderFooterContent } from './renderers/headerFooterRenderer.js';
+import type { MarginOptions, PdfGenerateOptions, RenderOptions, TextStyle, ProfilingTimings } from './types.js';
 import type { Element } from 'domhandler';
 
 const IMPORT_REGEX = /@import\s+(?:url\(['"]?([^'")]+)['"]?\)|['"]([^'"]+)['"])\s*;/g;
@@ -67,6 +73,35 @@ async function resolveCssImports(
   }
 
   return result;
+}
+
+/** Whether a text node of the (decoded) DOM holds characters that need the Unicode text layer. */
+function domNeedsUnicodeTextLayer(root: unknown): boolean {
+  const stack: unknown[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop() as { type?: string; data?: string; children?: unknown[] } | undefined;
+    if (node?.type === 'text') {
+      if (node.data && needsUnicodeTextLayer(node.data)) return true;
+    } else if (node?.children) {
+      for (const child of node.children) stack.push(child);
+    }
+  }
+  return false;
+}
+
+/**
+ * Page margins, side by side: the `margin` option (in points) wins over the `@page` rule of the CSS;
+ * sides set by neither use the PageLayout default.
+ */
+function resolvePageMargins(explicit: MarginOptions | undefined, css: string): MarginOptions | undefined {
+  const fromCss = css ? parsePageMargins(css) : null;
+  if (!fromCss) return explicit;
+  const resolved: { -readonly [Side in keyof MarginOptions]: MarginOptions[Side] } = { ...fromCss };
+  for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    const value = explicit?.[side];
+    if (value !== undefined) resolved[side] = value;
+  }
+  return resolved;
 }
 
 export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions = {}): Promise<Buffer> {
@@ -195,6 +230,7 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
 
     const renderOptions: RenderOptions = {
       ...options,
+      margin: resolvePageMargins(options.margin, fullCss),
       css: fullCss,
       _headerHeight: headerHeight,
       _footerHeight: footerHeight,
@@ -218,6 +254,16 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
       margin: 0,
       bufferPages: needsPageBuffer,
     });
+    // The Unicode text layer costs a scan of every measured or drawn string: documents whose text is
+    // all WinAnsi (most of them) do without it. Text only comes from the DOM, the CSS (@page content)
+    // and the header/footer templates.
+    if (
+      domNeedsUnicodeTextLayer($.root()[0]) ||
+      cssNeedsUnicodeTextLayer(fullCss) ||
+      [options.header, options.footer].some((template) => template && markupNeedsUnicodeTextLayer(template))
+    ) {
+      useWinAnsiStandardFonts(doc);
+    }
 
     const tFontStart = isProfiling ? performance.now() : 0;
     await registerFontFaces(doc, fullCss, renderOptions._fontBufferCache, fontAliasSet, renderOptions.allowedLocalIps);
@@ -254,11 +300,25 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
       margin: 0,
     });
 
-    const layout = getLayout();
-    doc.x = layout.leftMargin;
-    doc.y = layout.contentTop;
+    const pageLayout = getLayout();
 
-    const rootStyle: TextStyle = { ...DEFAULT_STYLE };
+    // <body> styles cascade to the whole document (font, color, size, line height, alignment) and its
+    // margins and padding inset the content box.
+    const bodyElement = bodyElements.length > 0 ? (bodyElements[0] as Element) : undefined;
+    const rootStyle: TextStyle = computeRootStyle(bodyElement);
+    const bodyBox = bodyElement ? parseInlineStyle(bodyElement) : {};
+    const insetLeft = (bodyBox.marginLeft ?? 0) + (bodyBox.paddingLeft ?? 0);
+    const insetRight = (bodyBox.marginRight ?? 0) + (bodyBox.paddingRight ?? 0);
+    let layout: PageLayout = pageLayout;
+    if (insetLeft > 0 || insetRight > 0) {
+      layout = Object.create(pageLayout) as PageLayout;
+      Object.assign(layout, {
+        leftMargin: pageLayout.leftMargin + insetLeft,
+        contentWidth: Math.max(10, pageLayout.contentWidth - insetLeft - insetRight),
+      });
+    }
+    doc.x = layout.leftMargin;
+    doc.y = pageLayout.contentTop + Math.max(0, (bodyBox.marginTop ?? 0) + (bodyBox.paddingTop ?? 0));
 
     const tLayoutStart = isProfiling ? performance.now() : 0;
     for (const child of body.children().toArray()) {
@@ -287,87 +347,28 @@ export async function renderHtmlToPdf(html: string, options: PdfGenerateOptions 
       const pageLayout = getLayout();
       const cw = pageLayout.contentWidth;
       const footerY = doc.page.height - pageLayout.bottomMargin - pageLayout.footerHeight;
-      const halfCw = cw / 2;
 
       if (pageZones) {
-        if (pageZones['top-left']) {
-          renderPageZone(
-            doc,
-            pageZones['top-left'],
-            pageLayout.leftMargin,
-            pageLayout.topMargin,
-            halfCw,
-            'left',
-            curPageNum,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['top-center']) {
-          renderPageZone(
-            doc,
-            pageZones['top-center'],
-            pageLayout.leftMargin + halfCw * 0.15,
-            pageLayout.topMargin,
-            halfCw,
-            'center',
-            curPageNum,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['top-right']) {
-          renderPageZone(
-            doc,
-            pageZones['top-right'],
-            pageLayout.leftMargin + halfCw,
-            pageLayout.topMargin,
-            halfCw,
-            'right',
-            curPageNum,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['bottom-left']) {
-          renderPageZone(
-            doc,
-            pageZones['bottom-left'],
-            pageLayout.leftMargin,
-            footerY,
-            halfCw,
-            'left',
-            curPageNum,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['bottom-center']) {
-          renderPageZone(
-            doc,
-            pageZones['bottom-center'],
-            pageLayout.leftMargin + halfCw * 0.15,
-            footerY,
-            halfCw,
-            'center',
-            curPageNum,
-            totalPages,
-            fontAliasSet,
-          );
-        }
-        if (pageZones['bottom-right']) {
-          renderPageZone(
-            doc,
-            pageZones['bottom-right'],
-            pageLayout.leftMargin + halfCw,
-            footerY,
-            halfCw,
-            'right',
-            curPageNum,
-            totalPages,
-            fontAliasSet,
-          );
-        }
+        renderPageZoneRow(
+          doc,
+          [pageZones['top-left'], pageZones['top-center'], pageZones['top-right']],
+          pageLayout.leftMargin,
+          pageLayout.topMargin,
+          cw,
+          curPageNum,
+          totalPages,
+          fontAliasSet,
+        );
+        renderPageZoneRow(
+          doc,
+          [pageZones['bottom-left'], pageZones['bottom-center'], pageZones['bottom-right']],
+          pageLayout.leftMargin,
+          footerY,
+          cw,
+          curPageNum,
+          totalPages,
+          fontAliasSet,
+        );
       }
 
       if (options.header && !pageZones) {

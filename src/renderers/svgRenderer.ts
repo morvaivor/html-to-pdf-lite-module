@@ -2,6 +2,7 @@ import SVGtoPDF from 'svg-to-pdfkit';
 import { render } from 'dom-serializer';
 import type { Element } from 'domhandler';
 import type { PageLayout } from '../core/PageLayout.js';
+import { parseLength, PT_PER_PX } from '../core/cssLength.js';
 import type { TextStyle, RenderOptions } from '../types.js';
 
 interface SvgDimensions {
@@ -9,10 +10,10 @@ interface SvgDimensions {
   height: number;
 }
 
+/** An SVG width or height attribute (CSS pixels when unitless) in points. */
 function parseDimension(value: string | undefined): number | null {
-  if (!value) return null;
-  const num = parseFloat(value.replace(/px|pt|em|rem/g, ''));
-  return Number.isFinite(num) && num > 0 ? num : null;
+  const size = parseLength(value);
+  return size !== undefined && size > 0 ? size : null;
 }
 
 function extractSvgDimensions(element: Element): SvgDimensions {
@@ -36,8 +37,9 @@ function extractSvgDimensions(element: Element): SvgDimensions {
       .split(/[\s,]+/)
       .map(Number);
     if (parts.length === 4 && parts[2] && parts[3]) {
-      const vbWidth = parts[2];
-      const vbHeight = parts[3];
+      // viewBox user units are CSS pixels when the SVG has no width and height.
+      const vbWidth = parts[2] * PT_PER_PX;
+      const vbHeight = parts[3] * PT_PER_PX;
 
       if (!width && !height) {
         width = vbWidth;
@@ -51,7 +53,7 @@ function extractSvgDimensions(element: Element): SvgDimensions {
   }
 
   // Fallbacks if still undefined
-  const defaultDim = 150;
+  const defaultDim = 150 * PT_PER_PX;
   return {
     width: width ?? defaultDim,
     height: height ?? defaultDim,
@@ -100,7 +102,8 @@ export function renderSvg(
       width: renderWidth,
       height: renderHeight,
       preserveAspectRatio: 'xMidYMid meet',
-      assumePt: true,
+      // SVG user units are CSS pixels (0.75pt), like the width and height converted above.
+      assumePt: false,
       imageCallback: () => '',
     });
   } catch (err) {

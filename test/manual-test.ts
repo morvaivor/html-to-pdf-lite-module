@@ -808,14 +808,17 @@ async function runTests() {
   const zlib46 = await import('node:zlib');
   const decompressStreams = (buf: Buffer): string => {
     const binary = buf.toString('binary');
-    const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
+    // Exactly one EOL on each side: `[\r\n]+` would also eat a final 0x0A/0x0D byte of the compressed data.
+    const streamRegex = /stream(?:\r\n|\n|\r)([\s\S]*?)(?:\r\n|\n|\r)?endstream/g;
     let m: RegExpExecArray | null;
     let out = '';
     while ((m = streamRegex.exec(binary)) !== null) {
       const raw = m[1];
       if (!raw) continue;
       try {
-        out += zlib46.inflateSync(Buffer.from(raw, 'binary')).toString('latin1');
+        out += zlib46
+          .inflateSync(Buffer.from(raw, 'binary'), { finishFlush: zlib46.constants.Z_SYNC_FLUSH })
+          .toString('latin1');
       } catch {
         out += raw;
       }
@@ -833,7 +836,8 @@ async function runTests() {
   `;
   const pdf46 = await generator.generate(content46);
   const stream46 = decompressStreams(pdf46);
-  if (!/3 Tc/.test(stream46)) throw new Error('letter-spacing: no "3 Tc" operator found in content stream');
+  // CSS pixels are 0.75pt: letter-spacing 3px is 2.25pt.
+  if (!/2\.25 Tc/.test(stream46)) throw new Error('letter-spacing: no "2.25 Tc" operator found in content stream');
   const strokeOps46 = (stream46.match(/\n1 w\n/g) || []).length;
   if (strokeOps46 < 2)
     throw new Error('text-decoration: expected at least 2 underline/line-through strokes, got ' + strokeOps46);
@@ -874,7 +878,8 @@ async function runTests() {
   const gapWith = Math.abs(ysWith[0] - ysWith[1]);
   const gapWithout = Math.abs(ysWithout[0] - ysWithout[1]);
   console.log('  gap avec margin:20px = ' + gapWith.toFixed(1) + ', gap sans = ' + gapWithout.toFixed(1));
-  if (gapWith < gapWithout + 15)
+  // margin-bottom: 20px = 15pt between the heading and the paragraph.
+  if (gapWith < gapWithout + 15 - 0.5)
     throw new Error('margin: h1 avec margin:20px devrait éloigner davantage le paragraphe suivant');
 
   await savePdf('output/test47-css-margin.pdf', pdf47With);

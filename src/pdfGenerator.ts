@@ -5,7 +5,7 @@ import type {
   PdfGeneratorConfig,
   PdfGenerateOptions,
   WorkerPoolStats,
-  RequiredMargin,
+  MarginOptions,
   Orientation,
   PaperFormat,
   LogLevel,
@@ -17,17 +17,12 @@ import { gpuAccelerator } from './gpu/gpuAccelerator.js';
 
 const DEFAULT_FORMAT: PaperFormat = 'A4';
 const DEFAULT_ORIENTATION: Orientation = 'portrait';
-const DEFAULT_MARGIN: RequiredMargin = {
-  top: 20,
-  bottom: 20,
-  left: 20,
-  right: 20,
-} as const;
 
 interface ResolvedConfig {
   readonly defaultFormat: string;
   readonly defaultOrientation: Orientation;
-  readonly defaultMargin: RequiredMargin;
+  /** Only the sides set by the configuration: the others come from the `@page` rule, else 20pt. */
+  readonly defaultMargin: MarginOptions;
   readonly css: string;
   readonly header: string;
   readonly footer: string;
@@ -57,7 +52,7 @@ export class PdfGenerator {
     this.config = {
       defaultFormat: config.defaultFormat ?? DEFAULT_FORMAT,
       defaultOrientation: config.defaultOrientation ?? DEFAULT_ORIENTATION,
-      defaultMargin: config.defaultMargin ? { ...DEFAULT_MARGIN, ...config.defaultMargin } : DEFAULT_MARGIN,
+      defaultMargin: config.defaultMargin ?? {},
       css: config.css ?? '',
       header: config.header ?? '',
       footer: config.footer ?? '',
@@ -122,7 +117,6 @@ export class PdfGenerator {
       format: options.format ?? this.config.defaultFormat,
       orientation: options.orientation ?? this.config.defaultOrientation,
       margin: {
-        ...DEFAULT_MARGIN,
         ...this.config.defaultMargin,
         ...options.margin,
       },

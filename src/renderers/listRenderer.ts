@@ -1,11 +1,10 @@
 import { parseInlineStyle } from '../core/cacheManager.js';
 import { resolveFontFamily } from '../core/fontManager.js';
+import { computedFontSize } from '../core/cssLength.js';
 import type { TextStyle, RenderOptions } from '../types.js';
 import type { PageLayout } from '../core/PageLayout.js';
 import type { TextMeasureCache } from '../core/cacheManager.js';
 import type { Element, ChildNode } from 'domhandler';
-
-const FONT_SIZES_LI: number = 12;
 
 export function renderList(
   doc: PDFKit.PDFDocument,
@@ -20,7 +19,6 @@ export function renderList(
   const isOrdered = element.name === 'ol';
   const indent = depth * 20;
   const itemSpacing = 4;
-  const fontSize = FONT_SIZES_LI;
 
   let itemIndex = 0;
 
@@ -37,7 +35,9 @@ export function renderList(
     const itemStyle: TextStyle = {
       ...parentStyle,
       ...inlineStyle,
-      fontSize: inlineStyle.fontSize ?? fontSize,
+      // Items inherit the list's font size (CSS inheritance) unless they set their own.
+      fontSize: computedFontSize(inlineStyle, parentStyle.fontSize),
+      fontSizeScale: undefined,
     };
 
     const fontFamily = resolveFontFamily(itemStyle.fontFamily, itemStyle.bold, itemStyle.italic, fontAliasSet);

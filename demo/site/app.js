@@ -139,39 +139,49 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupTestFilters();
   loadExample(currentExampleId);
 
-  try {
-    const res = await fetch('test-results.json');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.branch) {
-        const branchEl = document.getElementById('branch-name');
-        if (branchEl) branchEl.textContent = data.branch;
-        const branchTextEl = document.getElementById('branch-text');
-        if (branchTextEl) branchTextEl.textContent = data.branch;
-      }
-      if (data.totalIntegrationTests) {
-        const totalPassedEl = document.getElementById('stat-total-passed');
-        if (totalPassedEl) totalPassedEl.textContent = `${data.totalIntegrationTests} / ${data.totalIntegrationTests}`;
-      }
-      if (data.totalUnitTests) {
-        const unitPassedEl = document.getElementById('stat-unit-passed');
-        if (unitPassedEl) unitPassedEl.textContent = `${data.totalUnitTests} / ${data.totalUnitTests}`;
-      }
-      if (data.testFiles) {
-        TEST_CASES.forEach((tc) => {
-          if (data.testFiles[tc.id]) {
-            tc.file = data.testFiles[tc.id].file;
-            tc.sizeBytes = data.testFiles[tc.id].size;
-          }
-        });
-      }
+  const data = await manifestReady;
+  if (data) {
+    updateFidelityBadge(currentExampleId);
+    if (data.branch) {
+      const branchEl = document.getElementById('branch-name');
+      if (branchEl) branchEl.textContent = data.branch;
+      const branchTextEl = document.getElementById('branch-text');
+      if (branchTextEl) branchTextEl.textContent = data.branch;
     }
-  } catch (_e) {
-    // Fallback quietly to default hardcoded paths
+    updateSuiteStat('stat-total-passed', 'stat-total-label', "Tests d'intégration", data.integrationTests);
+    updateTestsBadge(data.integrationTests);
+    updateSuiteStat('stat-unit-passed', 'stat-unit-label', 'Tests unitaires', data.unitTests);
+    if (data.testFiles) {
+      TEST_CASES.forEach((tc) => {
+        if (data.testFiles[tc.id]) {
+          tc.file = data.testFiles[tc.id].file;
+          tc.sizeBytes = data.testFiles[tc.id].size;
+        }
+      });
+    }
   }
 
   renderTestsTable(TEST_CASES);
 });
+
+/** Shows the real counts of a test suite run by the demo build (passed / total, success rate). */
+function updateSuiteStat(valueId, labelId, label, suite) {
+  const valueEl = document.getElementById(valueId);
+  const labelEl = document.getElementById(labelId);
+  if (!valueEl || !labelEl || !suite || !suite.total) return;
+  valueEl.textContent = `${suite.passed} / ${suite.total}`;
+  labelEl.textContent = `${label} (${Math.floor((suite.passed / suite.total) * 100)}%)`;
+}
+
+/** Header badge: integration tests of this build, green when all of them passed. */
+function updateTestsBadge(suite) {
+  const badge = document.getElementById('tests-badge');
+  const text = document.getElementById('tests-badge-text');
+  if (!badge || !text || !suite || !suite.total) return;
+  text.textContent = `${suite.passed}/${suite.total} Tests Intégration Passés`;
+  badge.classList.remove('badge-meta');
+  badge.classList.add(suite.failed ? 'badge-danger' : 'badge-success');
+}
 
 function setupNavigation() {
   const tabs = document.querySelectorAll('.nav-tab');
@@ -343,25 +353,53 @@ function renderTestsTable(tests) {
   });
 }
 
-let testResultsManifest = null;
-fetch('test-results.json')
-  .then((r) => r.json())
-  .then((data) => {
-    testResultsManifest = data;
-    if (typeof currentExampleId !== 'undefined') {
-      updateFidelityBadge(currentExampleId);
-    }
-  })
-  .catch(() => {});
+/**
+ * Build manifest (scores computed by verifyRenderingQuality in scripts/build-demo.ts). It is embedded in
+ * index.html at build time, so it is available from file:// and cannot be out of sync with the PDFs;
+ * test-results.json is only fetched when the page is served without the build step.
+ */
+function readEmbeddedManifest() {
+  const script = document.getElementById('demo-manifest');
+  if (!script) return null;
+  try {
+    return JSON.parse(script.textContent || 'null');
+  } catch (_e) {
+    return null;
+  }
+}
+
+let testResultsManifest = readEmbeddedManifest();
+const manifestReady = testResultsManifest
+  ? Promise.resolve(testResultsManifest)
+  : fetch('test-results.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((data) => (testResultsManifest = data));
+
+const GRADE_BADGE_CLASSES = {
+  'A+': 'badge-success',
+  A: 'badge-success',
+  B: 'badge-warning',
+  C: 'badge-warning',
+  D: 'badge-danger',
+  F: 'badge-danger',
+};
 
 function updateFidelityBadge(exId) {
   const badge = document.getElementById('fidelity-badge');
   if (!badge) return;
   const numId = exId.replace('example-', '');
   const exData = testResultsManifest?.demonstrationExamples?.find((e) => e.id === numId);
-  if (exData && exData.qualityScore !== undefined) {
+  badge.classList.remove('badge-meta', 'badge-success', 'badge-warning', 'badge-danger');
+  if (exData && typeof exData.qualityScore === 'number') {
     badge.textContent = `✨ Fidélité Rendu : ${exData.qualityScore}% (${exData.grade})`;
+    badge.classList.add(GRADE_BADGE_CLASSES[exData.grade] || 'badge-meta');
+    const recall = typeof exData.textRecall === 'number' ? ` • texte retrouvé : ${Math.round(exData.textRecall * 100)}%` : '';
+    badge.title = `Score SSQI calculé au build par verifyRenderingQuality${recall}`;
   } else {
-    badge.textContent = `✨ Fidélité Rendu : 100% (A+)`;
+    // Never show a made-up score: without the manifest the fidelity is unknown.
+    badge.textContent = '✨ Fidélité Rendu : non mesurée';
+    badge.classList.add('badge-meta');
+    badge.title = 'Manifeste test-results.json indisponible : lancez npm run build:demo';
   }
 }

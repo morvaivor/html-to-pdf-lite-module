@@ -11,6 +11,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { resolveFontFamily, registerFontFaces } from '../src/core/fontManager.js';
 import { parseInlineStyle } from '../src/core/cacheManager.js';
+import { PT_PER_PX } from '../src/core/cssLength.js';
 import { renderHtmlToPdf } from '../src/htmlRenderer.js';
 import { createPdfGenerator } from '../src/index.js';
 import { calculateMaxWorkers } from '../src/workers/workerPool.js';
@@ -256,29 +257,32 @@ describe('fontManager', () => {
   });
 });
 
+/** CSS pixels in points (1px = 0.75pt). */
+const px = (value: number): number => value * PT_PER_PX;
+
 describe('cacheManager & Box Spacing', () => {
   test('parses box spacing with 1, 2, 3, and 4 parts', () => {
     const el1 = { attribs: { style: 'padding: 10px;' } };
-    assert.equal(parseInlineStyle(el1).padding, 10);
-    assert.equal(parseInlineStyle(el1).paddingTop, 10);
+    assert.equal(parseInlineStyle(el1).padding, px(10));
+    assert.equal(parseInlineStyle(el1).paddingTop, px(10));
 
     const el2 = { attribs: { style: 'padding: 5px 15px;' } };
-    assert.equal(parseInlineStyle(el2).paddingTop, 5);
-    assert.equal(parseInlineStyle(el2).paddingRight, 15);
-    assert.equal(parseInlineStyle(el2).paddingBottom, 5);
-    assert.equal(parseInlineStyle(el2).paddingLeft, 15);
+    assert.equal(parseInlineStyle(el2).paddingTop, px(5));
+    assert.equal(parseInlineStyle(el2).paddingRight, px(15));
+    assert.equal(parseInlineStyle(el2).paddingBottom, px(5));
+    assert.equal(parseInlineStyle(el2).paddingLeft, px(15));
 
     const el3 = { attribs: { style: 'margin: 5px 10px 15px;' } };
-    assert.equal(parseInlineStyle(el3).marginTop, 5);
-    assert.equal(parseInlineStyle(el3).marginRight, 10);
-    assert.equal(parseInlineStyle(el3).marginBottom, 15);
-    assert.equal(parseInlineStyle(el3).marginLeft, 10);
+    assert.equal(parseInlineStyle(el3).marginTop, px(5));
+    assert.equal(parseInlineStyle(el3).marginRight, px(10));
+    assert.equal(parseInlineStyle(el3).marginBottom, px(15));
+    assert.equal(parseInlineStyle(el3).marginLeft, px(10));
 
     const el4 = { attribs: { style: 'margin: 1px 2px 3px 4px;' } };
-    assert.equal(parseInlineStyle(el4).marginTop, 1);
-    assert.equal(parseInlineStyle(el4).marginRight, 2);
-    assert.equal(parseInlineStyle(el4).marginBottom, 3);
-    assert.equal(parseInlineStyle(el4).marginLeft, 4);
+    assert.equal(parseInlineStyle(el4).marginTop, px(1));
+    assert.equal(parseInlineStyle(el4).marginRight, px(2));
+    assert.equal(parseInlineStyle(el4).marginBottom, px(3));
+    assert.equal(parseInlineStyle(el4).marginLeft, px(4));
   });
 
   test('parses individual border sides and shorthand styles', () => {
@@ -289,18 +293,18 @@ describe('cacheManager & Box Spacing', () => {
       },
     };
     const style1 = parseInlineStyle(el1);
-    assert.equal(style1.borderLeftWidth, 2);
+    assert.equal(style1.borderLeftWidth, px(2));
     assert.equal(style1.borderLeftColor, 'red');
-    assert.equal(style1.borderTopWidth, 1);
+    assert.equal(style1.borderTopWidth, px(1));
     assert.equal(style1.borderTopColor, 'blue');
-    assert.equal(style1.borderRightWidth, 3);
+    assert.equal(style1.borderRightWidth, px(3));
     assert.equal(style1.borderRightColor, 'green');
-    assert.equal(style1.borderBottomWidth, 4);
+    assert.equal(style1.borderBottomWidth, px(4));
     assert.equal(style1.borderBottomColor, 'black');
 
     const el2 = { attribs: { style: 'border: none; border-width: 3px; border-color: #333333;' } };
     const style2 = parseInlineStyle(el2);
-    assert.equal(style2.borderWidth, 3);
+    assert.equal(style2.borderWidth, px(3));
     assert.equal(style2.borderColor, '#333333');
 
     const el3 = { attribs: { style: 'border: 0;' } };
@@ -332,10 +336,10 @@ describe('cacheManager & Box Spacing', () => {
     };
     const s = parseInlineStyle(el);
     assert.equal(s.lineHeight, 1.6);
-    assert.equal(s.letterSpacing, 0.5);
+    assert.equal(s.letterSpacing, px(0.5));
     assert.equal(s.textDecoration, 'underline');
     assert.equal(s.textTransform, 'uppercase');
-    assert.equal(s.borderRadius, 8);
+    assert.equal(s.borderRadius, px(8));
   });
 
   test('handles style cache overflow cleanly without leaking', () => {
@@ -343,7 +347,7 @@ describe('cacheManager & Box Spacing', () => {
       parseInlineStyle({ attribs: { style: `font-size: ${10 + (i % 20)}px; color: #${i % 9}00;` } });
     }
     const finalStyle = parseInlineStyle({ attribs: { style: 'font-size: 14px;' } });
-    assert.equal(finalStyle.fontSize, 14);
+    assert.equal(finalStyle.fontSize, px(14));
   });
 });
 

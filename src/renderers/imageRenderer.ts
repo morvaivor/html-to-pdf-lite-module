@@ -1,4 +1,5 @@
 import SVGtoPDF from 'svg-to-pdfkit';
+import { parseLength, PT_PER_PX } from '../core/cssLength.js';
 import { decodeDataUri, fetchRemoteResource, readLocalFile } from '../core/networkSecurity.js';
 import { defaultAssetCache } from '../core/assetCache.js';
 import type { TextStyle, RenderOptions } from '../types.js';
@@ -69,8 +70,9 @@ export function renderImage(
 ): Promise<void> {
   const attribs = element.attribs || {};
   const src = attribs['src'] || '';
-  const imgWidth = parseInt(attribs['width'] ?? '', 10) || 0;
-  const imgHeight = parseInt(attribs['height'] ?? '', 10) || 0;
+  // HTML width/height attributes are CSS pixels.
+  const imgWidth = parseLength(attribs['width']) || 0;
+  const imgHeight = parseLength(attribs['height']) || 0;
   const spacing = 8;
 
   if (!src) return Promise.resolve();
@@ -84,8 +86,8 @@ export function renderImage(
       imgBuffer.subarray(0, 100).toString('utf8').includes('<svg');
 
     if (isSvg) {
-      let renderWidth = imgWidth || 150;
-      let renderHeight = imgHeight || 150;
+      let renderWidth = imgWidth || 150 * PT_PER_PX;
+      let renderHeight = imgHeight || 150 * PT_PER_PX;
 
       if (renderWidth > layout.contentWidth) {
         const ratio = layout.contentWidth / renderWidth;
@@ -104,7 +106,7 @@ export function renderImage(
           width: renderWidth,
           height: renderHeight,
           preserveAspectRatio: 'xMidYMid meet',
-          assumePt: true,
+          assumePt: false,
         });
       } catch (err) {
         console.warn('Warning: Failed to render SVG image:', err);
@@ -117,18 +119,19 @@ export function renderImage(
 
     const img = openImageOnce(doc, imgBuffer);
 
-    let renderWidth = imgWidth || img.width;
-    let renderHeight = imgHeight || img.height;
+    // Intrinsic size: one image pixel per CSS pixel, as browsers display images at 1x.
+    const intrinsicWidth = img.width * PT_PER_PX;
+    const intrinsicHeight = img.height * PT_PER_PX;
+    let renderWidth = imgWidth || intrinsicWidth;
+    let renderHeight = imgHeight || intrinsicHeight;
 
     if (imgHeight && imgWidth) {
       renderWidth = imgWidth;
       renderHeight = imgHeight;
     } else if (imgWidth) {
-      const ratio = imgWidth / img.width;
-      renderHeight = img.height * ratio;
+      renderHeight = intrinsicHeight * (imgWidth / intrinsicWidth);
     } else if (imgHeight) {
-      const ratio = imgHeight / img.height;
-      renderWidth = img.width * ratio;
+      renderWidth = intrinsicWidth * (imgHeight / intrinsicHeight);
     }
 
     if (renderWidth > layout.contentWidth) {

@@ -2,7 +2,8 @@ import type { Cheerio, CheerioAPI } from 'cheerio';
 import type { ChildNode, Element } from 'domhandler';
 import { parseStyleString, primeInlineStyle } from './core/cacheManager.js';
 import { LruCache } from './core/lruCache.js';
-import type { CssRule, FontFace, PageZones, PageZoneProperties, TextStyle } from './types.js';
+import { parseLength } from './core/cssLength.js';
+import type { CssRule, FontFace, MarginOptions, PageZones, PageZoneProperties, TextStyle } from './types.js';
 
 // --- Pre-compiled regex constants (compiled once at module load) ---
 const FONT_FACE_REGEX = /@font-face\s*\{([^}]*)\}/g;
@@ -581,6 +582,55 @@ export function extractPageBlock(css: string): string | null {
   if (blockEnd === -1) return null;
 
   return css.substring(braceStart + 1, blockEnd);
+}
+
+/** Top-level declarations of a block body, without its nested blocks (`@top-left { ... }`). */
+function topLevelDeclarations(body: string): string {
+  let result = '';
+  let depth = 0;
+  let statementStart = 0;
+  for (const char of body) {
+    if (char === '{') {
+      // Drop the prelude of the nested block (its at-rule name).
+      if (depth === 0) result = result.slice(0, statementStart);
+      depth++;
+    } else if (char === '}') {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) statementStart = result.length;
+    } else if (depth === 0) {
+      result += char;
+      if (char === ';') statementStart = result.length;
+    }
+  }
+  return result;
+}
+
+type PageSide = 'top' | 'right' | 'bottom' | 'left';
+
+/**
+ * Page margins declared by the `@page` rule (`margin` shorthand and `margin-*` longhands), in points,
+ * or null when it declares none.
+ */
+export function parsePageMargins(css: string): MarginOptions | null {
+  const pageBody = css ? extractPageBlock(css) : null;
+  if (!pageBody) return null;
+
+  const margins: Partial<Record<PageSide, number>> = {};
+  for (const declaration of topLevelDeclarations(pageBody).split(';')) {
+    const colonIdx = declaration.indexOf(':');
+    if (colonIdx === -1) continue;
+    const prop = declaration.slice(0, colonIdx).trim().toLowerCase();
+    const value = declaration.slice(colonIdx + 1).trim();
+    if (prop === 'margin') {
+      const [top, right = top, bottom = top, left = right] = value.split(/\s+/).map((part) => parseLength(part));
+      Object.assign(margins, { top, right, bottom, left });
+    } else if (prop === 'margin-top' || prop === 'margin-right' || prop === 'margin-bottom' || prop === 'margin-left') {
+      margins[prop.slice(7) as PageSide] = parseLength(value);
+    }
+  }
+
+  const sides = (['top', 'right', 'bottom', 'left'] as const).filter((side) => margins[side] !== undefined);
+  return sides.length > 0 ? Object.fromEntries(sides.map((side) => [side, margins[side]])) : null;
 }
 
 export function parsePageRule(css: string): PageZones | null {

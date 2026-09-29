@@ -1,4 +1,6 @@
 import { parseInlineStyle } from '../core/cacheManager.js';
+import { parseLength, PT_PER_PX } from '../core/cssLength.js';
+import { applyMarginBottom, applyMarginTop } from '../core/blockFlow.js';
 import type { TextStyle, RenderOptions } from '../types.js';
 import type { PageLayout } from '../core/PageLayout.js';
 import type { TextMeasureCache } from '../core/cacheManager.js';
@@ -33,26 +35,22 @@ function calculateColumnWidths(
     const tokens = clean.split(/\s+/).filter(Boolean);
     if (tokens.length > 0) {
       let totalFr = 0;
-      let fixedPx = 0;
-      const parsedTokens: Array<{ type: 'fr' | 'px' | 'pct'; value: number }> = [];
+      let fixedWidth = 0;
+      const parsedTokens: Array<{ type: 'fr' | 'fixed'; value: number }> = [];
 
       for (const t of tokens) {
         if (t.endsWith('fr')) {
           const v = parseFloat(t) || 1;
           totalFr += v;
           parsedTokens.push({ type: 'fr', value: v });
-        } else if (t.endsWith('%')) {
-          const v = (parseFloat(t) / 100) * availableWidth;
-          fixedPx += v;
-          parsedTokens.push({ type: 'pct', value: v });
         } else {
-          const v = parseFloat(t.replace(/(px|pt)/i, '')) || 50;
-          fixedPx += v;
-          parsedTokens.push({ type: 'px', value: v });
+          const v = t.endsWith('%') ? (parseFloat(t) / 100) * availableWidth : (parseLength(t) ?? 50 * PT_PER_PX);
+          fixedWidth += v;
+          parsedTokens.push({ type: 'fixed', value: v });
         }
       }
 
-      const remainingForFr = Math.max(0, availableWidth - fixedPx);
+      const remainingForFr = Math.max(0, availableWidth - fixedWidth);
       return parsedTokens.map((p) => {
         if (p.type === 'fr') {
           return totalFr > 0 ? (p.value / totalFr) * remainingForFr : availableWidth / tokens.length;
@@ -79,10 +77,10 @@ function calculateColumnWidths(
         hasExplicitWidths = true;
         continue;
       } else {
-        const px = parseFloat(wStr.replace(/(px|pt)/i, ''));
-        if (!isNaN(px)) {
-          childWidths.push(px);
-          allocatedWidth += px;
+        const width = parseLength(wStr);
+        if (width !== undefined) {
+          childWidths.push(width);
+          allocatedWidth += width;
           hasExplicitWidths = true;
           continue;
         }
@@ -147,9 +145,7 @@ export async function renderFlexContainer(
   const paddingLeft = style.paddingLeft ?? style.padding ?? 0;
   const paddingRight = style.paddingRight ?? style.padding ?? 0;
 
-  if (marginTop > 0) {
-    doc.y += marginTop;
-  }
+  applyMarginTop(doc, marginTop);
 
   // Tag children uniquement
   const tagChildren = element.children.filter((c: any) => c.type === 'tag') as Element[];
@@ -170,7 +166,7 @@ export async function renderFlexContainer(
       await renderElementFn(doc, child, style, options, colLayout, textCache, fontAliasSet, imageCache);
       if (gap > 0) doc.y += gap;
     }
-    if (marginBottom > 0) doc.y += marginBottom;
+    applyMarginBottom(doc, marginBottom);
     return;
   }
 
@@ -241,6 +237,7 @@ export async function renderFlexContainer(
   }
 
   // Positionner le curseur en bas de la plus grande colonne
-  doc.y = startY + finalBoxHeight + marginBottom;
+  doc.y = startY + finalBoxHeight;
+  applyMarginBottom(doc, marginBottom);
   doc.x = layout.leftMargin;
 }
