@@ -269,7 +269,6 @@ function computeInheritedStyle(parentStyle: TextStyle, inlineStyle: Partial<Text
     textDecoration: inlineStyle.textDecoration ?? parentStyle.textDecoration,
     textAlign: inlineStyle.textAlign ?? parentStyle.textAlign,
     textTransform: inlineStyle.textTransform ?? parentStyle.textTransform,
-    verticalAlign: inlineStyle.verticalAlign ?? parentStyle.verticalAlign,
 
     // Propriétés CSS NON héritables (Box Model : bordures, marges, padding, fonds propres à l'élément)
     backgroundColor: inlineStyle.backgroundColor,

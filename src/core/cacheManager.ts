@@ -361,7 +361,8 @@ export function parseStyleString(styleAttr: string): Partial<TextStyle> {
         const va = value.toLowerCase();
         if (va === 'top' || va === 'text-top') style.verticalAlign = 'top';
         else if (va === 'bottom' || va === 'text-bottom') style.verticalAlign = 'bottom';
-        else if (va === 'middle' || va === 'baseline') style.verticalAlign = va;
+        else if (va === 'middle' || va === 'center') style.verticalAlign = 'middle';
+        else if (va === 'baseline') style.verticalAlign = 'baseline';
         break;
       }
       case 'text-align':
@@ -415,10 +416,6 @@ export function parseStyleString(styleAttr: string): Partial<TextStyle> {
         if (br !== undefined) style.borderRadius = br;
         break;
       }
-      case 'vertical-align':
-        if (value === 'top' || value === 'bottom') style.verticalAlign = value;
-        else if (value === 'middle' || value === 'center') style.verticalAlign = 'middle';
-        break;
     }
   }
 

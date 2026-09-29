@@ -119,6 +119,18 @@ describe('Rendering with CSS units', () => {
     assert.deepEqual(textOperators(explicit).xs, [30]);
   });
 
+  test('sizes images from their CSS width and height, which win over the HTML attributes', async () => {
+    const png =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const pdf = await renderHtmlToPdf(`<img src="${png}" width="400" height="400" style="width: 100px; height: 2cm">`, {
+      gpu: false,
+    });
+    // PDFKit draws an image with the matrix [width 0 0 -height x y] just before painting its XObject.
+    const [, width, height] = /([\d.]+) 0 0 -([\d.]+) [\d.]+ [\d.]+ cm\s+\/I\d+ Do/.exec(contentStreams(pdf)) ?? [];
+    assert.equal(Number(width), 75);
+    assert.ok(Math.abs(Number(height) - 56.6929) < 1e-3);
+  });
+
   test('reads @page margin declarations, not those of the margin boxes', () => {
     const css = '@page { @top-left { content: "x"; margin: 99px; } margin: 10mm 20px; margin-bottom: 1in; }';
     const margins = parsePageMargins(css);

@@ -677,25 +677,21 @@ export async function renderTable(
         ).filter(([, width]) => width !== undefined && width > 0);
     applyMarginTop(doc, tableStyle.marginTop ?? 0);
 
-    for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
-      const block = blocks[blockIndex] as { start: number; end: number };
-      // O(1) block height using precomputed prefix sums
-      const blockHeight = rowPre(block.end + 1) - rowPre(block.start);
-      if (doc.y + blockHeight > layout.pageBottom) {
-        doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
-        doc.y = layout.contentTop;
-        doc.x = layout.leftMargin;
-      }
-
-    const renderRowRange = async (startRow: number, endRow: number): Promise<void> => {
+    /**
+     * Draws rows `startRow`..`endRow` from doc.y. `first` and `last` tell whether the top and bottom outer
+     * borders of the table close this range.
+     */
+    const renderRowRange = async (startRow: number, endRow: number, first: boolean, last: boolean): Promise<void> => {
       const blockY = doc.y;
       const blockStartOffset = rowPre(startRow);
+      // O(1) block height using precomputed prefix sums
+      const blockHeight = rowPre(endRow + 1) - blockStartOffset;
 
       if (tableStyle.backgroundColor) {
         doc.fillColor(tableStyle.backgroundColor).rect(tableX, blockY, tableWidth, blockHeight).fill();
       }
 
-      for (let rowIndex = block.start; rowIndex <= block.end; rowIndex++) {
+      for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
         const cellY = blockY + (rowPre(rowIndex) - blockStartOffset);
         let col = 0;
         while (col < maxCols) {
@@ -704,8 +700,8 @@ export async function renderTable(
             // O(1) cell coordinates and width using precomputed prefix sums
             const cellX = colX(cell.startCol);
             const cellWidth = colX(cell.startCol + cell.colspan) - cellX;
-            const endRow = Math.min(rowIndex + cell.rowspan - 1, allRows.length - 1);
-            const cellH = rowPre(endRow + 1) - rowPre(rowIndex);
+            const cellEndRow = Math.min(rowIndex + cell.rowspan - 1, allRows.length - 1);
+            const cellH = rowPre(cellEndRow + 1) - rowPre(rowIndex);
 
             if (cell.style.backgroundColor) {
               doc.fillColor(cell.style.backgroundColor).rect(cellX, cellY, cellWidth, cellH).fill();
@@ -820,7 +816,10 @@ export async function renderTable(
             if (cell.nestedTables.length > 0) {
               const savedX = doc.x;
               const savedY = doc.y;
-              doc.x = cellX;
+              // Nested tables are laid out in the content box of their cell.
+              const nestedLayout = Object.create(layout) as PageLayout;
+              Object.assign(nestedLayout, { leftMargin: textX, contentWidth: textWidth });
+              doc.x = textX;
               doc.y = cellY + pad.top;
               for (const nestedTable of cell.nestedTables) {
                 await renderElementFn(
@@ -847,8 +846,8 @@ export async function renderTable(
 
       for (const [side, width, color] of outerSides) {
         const bottom = blockY + blockHeight;
-        if (side === 'top' && blockIndex > 0) continue;
-        if (side === 'bottom' && blockIndex < blocks.length - 1) continue;
+        if (side === 'top' && !first) continue;
+        if (side === 'bottom' && !last) continue;
         doc.strokeColor(color ?? tableStyle.borderColor ?? '#000000').lineWidth(width as number);
         if (side === 'top')
           doc
@@ -869,6 +868,48 @@ export async function renderTable(
       }
 
       doc.y = blockY + blockHeight;
+    };
+
+    const newPage = (): void => {
+      doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
+      doc.y = layout.contentTop;
+      doc.x = layout.leftMargin;
+    };
+    const blockHeightOf = (block: { start: number; end: number }): number =>
+      rowPre(block.end + 1) - rowPre(block.start);
+
+    // The <thead> rows repeat at the top of every page the table continues on, as browsers print a
+    // table-header-group. They must form whole blocks (no rowspan into the body).
+    let headBlockCount = 0;
+    while (headBlockCount < blocks.length && (blocks[headBlockCount] as { end: number }).end < theadCount) {
+      headBlockCount++;
+    }
+    const repeatHead =
+      theadCount > 0 &&
+      theadCount < allRows.length &&
+      headBlockCount > 0 &&
+      (blocks[headBlockCount - 1] as { end: number }).end === theadCount - 1;
+    const bodyBlocks = repeatHead ? blocks.slice(headBlockCount) : blocks;
+
+    if (repeatHead) {
+      // Keep the header with the first body rows.
+      const headHeight = rowPre(theadCount) - rowPre(0);
+      const firstBody = bodyBlocks[0] as { start: number; end: number };
+      if (doc.y > layout.contentTop && doc.y + headHeight + blockHeightOf(firstBody) > layout.pageBottom) newPage();
+      await renderRowRange(0, theadCount - 1, true, false);
+    }
+    for (let blockIndex = 0; blockIndex < bodyBlocks.length; blockIndex++) {
+      const block = bodyBlocks[blockIndex] as { start: number; end: number };
+      if (doc.y + blockHeightOf(block) > layout.pageBottom) {
+        newPage();
+        if (repeatHead) await renderRowRange(0, theadCount - 1, true, false);
+      }
+      await renderRowRange(
+        block.start,
+        block.end,
+        !repeatHead && blockIndex === 0,
+        blockIndex === bodyBlocks.length - 1,
+      );
     }
 
     applyMarginBottom(doc, tableStyle.marginBottom ?? 0);

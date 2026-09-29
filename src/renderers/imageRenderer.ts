@@ -1,5 +1,6 @@
 import SVGtoPDF from 'svg-to-pdfkit';
-import { parseLength, PT_PER_PX } from '../core/cssLength.js';
+import { parseInlineStyle } from '../core/cacheManager.js';
+import { parseLength, parseLengthOrPercentage, PT_PER_PX } from '../core/cssLength.js';
 import { decodeDataUri, fetchRemoteResource, readLocalFile } from '../core/networkSecurity.js';
 import { defaultAssetCache } from '../core/assetCache.js';
 import type { TextStyle, RenderOptions } from '../types.js';
@@ -70,9 +71,13 @@ export function renderImage(
 ): Promise<void> {
   const attribs = element.attribs || {};
   const src = attribs['src'] || '';
-  // HTML width/height attributes are CSS pixels.
-  const imgWidth = parseLength(attribs['width']) || 0;
-  const imgHeight = parseLength(attribs['height']) || 0;
+  // Size: the CSS width/height (any unit, a width percentage of the content box) win over the HTML
+  // width/height attributes, which are CSS pixels.
+  const cssStyle = parseInlineStyle(element);
+  const cssWidth = cssStyle.width === undefined ? undefined : String(cssStyle.width);
+  const cssHeight = cssStyle.height === undefined ? undefined : String(cssStyle.height);
+  const imgWidth = parseLengthOrPercentage(cssWidth, layout.contentWidth) || parseLength(attribs['width']) || 0;
+  const imgHeight = parseLength(cssHeight) || parseLength(attribs['height']) || 0;
   const spacing = 8;
 
   if (!src) return Promise.resolve();

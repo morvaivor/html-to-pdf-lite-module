@@ -904,12 +904,14 @@ async function runTests() {
       for (let i = 0; i < h.length; i += 2) out += String.fromCharCode(parseInt(h.slice(i, i + 2), 16));
       return out;
     });
-  const streams48 = pdf48.toString('binary').match(/stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g) ?? [];
-  const pages48 = streams48
-    .map((s) => {
-      const body = s.replace(/^stream[\r\n]+/, '').replace(/[\r\n]+endstream$/, '');
+  // Exactly one EOL on each side: `[\r\n]+` would also eat a final 0x0A/0x0D byte of the compressed data.
+  const pages48 = [...pdf48.toString('binary').matchAll(/stream(?:\r\n|\n|\r)([\s\S]*?)(?:\r\n|\n|\r)?endstream/g)]
+    .map(([, body = '']) => {
       try {
-        return decodeHexText(zlib48.inflateSync(Buffer.from(body, 'binary')).toString('latin1'));
+        const inflated = zlib48.inflateSync(Buffer.from(body, 'binary'), {
+          finishFlush: zlib48.constants.Z_SYNC_FLUSH,
+        });
+        return decodeHexText(inflated.toString('latin1'));
       } catch {
         return body;
       }
