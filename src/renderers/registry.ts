@@ -269,6 +269,7 @@ function computeInheritedStyle(parentStyle: TextStyle, inlineStyle: Partial<Text
     textDecoration: inlineStyle.textDecoration ?? parentStyle.textDecoration,
     textAlign: inlineStyle.textAlign ?? parentStyle.textAlign,
     textTransform: inlineStyle.textTransform ?? parentStyle.textTransform,
+    verticalAlign: inlineStyle.verticalAlign ?? parentStyle.verticalAlign,
 
     // Propriétés CSS NON héritables (Box Model : bordures, marges, padding, fonds propres à l'élément)
     backgroundColor: inlineStyle.backgroundColor,
@@ -653,6 +654,9 @@ export async function renderElement(
   const tagName = element.name || 'span';
   const inlineStyle = parseInlineStyle(element);
   const style = inheritStyle(parentStyle, inlineStyle, tagName);
+
+  if (style.display === 'none') return;
+  if (tagName === 'script' || tagName === 'noscript') return;
 
   const registeredRenderer = elementRegistry.get(tagName);
   if (registeredRenderer) {

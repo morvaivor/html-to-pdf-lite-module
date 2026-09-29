@@ -103,6 +103,16 @@ function calculateColumnWidths(
   return Array(count).fill(equalWidth);
 }
 
+function countGridColumns(template: string): number {
+  let clean = template.trim();
+  const repeatMatch = clean.match(/repeat\((\d+),\s*([^)]+)\)/i);
+  if (repeatMatch && repeatMatch[1] && repeatMatch[2]) {
+    const repCount = parseInt(repeatMatch[1], 10);
+    clean = Array(repCount).fill(repeatMatch[2].trim()).join(' ');
+  }
+  return clean.split(/\s+/).filter(Boolean).length;
+}
+
 /**
  * Renders container elements marked with display: flex or display: grid.
  */
@@ -173,19 +183,30 @@ export async function renderFlexContainer(
   // Calcul des colonnes horizontales
   const colWidths = calculateColumnWidths(tagChildren, innerWidth, gap, style.gridTemplateColumns);
 
+  // Le grid retourne à la ligne quand le nombre d'enfants dépasse le nombre de colonnes
+  const gridCols = style.gridTemplateColumns ? countGridColumns(style.gridTemplateColumns) : 0;
+  const needWrap = gridCols > 0 && tagChildren.length > gridCols;
+
   // Pre-calculate estimated box height so background is drawn BEFORE children, eliminating double-rendering
-  let maxEstimatedChildHeight = 0;
+  let estimatedContentHeight = 0;
+  let estRowMax = 0;
   for (let i = 0; i < tagChildren.length; i++) {
-    const colW = colWidths[i] ?? innerWidth / tagChildren.length;
+    const colIndex = needWrap ? i % gridCols : i;
+    const colW = colWidths[colIndex] ?? innerWidth / tagChildren.length;
     const estH = estimateElementHeightFn
       ? estimateElementHeightFn(doc, tagChildren[i]!, style, colW, textCache, fontAliasSet)
       : 0;
-    if (estH > maxEstimatedChildHeight) {
-      maxEstimatedChildHeight = estH;
+    if (estH > estRowMax) {
+      estRowMax = estH;
+    }
+    const rowEnds = !needWrap || (i + 1) % gridCols === 0 || i === tagChildren.length - 1;
+    if (rowEnds) {
+      estimatedContentHeight += estRowMax + (estimatedContentHeight > 0 ? gap : 0);
+      estRowMax = 0;
     }
   }
 
-  const estimatedBoxHeight = paddingTop + maxEstimatedChildHeight + paddingBottom;
+  const estimatedBoxHeight = paddingTop + estimatedContentHeight + paddingBottom;
 
   // Draw background FIRST if present
   if (style.backgroundColor) {
@@ -200,12 +221,15 @@ export async function renderFlexContainer(
   }
 
   let curX = containerX + paddingLeft;
-  let maxY = startY + paddingTop;
+  let rowY = startY + paddingTop;
+  let rowBottom = rowY;
+  let rowMaxHeight = 0;
 
   // Render each child exactly ONCE on top of the background
   for (let i = 0; i < tagChildren.length; i++) {
     const child = tagChildren[i]!;
-    const colW = colWidths[i] ?? innerWidth / tagChildren.length;
+    const colIndex = needWrap ? i % gridCols : i;
+    const colW = colWidths[colIndex] ?? innerWidth / tagChildren.length;
 
     // Créer un layout virtuel borné à la colonne courante
     const childLayout = Object.create(layout);
@@ -213,18 +237,29 @@ export async function renderFlexContainer(
     childLayout.contentWidth = colW;
 
     doc.x = curX;
-    doc.y = startY + paddingTop;
+    doc.y = rowY;
 
     await renderElementFn(doc, child, style, options, childLayout, textCache, fontAliasSet, imageCache);
 
-    if (doc.y > maxY) {
-      maxY = doc.y;
+    if (doc.y > rowBottom) {
+      rowBottom = doc.y;
     }
 
-    curX += colW + gap;
+    const rowEnds = i === tagChildren.length - 1 || (needWrap && (i + 1) % gridCols === 0);
+    if (rowEnds) {
+      const renderedRowHeight = rowBottom - rowY;
+      if (renderedRowHeight > rowMaxHeight) rowMaxHeight = renderedRowHeight;
+      if (i !== tagChildren.length - 1) {
+        rowY = rowBottom + gap;
+        curX = containerX + paddingLeft;
+        rowBottom = rowY;
+      }
+    } else {
+      curX += colW + gap;
+    }
   }
 
-  const finalBoxHeight = Math.max(estimatedBoxHeight, maxY - startY + paddingBottom);
+  const finalBoxHeight = Math.max(estimatedBoxHeight, rowBottom - startY + paddingBottom);
 
   // Bordures du conteneur
   if (style.borderWidth && style.borderColor) {
