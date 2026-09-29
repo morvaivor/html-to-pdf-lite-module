@@ -274,6 +274,7 @@ export async function renderTable(
   const defaultBorderWidth = tableStyle.borderWidth ?? 1;
 
   const allRows: Element[] = [];
+  const rowIsThead: boolean[] = [];
   for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
     const child = element.children[childIndex];
     if (child && child.type === 'tag') {
@@ -283,15 +284,22 @@ export async function renderTable(
           const grandChild = el.children[grandChildIndex];
           if (grandChild && grandChild.type === 'tag' && (grandChild as Element).name === 'tr') {
             allRows.push(grandChild as Element);
+            rowIsThead.push(el.name === 'thead');
           }
         }
       } else if (el.name === 'tr') {
         allRows.push(el);
+        rowIsThead.push(false);
       }
     }
   }
 
   if (allRows.length === 0) return;
+
+  let theadCount = 0;
+  while (theadCount < rowIsThead.length && rowIsThead[theadCount]) {
+    theadCount++;
+  }
 
   // Single-pass extraction of rowCells and calculation of maxCols
   let maxCols = 0;
@@ -679,8 +687,9 @@ export async function renderTable(
         doc.x = layout.leftMargin;
       }
 
+    const renderRowRange = async (startRow: number, endRow: number): Promise<void> => {
       const blockY = doc.y;
-      const blockStartOffset = rowPre(block.start);
+      const blockStartOffset = rowPre(startRow);
 
       if (tableStyle.backgroundColor) {
         doc.fillColor(tableStyle.backgroundColor).rect(tableX, blockY, tableWidth, blockHeight).fill();
@@ -819,7 +828,7 @@ export async function renderTable(
                   nestedTable,
                   cell.style,
                   options,
-                  layout,
+                  nestedLayout,
                   textCache,
                   fontAliasSet,
                   imageCache,

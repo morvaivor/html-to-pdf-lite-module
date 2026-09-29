@@ -24,6 +24,7 @@
     "demo/site/**",
     "node_modules/**",
     "coverage/**",
-    "output/**"
+    "output/**",
+    ".tmp/**"
   ]
 }

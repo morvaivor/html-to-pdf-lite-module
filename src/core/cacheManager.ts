@@ -415,6 +415,10 @@ export function parseStyleString(styleAttr: string): Partial<TextStyle> {
         if (br !== undefined) style.borderRadius = br;
         break;
       }
+      case 'vertical-align':
+        if (value === 'top' || value === 'bottom') style.verticalAlign = value;
+        else if (value === 'middle' || value === 'center') style.verticalAlign = 'middle';
+        break;
     }
   }
 

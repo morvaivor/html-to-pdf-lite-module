@@ -1,6 +1,6 @@
 import { parseFontFaces } from '../cssParser.js';
 import { DEFAULT_STYLE } from './cacheManager.js';
-import { fetchRemoteResource, decodeDataUri } from './networkSecurity.js';
+import { fetchRemoteResource, decodeDataUri, readLocalFile } from './networkSecurity.js';
 import { AssetCache, defaultAssetCache } from './assetCache.js';
 import { LruCache } from './lruCache.js';
 import type { FontFace } from '../types.js';
@@ -58,11 +58,12 @@ export async function registerFontFaces(
   // Concurrent font download with cross-PDF caching and in-flight coalescing
   const downloadPromises = faces.map(async (face) => {
     if (fontBufferCache.has(face.url)) return;
-
     const fontKey = AssetCache.buildFontKey(face.url, face.bold, face.italic);
     const loader = async (): Promise<Buffer> => {
       if (face.url.startsWith('data:')) {
         return decodeDataUri(face.url);
+      } else if (!face.url.startsWith('http://') && !face.url.startsWith('https://')) {
+        return readLocalFile(face.url);
       }
       try {
         return await fetchRemoteResource(face.url, allowedLocalIps);
