@@ -155,7 +155,10 @@ export type PageZones = Partial<Record<PageZoneName, PageZoneProperties>>;
 /** Resolved text style for rendering */
 export interface TextStyle {
   color: string;
+  /** Font size in points. */
   fontSize: number;
+  /** Parsed only: relative `font-size` (`em`, `%`, `smaller`...), a factor of the parent's size. */
+  fontSizeScale?: number;
   bold: boolean;
   italic: boolean;
   fontFamily: string;
@@ -188,13 +191,14 @@ export interface TextStyle {
   textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
   display?: string;
   textAlign?: TextAlign;
+  /** CSS `vertical-align`, used to position content inside table cells. */
+  verticalAlign?: 'top' | 'middle' | 'bottom' | 'baseline';
   // Propriétés de layout Flexbox & Grid
   flexDirection?: 'row' | 'column';
   justifyContent?: 'flex-start' | 'center' | 'flex-end' | 'space-between' | 'space-around';
   alignItems?: 'flex-start' | 'center' | 'flex-end' | 'stretch';
   gap?: number;
   gridTemplateColumns?: string;
-  verticalAlign?: 'top' | 'middle' | 'bottom';
   width?: string | number;
   height?: string | number;
   minWidth?: number;

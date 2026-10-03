@@ -1,5 +1,7 @@
 import {
   createPdfGenerator,
+  verifyRenderingQuality,
+  type PdfGenerateOptions,
   type ProfilingTimings,
   gpuAccelerator,
   getGpuContext,
@@ -110,6 +112,17 @@ function generateLongWrappedTextHtml(sentenceCount = 200): string {
   return `<div style="padding: 10px;"><p style="font-size: 12px; line-height: 1.5; color: #222;">${p}</p></div>`;
 }
 
+function generateUnicodeParagraphsHtml(count = 500): string {
+  // Text outside WinAnsi: U+202F thousands separators, symbols drawn with the Symbol and ZapfDingbats
+  // fonts (✔ ★ β ≤ →) and an emoji without any glyph, which exercises every branch of the mapping.
+  const nnbsp = String.fromCharCode(0x202f);
+  let html = `<div>`;
+  for (let i = 0; i < count; i++) {
+    html += `<p style="font-size: 11px; margin: 2px 0;">✔ Lot ${i} : 1${nnbsp}${String(i).padStart(3, '0')},50 € — β ≤ 5 → conforme ★ 🌱</p>`;
+  }
+  return `${html}</div>`;
+}
+
 // 3. Tables: 100x5, 500x10, 1000x10
 function generateTableHtml(rows = 100, cols = 5): string {
   let html = `<table style="border: 1px solid #333; padding: 4px;"><thead><tr>`;
@@ -215,17 +228,40 @@ function generateFullDocumentHtml(): string {
 }
 
 // --- Load Real-World Demo Templates ---
-function loadRealWorldTemplates(): Array<{ name: string; label: string; html: string }> {
+interface FidelityResult {
+  label: string;
+  score: number;
+  grade: string;
+  pages: number;
+  textRecall: number;
+}
+
+interface RealWorldTemplate {
+  readonly name: string;
+  readonly label: string;
+  readonly html: string;
+  /** Same options as scripts/build-demo.ts (templates with `@page { margin }` take theirs from the CSS). */
+  readonly options: PdfGenerateOptions;
+}
+
+function loadRealWorldTemplates(): RealWorldTemplate[] {
   const templatesDir = path.resolve(rootDir, 'demo/templates');
-  const files = [
-    { name: '1-editorial-report.html', label: 'Rapport Éditorial (A4)' },
-    { name: '2-product-catalog.html', label: 'Catalogue Produit (A4)' },
-    { name: '3-analytics-dashboard.html', label: 'Dashboard Analytique (A4)' },
-    { name: '4-invoice-pro.html', label: 'Facture Professionnelle (A4)' },
-    { name: '5-certificate-landscape.html', label: 'Certificat Paysage (A4)' },
+  const margin = (value: number) => ({ top: value, bottom: value, left: value, right: value });
+  const files: Array<{ name: string; label: string; options: PdfGenerateOptions }> = [
+    { name: '1-editorial-report.html', label: 'Rapport Éditorial (A4)', options: { margin: margin(25) } },
+    { name: '2-product-catalog.html', label: 'Catalogue Produit (A4)', options: { margin: margin(20) } },
+    { name: '3-analytics-dashboard.html', label: 'Dashboard Analytique (A4)', options: { margin: margin(20) } },
+    { name: '4-invoice-pro.html', label: 'Facture Professionnelle (A4)', options: { margin: margin(25) } },
+    { name: '5-certificate-landscape.html', label: 'Certificat Paysage (A4)', options: { orientation: 'landscape' } },
+    { name: '6-tech-resume.html', label: 'CV Technique (A4)', options: {} },
+    { name: '7-medical-report.html', label: 'Compte-rendu Médical (A4)', options: {} },
+    { name: '8-restaurant-menu.html', label: 'Menu Gastronomique (A4)', options: {} },
+    { name: '9-legal-contract.html', label: 'Contrat Juridique (A4)', options: {} },
+    { name: '10-event-ticket.html', label: 'Billet Événement (A4)', options: {} },
+    { name: '11-heavy-financial-ledger.html', label: 'Grand Livre 500+ écritures (A4)', options: {} },
   ];
 
-  const loaded: Array<{ name: string; label: string; html: string }> = [];
+  const loaded: RealWorldTemplate[] = [];
   for (const f of files) {
     const filePath = path.join(templatesDir, f.name);
     if (fs.existsSync(filePath)) {
@@ -233,6 +269,7 @@ function loadRealWorldTemplates(): Array<{ name: string; label: string; html: st
         name: f.name,
         label: f.label,
         html: fs.readFileSync(filePath, 'utf-8'),
+        options: { format: 'A4', ...f.options },
       });
     }
   }
@@ -333,6 +370,12 @@ async function runBenchmarks() {
       html: generateLongWrappedTextHtml(200),
       iterations: 10,
     },
+    {
+      name: 'Typography (500 Unicode par.)',
+      category: 'Typography',
+      html: generateUnicodeParagraphsHtml(500),
+      iterations: 6,
+    },
     // Tables
     {
       name: 'Table (100 rows x 5 cols)',
@@ -387,7 +430,7 @@ async function runBenchmarks() {
   await singleGenerator.generate('<p>Warmup paragraph</p>');
   await singleGenerator.generate(generateTableHtml(20, 4));
   for (const t of realWorldTemplates.slice(0, 2)) {
-    await singleGenerator.generate(t.html);
+    await singleGenerator.generate(t.html, t.options);
   }
   console.log('   ✔ Préchauffage terminé (Caches JIT, LRU et polices amorcés).\n');
 
@@ -440,16 +483,19 @@ async function runBenchmarks() {
   console.log('🎨 2. MODÈLES PROFESSIONNELS RÉELS (demo/templates)');
   console.log('--------------------------------------------------------------------');
 
+  const fidelityResults: FidelityResult[] = [];
   for (const t of realWorldTemplates) {
     const times: number[] = [];
     let lastSize = 0;
+    let lastPdf: Buffer = Buffer.alloc(0);
     const memBefore = getHeapMemoryMB();
 
     for (let i = 0; i < 8; i++) {
       const t0 = performance.now();
-      const pdf = await singleGenerator.generate(t.html);
+      const pdf = await singleGenerator.generate(t.html, t.options);
       times.push(performance.now() - t0);
       lastSize = pdf.length;
+      lastPdf = pdf;
     }
 
     const memAfter = getHeapMemoryMB();
@@ -471,8 +517,18 @@ async function runBenchmarks() {
       heapDeltaMb: heapDelta,
     });
 
+    // Rendering fidelity of the same PDF (SSQI audit, as in the demo).
+    const audit = await verifyRenderingQuality(t.html, lastPdf, { options: t.options as never });
+    fidelityResults.push({
+      label: t.label,
+      score: audit.score,
+      grade: audit.grade,
+      pages: audit.layout.pageCount,
+      textRecall: audit.textCompleteness.rate,
+    });
+
     console.log(
-      `  • [Template    ] ${t.label.padEnd(34)} : Moy ${avg.toFixed(2).padStart(6)} ms | Min ${min.toFixed(2).padStart(6)} ms | Débit ${throughput.toFixed(1).padStart(5)} doc/s | Taille ${sizeKb.toFixed(1).padStart(5)} KB`,
+      `  • [Template    ] ${t.label.padEnd(34)} : Moy ${avg.toFixed(2).padStart(6)} ms | Min ${min.toFixed(2).padStart(6)} ms | Débit ${throughput.toFixed(1).padStart(5)} doc/s | Taille ${sizeKb.toFixed(1).padStart(5)} KB | Fidélité ${String(audit.score).padStart(3)}% (${audit.grade})`,
     );
   }
 
@@ -742,6 +798,7 @@ async function runBenchmarks() {
   // 6. Generate docs/benchmark.md
   generateBenchmarkReport(
     benchmarkResults,
+    fidelityResults,
     lightConcurrencyResults,
     complexConcurrencyResults,
     gpuBenchmarkResults,
@@ -763,6 +820,7 @@ async function runBenchmarks() {
 
 function generateBenchmarkReport(
   results: BenchmarkItemResult[],
+  fidelity: FidelityResult[],
   lightConcurrency: ConcurrencyResult[],
   complexConcurrency: ConcurrencyResult[],
   gpuBenchmarkResults: GpuBenchmarkItem[],
@@ -815,6 +873,8 @@ Ce benchmark valide l'implémentation complète du **Plan d'Optimisation des Per
 - Résolution directe $O(1)$ des variantes de polices (\`_aliasDirectIndex\`).
 - Bounded backpressure (\`maxQueueSize\`, \`WorkerPoolBusyError\`) et maintien d'un pool de workers chauds (\`minWorkers\`).
 - Instrumentation de profilage par phase sans surcoût au repos.
+- Accélération exacte de PDFKit (patches 13 à 21) : métriques de polices compilées et partagées, flux de contenu encodés en une passe, sortie identique à l'octet.
+- Rendu fidèle 3.0 : unités CSS exactes (1px = 0,75pt), fusion des marges verticales, polices standard Symbol/ZapfDingbats pour les symboles.
 
 ---
 
@@ -830,6 +890,20 @@ Mesures obtenues en exécution séquentielle après amorçage des caches :
     const items = results.filter((r) => r.category === cat);
     for (const r of items) {
       md += `| **${r.category}** | ${r.scenario} | ${r.minMs.toFixed(2)} ms | **${r.avgMs.toFixed(2)} ms** | ${r.maxMs.toFixed(2)} ms | ~${r.throughputDocsSec.toFixed(1)} docs/s | ${r.sizeKb.toFixed(1)} KB |\n`;
+    }
+  }
+
+  if (fidelity.length > 0) {
+    md += `
+### 🎯 Fidélité de rendu des modèles réels (audit SSQI)
+
+Score de \`verifyRenderingQuality\` sur le PDF mesuré ci-dessus (rappel du texte, ordre de lecture, collisions, structure) :
+
+| Modèle | Fidélité | Pages | Texte retrouvé |
+|:---|:---:|:---:|:---:|
+`;
+    for (const f of fidelity) {
+      md += `| ${f.label} | **${f.score}% (${f.grade})** | ${f.pages} | ${Math.round(f.textRecall * 100)}% |\n`;
     }
   }
 
@@ -852,8 +926,8 @@ Mesure sur un document complet (titres, styles, tableaux, listes et paragraphes)
 | **Total Global** | **${p.totalMs.toFixed(2)} ms** | **100%** | Latence totale unitaire de bout en bout |
 
 > [!NOTE]
-> **Pourquoi le Layout & Rendu d'Éléments représente 75% à 85% du temps ?**  
-> Le découpage ci-dessus démontre que le parsing HTML (1.13 ms) et l'indexation CSS (0.55 ms) sont négligeables. L'essentiel du CPU est consommé par le calcul géométrique des glyphes de texte dans PDFKit (\`doc.heightOfString\`, \`doc.text\`), le calcul des retours à la ligne (*word wrapping*) et l'émission des flux d'instructions PDF binaires.
+> **Pourquoi le Layout & Rendu d'Éléments représente ${((p.layoutRenderMs / p.totalMs) * 100).toFixed(0)}% du temps ?**  
+> Le découpage ci-dessus démontre que le parsing HTML (${p.parseHtmlMs.toFixed(2)} ms) et l'indexation CSS (${p.cssMs.toFixed(2)} ms) sont négligeables. L'essentiel du CPU est consommé par le calcul géométrique des glyphes de texte dans PDFKit (\`doc.heightOfString\`, \`doc.text\`), le calcul des retours à la ligne (*word wrapping*) et l'émission des flux d'instructions PDF binaires.
 `;
   }
 

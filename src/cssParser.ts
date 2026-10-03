@@ -1,7 +1,9 @@
 import type { Cheerio, CheerioAPI } from 'cheerio';
-import type { Element } from 'domhandler';
+import type { ChildNode, Element } from 'domhandler';
+import { parseStyleString, primeInlineStyle } from './core/cacheManager.js';
 import { LruCache } from './core/lruCache.js';
-import type { CssRule, FontFace, PageZones, PageZoneProperties } from './types.js';
+import { parseLength } from './core/cssLength.js';
+import type { CssRule, FontFace, MarginOptions, PageZones, PageZoneProperties, TextStyle } from './types.js';
 
 // --- Pre-compiled regex constants (compiled once at module load) ---
 const FONT_FACE_REGEX = /@font-face\s*\{([^}]*)\}/g;
@@ -382,31 +384,98 @@ export function buildCssRuleIndex(rules: CssRule[]): CssRuleIndex {
   return { byId, byClass, byTag, complex };
 }
 
+interface CompiledRuleSet {
+  readonly index: CssRuleIndex;
+  /** Declaration string of each rule, by rule order. */
+  readonly styleByOrder: readonly string[];
+  /** True when a complex selector can observe the transient `data-orig-style` attribute. */
+  readonly observesOrigStyleAttr: boolean;
+}
+
+// Keyed by the (LRU-cached) parsed rule array, so documents sharing a stylesheet share its index.
+const _compiledRuleSets = new WeakMap<CssRule[], CompiledRuleSet>();
+
+function compileRuleSet(rules: CssRule[]): CompiledRuleSet {
+  let compiled = _compiledRuleSets.get(rules);
+  if (compiled === undefined) {
+    const index = buildCssRuleIndex(rules);
+    compiled = {
+      index,
+      styleByOrder: rules.map((rule) =>
+        Object.entries(rule.properties)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('; '),
+      ),
+      observesOrigStyleAttr: index.complex.some((c) => /data-orig-style/i.test(c.selector)),
+    };
+    _compiledRuleSets.set(rules, compiled);
+  }
+  return compiled;
+}
+
+/**
+ * Element nodes in document order (the traversal order of `$('*')`), collected iteratively.
+ */
+function collectTagElements(root: { children?: ChildNode[] } | undefined): Element[] {
+  const elements: Element[] = [];
+  if (!root?.children?.length) return elements;
+  const nodeStack: ChildNode[][] = [root.children];
+  const indexStack: number[] = [0];
+  while (nodeStack.length > 0) {
+    const top = nodeStack.length - 1;
+    const siblings = nodeStack[top] as ChildNode[];
+    const position = indexStack[top] as number;
+    if (position >= siblings.length) {
+      nodeStack.pop();
+      indexStack.pop();
+      continue;
+    }
+    indexStack[top] = position + 1;
+    const node = siblings[position] as ChildNode;
+    if (node.type === 'tag') elements.push(node as Element);
+    const children = (node as { children?: ChildNode[] }).children;
+    if (children !== undefined && children.length > 0) {
+      nodeStack.push(children);
+      indexStack.push(0);
+    }
+  }
+  return elements;
+}
+
 export function applyCssToElements($: CheerioAPI, css: string): void {
   if (!css || typeof css !== 'string') return;
 
   const rules = parseCssRules(css);
   if (rules.length === 0) return;
 
-  // Preserve original inline styles so external stylesheet rules don't overwrite them
-  $('[style]').each((_index, element) => {
-    if (element.type === 'tag' && element.attribs?.style && !element.attribs['data-orig-style']) {
-      element.attribs['data-orig-style'] = element.attribs.style;
+  const { index, styleByOrder, observesOrigStyleAttr } = compileRuleSet(rules);
+  const elements = collectTagElements($.root()[0]);
+
+  // Preserve original inline styles so external stylesheet rules don't overwrite them. They are
+  // tracked in a Map; the historical `data-orig-style` attribute is only materialized when a complex
+  // selector could observe it.
+  const originalStyles = new Map<Element, string>();
+  for (const el of elements) {
+    const attribs = el.attribs;
+    const existing = attribs['data-orig-style'];
+    if (attribs.style && !existing) {
+      originalStyles.set(el, attribs.style);
+      if (observesOrigStyleAttr) attribs['data-orig-style'] = attribs.style;
+    } else if (existing) {
+      originalStyles.set(el, existing);
     }
-  });
+  }
 
-  const index = buildCssRuleIndex(rules);
+  // Collect matched rule orders per element
+  const elementMatches = new Map<Element, number[]>();
 
-  // Collect matches per element preserving rule order: Element -> Map<order, styleString>
-  const elementMatches = new Map<Element, Map<number, string>>();
-
-  const addMatch = (el: Element, order: number, styleString: string) => {
-    let map = elementMatches.get(el);
-    if (!map) {
-      map = new Map<number, string>();
-      elementMatches.set(el, map);
+  const addMatch = (el: Element, order: number) => {
+    const orders = elementMatches.get(el);
+    if (orders === undefined) {
+      elementMatches.set(el, [order]);
+    } else {
+      orders.push(order);
     }
-    map.set(order, styleString);
   };
 
   // 1. Process complex selectors via Cheerio
@@ -414,10 +483,10 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
     const cleanSel = c.selector.trim();
     if (!cleanSel) continue;
 
-    const applyComplex = (elements: Cheerio<any>) => {
-      elements.each((_index: number, element: any) => {
+    const applyComplex = (matched: Cheerio<any>) => {
+      matched.each((_index: number, element: any) => {
         if (element.type === 'tag') {
-          addMatch(element as Element, c.order, c.styleString);
+          addMatch(element as Element, c.order);
         }
       });
     };
@@ -437,9 +506,7 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
   }
 
   // 2. Single-pass traversal of DOM to match indexed rules in O(1)
-  $('*').each((_index, element) => {
-    if (element.type !== 'tag') return;
-    const el = element as Element;
+  for (const el of elements) {
     const tagName = el.name ? el.name.toLowerCase() : '';
     const id = el.attribs?.id;
     const classAttr = el.attribs?.class;
@@ -449,7 +516,7 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
       const tagRules = index.byTag.get(tagName);
       if (tagRules) {
         for (const r of tagRules) {
-          addMatch(el, r.order, r.styleString);
+          addMatch(el, r.order);
         }
       }
     }
@@ -460,7 +527,7 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
       if (idRules) {
         for (const r of idRules) {
           if (!r.tagName || r.tagName === tagName) {
-            addMatch(el, r.order, r.styleString);
+            addMatch(el, r.order);
           }
         }
       }
@@ -475,32 +542,56 @@ export function applyCssToElements($: CheerioAPI, css: string): void {
           for (const r of classRules) {
             if (r.tagName && r.tagName !== tagName) continue;
             if (r.extraClasses && !r.extraClasses.every((c) => classes.includes(c))) continue;
-            addMatch(el, r.order, r.styleString);
+            addMatch(el, r.order);
           }
         }
       }
     }
-  });
-
-  // 3. Apply matches in order of appearance in the CSS
-  for (const [el, matches] of elementMatches) {
-    const sortedOrders = Array.from(matches.keys()).sort((a, b) => a - b);
-    const combinedStyle = sortedOrders.map((o) => matches.get(o)!).join('; ');
-    if (combinedStyle) {
-      const current = el.attribs?.style || '';
-      el.attribs.style = current ? current + '; ' + combinedStyle : combinedStyle;
-    }
   }
 
-  // Re-apply original inline styles at the end so they take highest precedence
-  $('[data-orig-style]').each((_index, element) => {
-    if (element.type === 'tag' && element.attribs?.['data-orig-style']) {
-      const orig = element.attribs['data-orig-style'];
-      const current = element.attribs.style || '';
-      element.attribs.style = current ? current + '; ' + orig : orig;
-      delete element.attribs['data-orig-style'];
+  // 3. Rewrite style attributes: matched rules in order of appearance in the CSS, then the original
+  // inline style re-applied last so it takes highest precedence. Elements sharing the same matched
+  // rules and inline style share one interned attribute string and one parsed style object.
+  const resolvedStyles = new Map<string, { style: string; parsed: Partial<TextStyle> }>();
+  for (const el of elements) {
+    const orders = elementMatches.get(el);
+    const original = originalStyles.get(el);
+    if (orders === undefined && original === undefined) continue;
+
+    const attribs = el.attribs;
+    const current = attribs.style || '';
+    let ordersKey = '';
+    if (orders !== undefined) {
+      orders.sort((a, b) => a - b);
+      let unique = 0;
+      for (let i = 0; i < orders.length; i++) {
+        if (i === 0 || orders[i] !== orders[unique - 1]) orders[unique++] = orders[i] as number;
+      }
+      orders.length = unique;
+      ordersKey = orders.join(',');
     }
-  });
+
+    const key = `${ordersKey}\u0000${current}\u0000${original ?? ''}`;
+    let resolved = resolvedStyles.get(key);
+    if (resolved === undefined) {
+      let style = current;
+      if (orders !== undefined) {
+        const combinedStyle = orders.map((o) => styleByOrder[o] as string).join('; ');
+        style = style ? style + '; ' + combinedStyle : combinedStyle;
+      }
+      if (original !== undefined) {
+        style = style ? style + '; ' + original : original;
+      }
+      resolved = { style, parsed: parseStyleString(style) };
+      resolvedStyles.set(key, resolved);
+    }
+
+    attribs.style = resolved.style;
+    primeInlineStyle(el, resolved.parsed);
+    if (original !== undefined && attribs['data-orig-style'] !== undefined) {
+      delete attribs['data-orig-style'];
+    }
+  }
 }
 
 export function extractPageBlock(css: string): string | null {
@@ -523,6 +614,55 @@ export function extractPageBlock(css: string): string | null {
   if (blockEnd === -1) return null;
 
   return css.substring(braceStart + 1, blockEnd);
+}
+
+/** Top-level declarations of a block body, without its nested blocks (`@top-left { ... }`). */
+function topLevelDeclarations(body: string): string {
+  let result = '';
+  let depth = 0;
+  let statementStart = 0;
+  for (const char of body) {
+    if (char === '{') {
+      // Drop the prelude of the nested block (its at-rule name).
+      if (depth === 0) result = result.slice(0, statementStart);
+      depth++;
+    } else if (char === '}') {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) statementStart = result.length;
+    } else if (depth === 0) {
+      result += char;
+      if (char === ';') statementStart = result.length;
+    }
+  }
+  return result;
+}
+
+type PageSide = 'top' | 'right' | 'bottom' | 'left';
+
+/**
+ * Page margins declared by the `@page` rule (`margin` shorthand and `margin-*` longhands), in points,
+ * or null when it declares none.
+ */
+export function parsePageMargins(css: string): MarginOptions | null {
+  const pageBody = css ? extractPageBlock(css) : null;
+  if (!pageBody) return null;
+
+  const margins: Partial<Record<PageSide, number>> = {};
+  for (const declaration of topLevelDeclarations(pageBody).split(';')) {
+    const colonIdx = declaration.indexOf(':');
+    if (colonIdx === -1) continue;
+    const prop = declaration.slice(0, colonIdx).trim().toLowerCase();
+    const value = declaration.slice(colonIdx + 1).trim();
+    if (prop === 'margin') {
+      const [top, right = top, bottom = top, left = right] = value.split(/\s+/).map((part) => parseLength(part));
+      Object.assign(margins, { top, right, bottom, left });
+    } else if (prop === 'margin-top' || prop === 'margin-right' || prop === 'margin-bottom' || prop === 'margin-left') {
+      margins[prop.slice(7) as PageSide] = parseLength(value);
+    }
+  }
+
+  const sides = (['top', 'right', 'bottom', 'left'] as const).filter((side) => margins[side] !== undefined);
+  return sides.length > 0 ? Object.fromEntries(sides.map((side) => [side, margins[side]])) : null;
 }
 
 export function parsePageRule(css: string): PageZones | null {

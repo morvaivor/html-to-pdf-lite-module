@@ -132,7 +132,9 @@ function normalizeBaseFont(fontFamily: string): string {
   return 'Helvetica';
 }
 
-const _fontResolutionCache = new LruCache<string, string>(512);
+// Built-in font resolution (no custom aliases) is a pure function of (family, bold, italic): cache the
+// four variants per family, without building a string key per lookup.
+const _fontResolutionCache = new LruCache<string, Array<string | undefined>>(512);
 
 /**
  * Resolves font family name considering bold/italic variants and custom @font-face aliases.
@@ -143,13 +145,31 @@ export function resolveFontFamily(
   italic: boolean,
   fontAliasSet: Set<string> | null | undefined,
 ): string {
-  const hasCustomAliases = Boolean(fontAliasSet && fontAliasSet.size > 0);
-  const cacheKey = !hasCustomAliases ? `${fontFamily || ''}|${bold ? 1 : 0}|${italic ? 1 : 0}` : null;
-  if (cacheKey) {
-    const cached = _fontResolutionCache.get(cacheKey);
-    if (cached !== undefined) return cached;
+  if (fontAliasSet && fontAliasSet.size > 0) {
+    return computeFontFamily(fontFamily, bold, italic, fontAliasSet);
   }
+  const familyKey = fontFamily || '';
+  const variant = (bold ? 2 : 0) + (italic ? 1 : 0);
+  let variants = _fontResolutionCache.get(familyKey);
+  const cached = variants?.[variant];
+  if (cached !== undefined) return cached;
 
+  const name = computeFontFamily(fontFamily, bold, italic, fontAliasSet);
+  if (variants === undefined) {
+    variants = [undefined, undefined, undefined, undefined];
+    _fontResolutionCache.set(familyKey, variants);
+  }
+  variants[variant] = name;
+  return name;
+}
+
+function computeFontFamily(
+  fontFamily: string | undefined,
+  bold: boolean,
+  italic: boolean,
+  fontAliasSet: Set<string> | null | undefined,
+): string {
+  const hasCustomAliases = Boolean(fontAliasSet && fontAliasSet.size > 0);
   let directIndex: Map<string, string> | undefined;
   const rawBase = fontFamily?.trim() || DEFAULT_STYLE.fontFamily;
   const normBase = rawBase.toLowerCase();
@@ -227,10 +247,6 @@ export function resolveFontFamily(
 
   if (directIndex) {
     directIndex.set(directKey, name);
-  }
-
-  if (cacheKey) {
-    _fontResolutionCache.set(cacheKey, name);
   }
 
   return name;

@@ -1,6 +1,6 @@
 import SVGtoPDF from 'svg-to-pdfkit';
 import { parseInlineStyle } from '../core/cacheManager.js';
-import { parseLengthPt } from '../core/units.js';
+import { parseLength, parseLengthOrPercentage, PT_PER_PX } from '../core/cssLength.js';
 import { decodeDataUri, fetchRemoteResource, readLocalFile } from '../core/networkSecurity.js';
 import { defaultAssetCache } from '../core/assetCache.js';
 import type { TextStyle, RenderOptions } from '../types.js';
@@ -34,6 +34,31 @@ export async function loadImage(
   }
 }
 
+// PDFKit only reuses images opened from string paths (`_imageRegistry`); a Buffer is decoded,
+// re-compressed and embedded again for every <img>. Opened images are memoized per document by buffer
+// identity (loadImage hands out one Buffer per source), so repeated logos and icons share one XObject.
+/** Subset of PDFKit's opened image object (not covered by @types/pdfkit) used for layout. */
+interface OpenedImage {
+  readonly width: number;
+  readonly height: number;
+}
+
+const _openedImages = new WeakMap<object, WeakMap<Buffer, OpenedImage>>();
+
+function openImageOnce(doc: PDFKit.PDFDocument, buffer: Buffer): OpenedImage {
+  let opened = _openedImages.get(doc);
+  if (opened === undefined) {
+    opened = new WeakMap();
+    _openedImages.set(doc, opened);
+  }
+  let image = opened.get(buffer);
+  if (image === undefined) {
+    image = (doc as unknown as { openImage(src: Buffer): OpenedImage }).openImage(buffer);
+    opened.set(buffer, image);
+  }
+  return image;
+}
+
 export function renderImage(
   doc: PDFKit.PDFDocument,
   element: Element,
@@ -46,12 +71,13 @@ export function renderImage(
 ): Promise<void> {
   const attribs = element.attribs || {};
   const src = attribs['src'] || '';
+  // Size: the CSS width/height (any unit, a width percentage of the content box) win over the HTML
+  // width/height attributes, which are CSS pixels.
   const cssStyle = parseInlineStyle(element);
-  let imgWidth = parseInt(attribs['width'] ?? '', 10) || 0;
-  let imgHeight = parseInt(attribs['height'] ?? '', 10) || 0;
-  if (imgWidth === 0) imgWidth = Math.round(parseLengthPt(cssStyle.width == null ? null : String(cssStyle.width)) ?? 0);
-  if (imgHeight === 0)
-    imgHeight = Math.round(parseLengthPt(cssStyle.height == null ? null : String(cssStyle.height)) ?? 0);
+  const cssWidth = cssStyle.width === undefined ? undefined : String(cssStyle.width);
+  const cssHeight = cssStyle.height === undefined ? undefined : String(cssStyle.height);
+  const imgWidth = parseLengthOrPercentage(cssWidth, layout.contentWidth) || parseLength(attribs['width']) || 0;
+  const imgHeight = parseLength(cssHeight) || parseLength(attribs['height']) || 0;
   const spacing = 8;
 
   if (!src) return Promise.resolve();
@@ -65,8 +91,8 @@ export function renderImage(
       imgBuffer.subarray(0, 100).toString('utf8').includes('<svg');
 
     if (isSvg) {
-      let renderWidth = imgWidth || 150;
-      let renderHeight = imgHeight || 150;
+      let renderWidth = imgWidth || 150 * PT_PER_PX;
+      let renderHeight = imgHeight || 150 * PT_PER_PX;
 
       if (renderWidth > layout.contentWidth) {
         const ratio = layout.contentWidth / renderWidth;
@@ -85,7 +111,7 @@ export function renderImage(
           width: renderWidth,
           height: renderHeight,
           preserveAspectRatio: 'xMidYMid meet',
-          assumePt: true,
+          assumePt: false,
         });
       } catch (err) {
         console.warn('Warning: Failed to render SVG image:', err);
@@ -96,20 +122,21 @@ export function renderImage(
       return;
     }
 
-    const img = (doc as any).openImage(imgBuffer);
+    const img = openImageOnce(doc, imgBuffer);
 
-    let renderWidth = imgWidth || img.width;
-    let renderHeight = imgHeight || img.height;
+    // Intrinsic size: one image pixel per CSS pixel, as browsers display images at 1x.
+    const intrinsicWidth = img.width * PT_PER_PX;
+    const intrinsicHeight = img.height * PT_PER_PX;
+    let renderWidth = imgWidth || intrinsicWidth;
+    let renderHeight = imgHeight || intrinsicHeight;
 
     if (imgHeight && imgWidth) {
       renderWidth = imgWidth;
       renderHeight = imgHeight;
     } else if (imgWidth) {
-      const ratio = imgWidth / img.width;
-      renderHeight = img.height * ratio;
+      renderHeight = intrinsicHeight * (imgWidth / intrinsicWidth);
     } else if (imgHeight) {
-      const ratio = imgHeight / img.height;
-      renderWidth = img.width * ratio;
+      renderWidth = intrinsicWidth * (imgHeight / intrinsicHeight);
     }
 
     if (renderWidth > layout.contentWidth) {
@@ -124,7 +151,8 @@ export function renderImage(
       doc.x = layout.leftMargin;
     }
 
-    doc.image(img, doc.x, doc.y, { width: renderWidth, height: renderHeight });
+    // PDFKit's image() accepts an already opened image, which its typings do not declare.
+    doc.image(img as unknown as PDFKit.Mixins.ImageSrc, doc.x, doc.y, { width: renderWidth, height: renderHeight });
     doc.y += renderHeight + spacing;
     doc.x = layout.leftMargin;
   });

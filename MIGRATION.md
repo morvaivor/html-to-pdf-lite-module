@@ -1,3 +1,63 @@
+# Migration Guide — v2.x → v3.0
+
+## Overview
+
+Version 3.0 lays out HTML and CSS the way a browser prints them. The public API is unchanged, but the
+**scale of every document authored in CSS pixels changes**: 2.x read every length as a raw number of
+PDF points, whatever its unit.
+
+---
+
+## What Changed
+
+### 📏 CSS units are converted like in a browser (1in = 96px = 72pt)
+
+| Declaration | 2.x | 3.0 |
+|:---|:---:|:---:|
+| `font-size: 16px` | 16pt | **12pt** |
+| `padding: 10px` | 10pt | **7.5pt** |
+| `font-size: 12pt` | 12pt | 12pt |
+| `margin: 1em` (font-size 10pt) | 1pt | **10pt** |
+| `width: 25mm` | 25pt | **70.87pt** |
+| `<img width="120">` | 120pt | **90pt** |
+
+- `px` = 0.75pt, `pt`, `pc`, `in`, `cm`, `mm` and `Q` use their exact ratio; unitless HTML attributes are pixels.
+- `em` and `%` font sizes are relative to the parent, `rem` to the 16px root; `line-height` accepts numbers,
+  `%`, `em` and lengths; `thin`/`medium`/`thick` borders and `!important` values are understood.
+- Headings without a `font-size` use the user-agent sizes relative to their parent (`h1` = 2em, `h2` = 1.5em…).
+- SVG user units and the intrinsic size of raster images are CSS pixels too.
+
+### 📄 `@page { margin }` sets the page margins
+
+The margins of the `@page` rule (in any unit) now apply. The `margin` option and the `defaultMargin`
+configuration still win, side by side; sides set by neither use 20pt as before. Note that
+`PdfGenerator.generate()` no longer fills the unset sides with 20pt itself.
+
+### ↕️ Vertical margins of adjacent blocks collapse
+
+The gap between two sibling blocks is the larger of the bottom and top margins, not their sum (CSS 2.1
+§8.3.1). The margins of a `<div>` that contains blocks are now applied.
+
+### ✔ Symbols are drawn instead of garbled
+
+Characters outside WinAnsi used to corrupt the PDF text (`1 655` with U+202F became `1 /655`, `✔` became
+`'`). They are now mapped: symbols such as ✔ ★ ● → ≤ ∞ β are drawn with the standard Symbol and
+ZapfDingbats fonts (no font embedded), typographic variants get their WinAnsi equivalent, and characters
+without any glyph (most emoji) are dropped. Embed a font with `@font-face` to render other scripts.
+
+---
+
+## How to Migrate
+
+- **Documents designed for 2.x in `px`**: the output is 25% smaller, as in a browser. To keep the 2.x scale,
+  write the lengths in `pt` (`font-size: 12pt` is unchanged) or multiply the pixel values by 4/3.
+- **Page margins**: stop passing `margin` / `defaultMargin` to let `@page { margin }` apply; keep passing them
+  (in points) to override the CSS.
+- **Rendering quality**: `verifyRenderingQuality()` now reads justified text, typographic quotes and every
+  compressed page correctly, so scores can rise without any change to your documents.
+
+---
+
 # Migration Guide — v1.x → v2.0
 
 ## Overview

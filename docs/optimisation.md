@@ -149,6 +149,86 @@ Toute optimisation appliquée au projet respecte la règle directrice :
 
 ---
 
+## 🧬 Couche d'Accélération Exacte & Innovations Mémoire / CPU (Patches 13 à 21)
+
+Le profilage CPU montre que 80 à 95 % du temps de génération se passe dans la phase *layout*, et que cette phase est dominée non par le code de mise en page du module mais par la **mécanique de polices standard (AFM) de PDFKit**, qui travaille sur des *noms* de glyphes : `getKernPair` (concaténation `gauche\0droite` + lookup en mode dictionnaire) représentait à lui seul 9 à 13 % du temps total. Les patches 13 à 21 ciblent ces coûts avec une contrainte stricte : **aucun octet du PDF ne change**, sauf pour la déduplication d'images (patch 20), dont le rendu est identique au pixel près.
+
+### 🔬 Méthode de Vérification de l'Exactitude
+1. **Empreinte octet par octet** : SHA-256 des PDF de 23 scénarios (11 templates de `demo/templates` + 12 synthétiques : CSS 500 règles/5k nœuds, 1 000 paragraphes, table 1000×10, boîtes imbriquées, zones `@page`, en-têtes/pieds…), date figée, avant/après chaque patch.
+2. **Empreinte canonique** (objets décompressés, références normalisées, triés) pour le seul cas non déterministe préexistant : les PNG avec canal alpha, que PDFKit décode de façon asynchrone.
+3. **Rastérisation pixel par pixel** (`pdftoppm`, 72, 110 et 150 DPI) pour les optimisations qui modifient le nombre d'objets.
+4. **Test automatisé** ([`test/performanceInnovations.test.ts`](../test/performanceInnovations.test.ts)) : rend un jeu d'échantillons (typographie Unicode et crénage, tables CSS avec `colspan`/`rowspan`, police embarquée, zones `@page`, en-têtes, SVG, couleurs) dans le processus accéléré puis dans un **sous-processus `PDF_LITE_ACCEL=off` (PDFKit d'origine)**, et exige des PDF identiques. Des tests différentiels confrontent aussi le nouveau LRU et la nouvelle application CSS à leurs implémentations de référence.
+
+### 🛡️ Modèle de Sûreté ([`src/core/pdfkitAccelerator.ts`](../src/core/pdfkitAccelerator.ts))
+- **Garde par empreinte de code source** : chaque remplacement n'est installé que si le SHA-256 du code PDFKit remplacé (classes `AFMFont`, `StandardFont`, `PDFReference`, méthodes `font`, `_setColorCore`, `_normalizeColor`) correspond à l'implémentation auditée (0.20.x). Sinon, le code d'origine est conservé et `ensurePdfKitAccelerator().reason` l'explique.
+- **Auto-test** : les tables compilées d'une police sont comparées aux méthodes d'origine de PDFKit (256 codes WinAnsi, caractères typographiques, paires crénées) avant toute utilisation.
+- **Interrupteur** : `PDF_LITE_ACCEL=off` restaure le comportement d'origine.
+
+---
+
+### 🔹 Patch 13 — Flyweight des Métriques de Polices Standard
+- **Problème initial** : 65 % du coût de `new PDFDocument()` (~0,5 ms) venait du constructeur `AFMFont`, qui redécode ~1 220 paires de crénage (Helvetica) en clés chaîne **pour chaque document et chaque police standard utilisée**.
+- **Architecture implémentée** : les métriques sont décodées **une fois par processus (ou worker)** et partagées par tous les documents. Les données brutes du module de police ne sont masquées que le temps de la construction synchrone de l'instance par document, aussitôt remplacée par l'instance partagée complète : aucun code tiers ne peut observer l'état intermédiaire.
+
+### 🔹 Patch 14 — Métriques Compilées & Positions de Glyphes Internées
+- **Problème initial** : ~180 ns/caractère pour mesurer et ~120 ns/caractère pour encoder (5 objets alloués par glyphe), avec deux passes de césure par paragraphe (mesure puis rendu).
+- **Architecture implémentée** :
+  - Chasses en `Float64Array` et matrice de crénage compacte en `Int16Array` (≤ 86 × 95 entrées, ~16 Ko par police), indexées par code de caractère.
+  - Objets de position **internés et gelés** (`Object.freeze`) : encoder une ligne alloue 2 tableaux au lieu de 5 objets par glyphe.
+  - Accumulation dans le même ordre que PDFKit : flottants identiques au bit près.
+
+### 🔹 Patch 15 — Cache des Opérandes de Couleur
+- **Problème initial** : chaque `fillColor('#rrggbb')` reparsait l'hexadécimal et reformatait trois flottants.
+- **Architecture implémentée** : les couleurs hexadécimales et nommées étant résolues avant les couleurs d'accompagnement propres à chaque document, leurs opérandes (`0.2 0.254902 0.333333`) sont internés à l'échelle du processus (≤ 1 024 entrées).
+
+### 🔹 Patch 16 — Coalescence des Flux de Contenu
+- **Problème initial** : chaque opérateur (`BT`, `Tf`, `TJ`…) était converti en `Uint8Array` par une boucle caractère par caractère, puis reconcaténé : des milliers de micro-allocations par page.
+- **Architecture implémentée** : les opérateurs restent des chaînes jusqu'à la finalisation du flux, encodé en **un seul** `Buffer.from(…, 'latin1')`, dont l'équivalence avec le `& 0xff` de PDFKit est vérifiée sur les 65 536 unités UTF-16.
+
+### 🔹 Patch 17 — LRU Intrusif à Liste Doublement Chaînée
+- **Problème initial** : chaque hit du `LruCache` faisait `delete` + `set` sur la `Map` (trous dans la table de hachage de V8, réallocations périodiques).
+- **Architecture implémentée** ([`src/core/lruCache.ts`](../src/core/lruCache.ts)) : `Map` → nœuds chaînés, promotion par relinkage $O(1)$, **recyclage du nœud évincé** (zéro allocation en régime plein). Hits 2,8× plus rapides (54 → 19 ns), usage mixte 1,7×, sémantique LRU exacte (test différentiel sur 20 000 opérations aléatoires).
+
+### 🔹 Patch 18 — Partage des Styles Calculés (*Style Sharing*)
+- **Problème initial** : chaque élément, et chaque cellule de tableau, allouait par *spread* un objet de ~45 propriétés, deux fois (mesure puis rendu).
+- **Architecture implémentée** ([`src/renderers/registry.ts`](../src/renderers/registry.ts), [`src/renderers/tableRenderer.ts`](../src/renderers/tableRenderer.ts)) : technique des moteurs de navigateurs. Un style calculé étant une fonction pure du style parent, du style inline parsé et de la balise, il est mémoïsé par identité dans des `WeakMap` imbriquées, libérées avec le document. Les éléments sans style partagent un objet vide gelé (`EMPTY_INLINE_STYLE`).
+
+### 🔹 Patch 19 — Application CSS en une Seule Passe
+- **Problème initial** : ~11 parcours complets du DOM par le moteur de sélecteurs (`[style]`, `*`, `[data-orig-style]`, `link` et `style` deux fois chacun, `body` deux fois), plus une longue chaîne de style reconstruite puis rehachée pour chaque élément.
+- **Architecture implémentée** ([`src/cssParser.ts`](../src/cssParser.ts), [`src/htmlRenderer.ts`](../src/htmlRenderer.ts)) :
+  - Un parcours itératif unique, dans l'ordre exact de `$('*')`.
+  - Index des règles compilé **une fois par feuille de style** et réutilisé entre documents.
+  - Chaînes de style finales **internées par combinaison** (règles appliquées + style inline), cache de parsing **pré-amorcé**.
+  - Requêtes `link`/`style` sautées lorsque la balise est absente du source ; attribut transitoire `data-orig-style` matérialisé seulement si un sélecteur peut l'observer.
+
+### 🔹 Patch 20 — Déduplication des Images par Document
+- **Problème initial** : PDFKit ne réutilise que les images ouvertes depuis un chemin ; une image `Buffer` était redécodée, recompressée et réintégrée **pour chaque `<img>`**.
+- **Architecture implémentée** ([`src/renderers/imageRenderer.ts`](../src/renderers/imageRenderer.ts)) : images ouvertes mémoïsées par document et par `Buffer`, soit un XObject par source. Un document de 20 pages aux logos répétés passe de **518 Ko à 28 Ko**, `images-100` de 45 Ko à 2 Ko (−88 à −93 % de CPU), rendu identique au pixel près.
+
+### 🔹 Patch 21 — Buffering Adaptatif des Pages
+- **Problème initial** : `bufferPages: true` gardait toutes les pages en mémoire jusqu'à la fin, même sans en-tête ni pied de page.
+- **Architecture implémentée** : le buffering n'est activé que si des zones `@page`, un `header` ou un `footer` exigent le nombre total de pages. Sinon, chaque page est compressée et libérée dès que la suivante commence, soit $O(1)$ pages en mémoire. PDFKit écrivant les objets dans le même ordre, la sortie reste identique à l'octet.
+
+### 📈 Résultats Mesurés (Patches 13 à 21)
+- **Méthodologie** : A/B/C **entrelacé** (chaque variante dans son propre processus, ordre alterné à chaque tour), processus épinglé sur un cœur P (`taskset`), **temps CPU** (`process.cpuUsage`, threads GC inclus) et **octets alloués** (`v8.GCProfiler`). Intel i7-13800H, Node.js v24.20, machine chargée (charge moyenne 4 à 6). Les chiffres par scénario sont la médiane de 4 sessions indépendantes.
+- **Global (23 scénarios)** : **−36 à −40 % de CPU**, **−42 à −46 % de temps réel**, **−44,5 % d'allocations** (1 110 → 615 Mo).
+- **Pic de mémoire vivante** : table 1000×10 **52,5 → 14,5 Mo (−72 %)**, CSS 500 règles **19,7 → 9,7 Mo (−51 %)**, grand livre financier **26,7 → 13,2 Mo (−51 %)**.
+
+| Scénario | Temps (médiane) | Allocations |
+|---|:---:|:---:|
+| Rapport Éditorial (template) | **−80 %** | −64 % |
+| Menu Restaurant (template) | **−59 %** | −54 % |
+| Contrat Juridique (template) | **−58 %** | −53 % |
+| Rapport Médical (template) | **−40 %** | −36 % |
+| Facture Professionnelle (template) | **−32 %** | −44 % |
+| Grand Livre Financier, 18 pages (template) | **−20 %** | −41 % |
+| 1 000 paragraphes uniques | **−56 %** | −55 % |
+| CSS 500 règles / 5 000 nœuds | **−47 %** | −48 % |
+| Table 1 000 × 10 | **−33 %** | −32 % |
+| En-têtes & pieds de page | **−60 %** | −51 % |
+
+---
+
 ## ⚡ Accélération Native WebGPU (Compute Shaders WGSL)
 
 Le module intègre un accélérateur WebGPU **100% standard W3C Headless**, sans aucune dépendance tierce npm (micro-interfaces TypeScript pures) :

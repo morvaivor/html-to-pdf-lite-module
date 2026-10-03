@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync, copyFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { createPdfGenerator, verifyRenderingQuality } from '../src/index.js';
 
 interface TemplateConfig {
@@ -10,6 +10,7 @@ interface TemplateConfig {
   pdfName: string;
   format?: 'A4' | 'Letter';
   orientation?: 'portrait' | 'landscape';
+  /** API margins in points; templates that declare `@page { margin }` take theirs from the CSS. */
   margin?: { top: number; bottom: number; left: number; right: number };
 }
 
@@ -52,7 +53,6 @@ const TEMPLATES: TemplateConfig[] = [
     pdfName: '5-certificate-landscape.pdf',
     format: 'A4',
     orientation: 'landscape',
-    margin: { top: 15, bottom: 15, left: 15, right: 15 },
   },
   {
     id: '6',
@@ -60,7 +60,6 @@ const TEMPLATES: TemplateConfig[] = [
     pdfName: '6-tech-resume.pdf',
     format: 'A4',
     orientation: 'portrait',
-    margin: { top: 15, bottom: 15, left: 20, right: 20 },
   },
   {
     id: '7',
@@ -68,7 +67,6 @@ const TEMPLATES: TemplateConfig[] = [
     pdfName: '7-medical-report.pdf',
     format: 'A4',
     orientation: 'portrait',
-    margin: { top: 18, bottom: 18, left: 22, right: 22 },
   },
   {
     id: '8',
@@ -76,7 +74,6 @@ const TEMPLATES: TemplateConfig[] = [
     pdfName: '8-restaurant-menu.pdf',
     format: 'A4',
     orientation: 'portrait',
-    margin: { top: 18, bottom: 18, left: 24, right: 24 },
   },
   {
     id: '9',
@@ -84,7 +81,6 @@ const TEMPLATES: TemplateConfig[] = [
     pdfName: '9-legal-contract.pdf',
     format: 'A4',
     orientation: 'portrait',
-    margin: { top: 22, bottom: 22, left: 25, right: 25 },
   },
   {
     id: '10',
@@ -92,7 +88,6 @@ const TEMPLATES: TemplateConfig[] = [
     pdfName: '10-event-ticket.pdf',
     format: 'A4',
     orientation: 'portrait',
-    margin: { top: 20, bottom: 20, left: 24, right: 24 },
   },
   {
     id: '11',
@@ -100,9 +95,42 @@ const TEMPLATES: TemplateConfig[] = [
     pdfName: '11-heavy-financial-ledger.pdf',
     format: 'A4',
     orientation: 'portrait',
-    margin: { top: 18, bottom: 18, left: 20, right: 20 },
   },
 ];
+
+interface SuiteResult {
+  readonly total: number;
+  readonly passed: number;
+  readonly failed: number;
+}
+
+function runWithTsx(args: readonly string[]): { stdout: string; status: number | null } {
+  const run = spawnSync(process.execPath, ['--import', 'tsx', ...args], {
+    encoding: 'utf-8',
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  return { stdout: run.stdout ?? '', status: run.status };
+}
+
+/**
+ * Runs the integration script (test/manual-test.ts), which stops at the first failing test and writes
+ * one output/testN-*.pdf per test, so the demo lists the PDFs of this build.
+ */
+function runIntegrationTests(): SuiteResult {
+  const total = (readFileSync('test/manual-test.ts', 'utf8').match(/=== Test \d+:/g) ?? []).length;
+  const run = runWithTsx(['test/manual-test.ts']);
+  const started = (run.stdout.match(/^=== Test \d+:/gm) ?? []).length;
+  const failed = run.status === 0 ? 0 : 1;
+  return { total, passed: Math.max(0, started - failed), failed };
+}
+
+/** Runs the unit test suite with the TAP reporter and reads its summary. */
+function runUnitTests(): SuiteResult | null {
+  const run = runWithTsx(['--test', '--test-reporter=tap', 'test/*.test.ts']);
+  const count = (label: string): number => Number(new RegExp(`^# ${label} (\\d+)$`, 'm').exec(run.stdout)?.[1]);
+  const total = count('tests');
+  return Number.isInteger(total) ? { total, passed: count('pass'), failed: count('fail') } : null;
+}
 
 async function buildDemo(): Promise<void> {
   console.log('====================================================');
@@ -140,7 +168,6 @@ async function buildDemo(): Promise<void> {
   indexHtml = indexHtml
     .replace(/<span id="branch-name">[^<]*<\/span>/, `<span id="branch-name">${branch}</span>`)
     .replace(/sur la branche active <b>[^<]*<\/b>/, `sur la branche active <b>${branch}</b>`);
-  writeFileSync(join(outDir, 'index.html'), indexHtml, 'utf8');
   copyFileSync('demo/site/styles.css', join(outDir, 'styles.css'));
   copyFileSync('demo/site/app.js', join(outDir, 'app.js'));
 
@@ -150,7 +177,15 @@ async function buildDemo(): Promise<void> {
 
   // 3. Process each template & generate PDFs
   const generator = createPdfGenerator();
-  const manifest: Array<{ id: string; pdf: string; size: number; durationMs: number }> = [];
+  const manifest: Array<{
+    id: string;
+    pdf: string;
+    size: number;
+    durationMs: number;
+    qualityScore: number;
+    grade: string;
+    textRecall: number;
+  }> = [];
 
   console.log(`🎨 Génération des ${TEMPLATES.length} PDFs de démonstration :`);
   for (const tpl of TEMPLATES) {
@@ -194,8 +229,16 @@ async function buildDemo(): Promise<void> {
     );
   }
 
-  // 4. Copy test output PDFs
-  console.log('\n🧪 Copie des artefacts de tests unitaires et d\'intégration :');
+  // 4. Run the test suites (real counts for the demo) and copy the integration PDFs
+  console.log('\n🧪 Exécution des tests unitaires et d\'intégration :');
+  const integrationTests = runIntegrationTests();
+  console.log(`   ${integrationTests.failed ? '✖' : '✔'} Tests d'intégration : ${integrationTests.passed}/${integrationTests.total}`);
+  const unitTests = runUnitTests();
+  console.log(
+    unitTests
+      ? `   ${unitTests.failed ? '✖' : '✔'} Tests unitaires : ${unitTests.passed}/${unitTests.total}`
+      : '   ✖ Tests unitaires : résumé TAP introuvable',
+  );
   let testCount = 0;
   const testMap: Record<number, { file: string; size: number }> = {};
 
@@ -225,13 +268,26 @@ async function buildDemo(): Promise<void> {
     branch,
     commit,
     generatedAt: new Date().toISOString(),
-    totalIntegrationTests: 47,
-    totalUnitTests: 217,
+    integrationTests,
+    unitTests,
     demonstrationExamples: manifest,
     testFiles: testMap,
   };
   writeFileSync(join(outDir, 'test-results.json'), JSON.stringify(report, null, 2));
-  console.log(`   ✔ Manifeste de métadonnées généré (branche: ${branch}, commit: ${commit})`);
+
+  // The page embeds the manifest: the fidelity badges then also work from file:// (where fetch fails)
+  // and always match the PDFs of this build. "<" is escaped so the JSON cannot close the script element.
+  const embeddedManifest = JSON.stringify(report).replace(/</g, '\\u003c');
+  const manifestScript = /<script id="demo-manifest" type="application\/json">[\s\S]*?<\/script>/;
+  if (!manifestScript.test(indexHtml)) {
+    throw new Error('demo/site/index.html must contain <script id="demo-manifest" type="application/json">');
+  }
+  indexHtml = indexHtml.replace(
+    manifestScript,
+    () => `<script id="demo-manifest" type="application/json">${embeddedManifest}</script>`,
+  );
+  writeFileSync(join(outDir, 'index.html'), indexHtml, 'utf8');
+  console.log(`   ✔ Manifeste de métadonnées généré et intégré à index.html (branche: ${branch}, commit: ${commit})`);
 
   console.log('\n====================================================');
   console.log('  ✨ Démo prête pour GitHub Pages dans ./dist-demo !');

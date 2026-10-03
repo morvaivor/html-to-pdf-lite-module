@@ -18,6 +18,8 @@
 - **⚙️ Offloading CPU Réglable (Défaut 50% CPU)** : Allocation dynamique de worker threads secondaires avec limitation CPU pour préserver l'Event Loop de votre serveur HTTP.
 - **🎯 AsyncDisposable (`await using`)** : Gestion moderne du cycle de vie des ressources (standard natif Node.js ≥ 22 & Node.js 24).
 - **🧠 Caches Optimisés (LRU $O(1)$ & WeakMap)** : Éviction LRU sans purge destructive, indexation CSS $O(1)$, cache d'actifs inter-PDF (`AssetCache`), sommes préfixes pour tableaux géants et index direct des polices.
+- **🧬 Accélération PDFKit Exacte à l'Octet** : Métriques de polices compilées en tableaux typés et partagées entre documents, positions de glyphes internées, flux de contenu encodés en une passe, partage des styles calculés, images dédupliquées et pages libérées au fil de l'eau — sortie identique octet par octet (pixel par pixel quand des images répétées sont fusionnées) (voir [Guide d'Optimisation](docs/optimisation.md#-couche-daccélération-exacte--innovations-mémoire--cpu-patches-13-à-21)).
+- **🎯 Rendu Fidèle au Navigateur (3.0)** : Unités CSS exactes (1px = 0,75pt), marges `@page`, fusion des marges verticales, tailles de titres relatives et symboles dessinés avec les polices standard Symbol/ZapfDingbats — sans police embarquée (voir [Guide de Migration](MIGRATION.md)).
 - **⏱️ Profilage par Phase Intégré** : Mesure non intrusive (`profiling: true`) des phases DOM, CSS, polices, layout et PDFKit avec zéro surcoût au repos.
 - **✅ Qualité & Conformité** : Tests unitaires complets pour chaque patch d'optimisation, 47 tests d'intégration, typage strict (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`).
 
@@ -249,7 +251,7 @@ console.log(generator.getWorkerStats());
 |---|---|---|---|
 | `defaultFormat` | `PaperFormat` | `'A4'` | Format de page (`'A3'`, `'A4'`, `'A5'`, `'Letter'`, `'Legal'`) |
 | `defaultOrientation` | `Orientation` | `'portrait'` | Orientation (`'portrait'` ou `'landscape'`) |
-| `defaultMargin` | `MarginOptions` | `{ top:20, bottom:20, left:20, right:20 }` | Marges en points |
+| `defaultMargin` | `MarginOptions` | `{}` | Marges en points ; un côté non défini prend la marge `@page { margin }` du CSS, sinon 20pt |
 | `css` | `string` | `''` | CSS global (sélecteurs, `@font-face`, `@page`) |
 | `header` | `string` | `''` | Template HTML de l'en-tête |
 | `footer` | `string` | `''` | Template HTML du pied de page (`{page}`, `{totalPages}`) |
@@ -292,6 +294,23 @@ console.log(generator.getGpuStats());
 
 ---
 
+### 🧬 Accélération Exacte de PDFKit (activée par défaut)
+
+L'essentiel du temps CPU d'une génération se passe dans la mécanique de polices standard (AFM) de PDFKit. Au premier rendu, le module installe une couche d'accélération qui produit des **PDF identiques octet par octet** à ceux de PDFKit :
+
+```typescript
+import { ensurePdfKitAccelerator } from 'pdf-generator';
+
+console.log(ensurePdfKitAccelerator());
+// { enabled: true, fontMetrics: true, colorCache: true, streamCoalescing: true }
+```
+
+- **Sûreté par empreinte** : chaque remplacement n'est installé que si l'empreinte SHA-256 du code PDFKit qu'il remplace correspond à l'implémentation auditée (0.20.x). Sinon, le code d'origine est conservé et `reason` indique pourquoi.
+- **Auto-vérification** : les tables de métriques compilées sont comparées aux méthodes d'origine de PDFKit avant toute utilisation.
+- **Désactivation** : la variable d'environnement `PDF_LITE_ACCEL=off` restaure le comportement d'origine de PDFKit.
+
+---
+
 ### 📝 Mode Verbose, Débug & Sondes de Profilage
 
 Le moteur intègre un système de logging et de diagnostic **100% natif Node.js** (sans dépendance externe), avec colorisation ANSI et écriture simultanée optionnelle dans un fichier :
@@ -324,6 +343,10 @@ const generator = createPdfGenerator({
 | **Allowlist IP Locales (SSRF)** | Chargement sécurisé de CSS depuis des IP locales planifiées (`allowedLocalIps: ['192.168.1.50']`) | ✅ |
 | **Polices `@font-face`** | TTF/OTF via URL HTTP(s) ou Data URI `base64` (variantes bold/italic) | ✅ |
 | **Zones de page `@page`** | 6 zones (`@top-left` à `@bottom-right`), `counter(page)`, `counter(num-pages)` | ✅ |
+| **Marges de page `@page`** | `@page { margin: 18px 22px; }` (l'option `margin` reste prioritaire) | ✅ |
+| **Unités CSS exactes** | `px` (= 0,75pt comme un navigateur), `pt`, `pc`, `in`, `cm`, `mm`, `em`, `rem`, `%` (tailles de police) | ✅ |
+| **Fusion des marges verticales** | L'écart entre deux blocs voisins est la plus grande des deux marges | ✅ |
+| **Symboles & Unicode** | ✔ ★ ● → ≤ ∞ β via les polices standard Symbol et ZapfDingbats, espaces fines U+202F, ligatures | ✅ |
 | **Tableaux Avancés** | `<table>`, `<thead>`, `<tbody>`, `colspan`, `rowspan`, bordures, tableaux imbriqués (5 niveaux) | ✅ |
 | **Listes Imbriquées** | `<ul>`, `<ol>`, `<li>` avec indentation automatique | ✅ |
 | **Images** | `<img>` local (restreint au `cwd`), HTTP/HTTPS validé, Data URI `base64` borné | ✅ |

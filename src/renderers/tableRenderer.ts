@@ -1,12 +1,13 @@
-import { parseInlineStyle } from '../core/cacheManager.js';
+import { parseInlineStyle, EMPTY_INLINE_STYLE } from '../core/cacheManager.js';
 import { resolveFontFamily } from '../core/fontManager.js';
+import { computedFontSize, parseLength, PT_PER_PX } from '../core/cssLength.js';
+import { applyMarginBottom, applyMarginTop } from '../core/blockFlow.js';
+import { lineGapFor, transformText } from './textRenderer.js';
 import type { TextStyle, RenderOptions } from '../types.js';
 import type { PageLayout } from '../core/PageLayout.js';
 import type { TextMeasureCache } from '../core/cacheManager.js';
-import type { Element, ChildNode } from 'domhandler';
+import type { Element } from 'domhandler';
 import { gpuAccelerator } from '../gpu/gpuAccelerator.js';
-
-const FONT_SIZES_TABLE: Record<string, number> = { td: 12, th: 12 };
 
 function getCellText(element: Element): string {
   let result = '';
@@ -28,40 +29,206 @@ function getCellText(element: Element): string {
   return result.trim();
 }
 
-function getCellNestedTables(element: Element): Element[] {
-  const tables: Element[] = [];
+const NO_NESTED_TABLES: readonly Element[] = Object.freeze([]);
+
+function getCellNestedTables(element: Element): readonly Element[] {
+  let tables: Element[] | null = null;
   for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
     const child = element.children[childIndex];
     if (child && child.type === 'tag' && (child as Element).name === 'table') {
-      tables.push(child as Element);
+      (tables ??= []).push(child as Element);
     }
   }
-  return tables;
+  return tables ?? NO_NESTED_TABLES;
 }
 
-function getCellNonTableChildren(element: Element): ChildNode[] {
-  const children: ChildNode[] = [];
-  for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
-    const child = element.children[childIndex];
-    if (!child) continue;
-    if (child.type === 'tag' && (child as Element).name === 'table') continue;
-    children.push(child);
+/**
+ * Cell styles shared across cells with identical inherited inputs (see computed-style sharing in the
+ * element registry): keyed by the identities of the parent, section, row and cell styles and the tag.
+ */
+const _cellStyleCache = new WeakMap<
+  object,
+  WeakMap<object, WeakMap<object, WeakMap<object, Map<string, TextStyle>>>>
+>();
+
+function resolveCellStyle(
+  parentStyle: TextStyle,
+  sectionInlineStyle: Partial<TextStyle>,
+  rowInlineStyle: Partial<TextStyle>,
+  cellInlineStyle: Partial<TextStyle>,
+  cellName: string,
+): TextStyle {
+  let bySection = _cellStyleCache.get(parentStyle);
+  if (bySection === undefined) {
+    bySection = new WeakMap();
+    _cellStyleCache.set(parentStyle, bySection);
   }
-  return children;
+  let byRow = bySection.get(sectionInlineStyle);
+  if (byRow === undefined) {
+    byRow = new WeakMap();
+    bySection.set(sectionInlineStyle, byRow);
+  }
+  let byCell = byRow.get(rowInlineStyle);
+  if (byCell === undefined) {
+    byCell = new WeakMap();
+    byRow.set(rowInlineStyle, byCell);
+  }
+  let byName = byCell.get(cellInlineStyle);
+  if (byName === undefined) {
+    byName = new Map();
+    byCell.set(cellInlineStyle, byName);
+  }
+  let cellStyle = byName.get(cellName);
+  if (cellStyle === undefined) {
+    const inheritedBg =
+      cellInlineStyle.backgroundColor || rowInlineStyle.backgroundColor || sectionInlineStyle.backgroundColor;
+    const inheritedColor =
+      cellInlineStyle.color || rowInlineStyle.color || sectionInlineStyle.color || parentStyle.color;
+
+    cellStyle = {
+      ...parentStyle,
+      ...sectionInlineStyle,
+      ...rowInlineStyle,
+      ...cellInlineStyle,
+      backgroundColor: inheritedBg,
+      color: inheritedColor,
+      // Relative sizes cascade: section, then row, then cell.
+      fontSize: computedFontSize(
+        cellInlineStyle,
+        computedFontSize(rowInlineStyle, computedFontSize(sectionInlineStyle, parentStyle.fontSize)),
+      ),
+      fontSizeScale: undefined,
+      bold: cellName === 'th' || cellInlineStyle.bold || rowInlineStyle.bold || parentStyle.bold,
+    };
+    byName.set(cellName, cellStyle);
+  }
+  return cellStyle;
+}
+
+interface InlineRun {
+  text: string;
+  style: TextStyle;
+}
+
+const INLINE_FORMATTING_TAGS = new Set([
+  'b',
+  'strong',
+  'i',
+  'em',
+  'span',
+  'a',
+  'small',
+  'code',
+  'u',
+  'sub',
+  'sup',
+  'mark',
+]);
+
+const _tableTextStyleCache = new WeakMap<object, WeakMap<object, TextStyle>>();
+
+/** Parent style extended with the table's own inherited (typographic) properties. */
+function tableTextStyle(parentStyle: TextStyle, tableStyle: Partial<TextStyle>): TextStyle {
+  let byTable = _tableTextStyleCache.get(parentStyle);
+  if (byTable === undefined) {
+    byTable = new WeakMap();
+    _tableTextStyleCache.set(parentStyle, byTable);
+  }
+  let style = byTable.get(tableStyle);
+  if (style === undefined) {
+    style = {
+      ...parentStyle,
+      fontFamily: tableStyle.fontFamily ?? parentStyle.fontFamily,
+      color: tableStyle.color ?? parentStyle.color,
+      fontSize: computedFontSize(tableStyle, parentStyle.fontSize),
+      bold: tableStyle.bold ?? parentStyle.bold,
+      italic: tableStyle.italic ?? parentStyle.italic,
+      lineHeight: tableStyle.lineHeight ?? parentStyle.lineHeight,
+      letterSpacing: tableStyle.letterSpacing ?? parentStyle.letterSpacing,
+      textAlign: tableStyle.textAlign ?? parentStyle.textAlign,
+      textTransform: tableStyle.textTransform ?? parentStyle.textTransform,
+    };
+    byTable.set(tableStyle, style);
+  }
+  return style;
+}
+
+interface CellBox {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+interface CellBorder {
+  /** Uniform border drawn as a rectangle, or null when sides differ. */
+  uniform: { width: number; color: string } | null;
+  sides: Array<{ side: 'top' | 'right' | 'bottom' | 'left'; width: number; color: string }>;
+}
+
+function cellPadding(cellInline: Partial<TextStyle>, defaultPadding: number): CellBox {
+  const all = cellInline.padding ?? defaultPadding;
+  return {
+    top: cellInline.paddingTop ?? all,
+    right: cellInline.paddingRight ?? all,
+    bottom: cellInline.paddingBottom ?? all,
+    left: cellInline.paddingLeft ?? all,
+  };
+}
+
+/** Border of a cell: its own CSS borders when it declares any, otherwise the legacy table border. */
+function cellBorder(cellInline: Partial<TextStyle>, tableBorder: { width: number; color: string } | null): CellBorder {
+  const declared =
+    cellInline.borderWidth !== undefined ||
+    cellInline.borderTopWidth !== undefined ||
+    cellInline.borderRightWidth !== undefined ||
+    cellInline.borderBottomWidth !== undefined ||
+    cellInline.borderLeftWidth !== undefined;
+  if (!declared) return { uniform: tableBorder && tableBorder.width > 0 ? tableBorder : null, sides: [] };
+
+  const fallbackColor = cellInline.borderColor ?? '#000000';
+  const sides = (
+    [
+      ['top', cellInline.borderTopWidth, cellInline.borderTopColor],
+      ['right', cellInline.borderRightWidth, cellInline.borderRightColor],
+      ['bottom', cellInline.borderBottomWidth, cellInline.borderBottomColor],
+      ['left', cellInline.borderLeftWidth, cellInline.borderLeftColor],
+    ] as const
+  ).map(([side, width, color]) => ({
+    side,
+    width: width ?? cellInline.borderWidth ?? 0,
+    color:
+      cellInline.borderColor && cellInline.borderWidth !== undefined
+        ? cellInline.borderColor
+        : (color ?? fallbackColor),
+  }));
+  const first = sides[0] as (typeof sides)[number];
+  if (sides.every((s) => s.width === first.width && s.color === first.color)) {
+    return { uniform: first.width > 0 ? { width: first.width, color: first.color } : null, sides: [] };
+  }
+  return { uniform: null, sides: sides.filter((s) => s.width > 0) };
 }
 
 interface CellData {
   text: string;
   textHeight: number;
   style: TextStyle;
-  padding: number;
+  /** Style used for the cell text (the single inline wrapper's style, e.g. `<b>`, when there is one). */
+  textStyle: TextStyle;
+  /** Inline runs with differing styles, rendered as continued text (left-aligned cells only). */
+  runs?: InlineRun[];
+  padding: CellBox;
+  border: CellBorder;
+  /** 0 = top, 0.5 = middle, 1 = bottom. */
+  verticalFactor: number;
+  /** Height of the content box (text, children or badge), excluding padding. */
+  contentHeight: number;
   fontSize: number;
   fontFamily: string;
   height: number;
   colspan: number;
   rowspan: number;
-  nestedTables: Element[];
-  nonTableChildren: ChildNode[];
+  nestedTables: readonly Element[];
   rawCell: Element;
   startRow: number;
   startCol: number;
@@ -88,8 +255,18 @@ export async function renderTable(
     fontAliasSet: Set<string>,
     imageCache: Map<string, Buffer>,
   ) => Promise<void>,
+  estimateHeightFn?: (
+    doc: PDFKit.PDFDocument,
+    element: Element,
+    parentStyle: TextStyle,
+    width: number,
+    textCache: TextMeasureCache,
+    fontAliasSet: Set<string>,
+  ) => number,
+  collectRunsFn?: (element: Element, parentStyle: TextStyle) => InlineRun[],
 ): Promise<void> {
   const tableStyle = parseInlineStyle(element);
+  const baseStyle = tableTextStyle(parentStyle, tableStyle);
 
   const defaultPadding = tableStyle.padding ?? 4;
   const defaultBorder = tableStyle.border || null;
@@ -159,8 +336,8 @@ export async function renderTable(
           if (strW.endsWith('%')) {
             explicitColWidths[cIdx] = (parseFloat(strW) / 100) * layout.contentWidth;
           } else {
-            const px = parseFloat(strW);
-            if (!isNaN(px) && px > 0) explicitColWidths[cIdx] = px;
+            const width = parseLength(strW);
+            if (width !== undefined && width > 0) explicitColWidths[cIdx] = width;
           }
         }
       }
@@ -189,7 +366,7 @@ export async function renderTable(
   }
 
   const borderWidth = defaultBorder ? defaultBorderWidth : 0;
-  const borderColor = defaultBorder ? defaultBorderColor : undefined;
+  const tableBorder = defaultBorder ? { width: defaultBorderWidth, color: defaultBorderColor } : null;
 
   // Precompute column prefix sums for O(1) cell X and width calculations (Patch 05)
   const columnX: number[] = [layout.leftMargin];
@@ -203,7 +380,8 @@ export async function renderTable(
     const gridCells: (CellData | null)[][] = [];
 
     for (let rowIdx = 0; rowIdx < allRows.length; rowIdx++) {
-      const data: (CellData | null)[] = Array.from({ length: maxCols }, () => null);
+      const data: (CellData | null)[] = [];
+      for (let c = 0; c < maxCols; c++) data.push(null);
       // Étape 1 : Propager les cellules des lignes précédentes qui ont un rowspan actif
       if (rowIdx > 0) {
         for (let col = 0; col < maxCols; col++) {
@@ -216,10 +394,10 @@ export async function renderTable(
       let col = 0;
       const currentCells = rowCells[rowIdx] ?? [];
       const currentRow = allRows[rowIdx];
-      const rowInlineStyle = currentRow ? parseInlineStyle(currentRow) : {};
+      const rowInlineStyle = currentRow ? parseInlineStyle(currentRow) : EMPTY_INLINE_STYLE;
       const parentSection =
         currentRow?.parent && (currentRow.parent as any).type === 'tag' ? (currentRow.parent as Element) : null;
-      const sectionInlineStyle = parentSection ? parseInlineStyle(parentSection) : {};
+      const sectionInlineStyle = parentSection ? parseInlineStyle(parentSection) : EMPTY_INLINE_STYLE;
 
       // Étape 2 : Placer chaque cellule dans la première colonne libre
       for (const cell of currentCells) {
@@ -228,44 +406,91 @@ export async function renderTable(
         const colspan = Math.min(parseInt(cell.attribs['colspan'] || '1', 10), maxCols - col);
         const rowspan = Math.max(1, Math.min(parseInt(cell.attribs['rowspan'] || '1', 10), allRows.length - rowIdx));
 
-        const cellInlineStyle = parseInlineStyle(cell);
-        const inheritedBg =
-          cellInlineStyle.backgroundColor || rowInlineStyle.backgroundColor || sectionInlineStyle.backgroundColor;
-        const inheritedColor =
-          cellInlineStyle.color || rowInlineStyle.color || sectionInlineStyle.color || parentStyle.color;
+        const cellInline = parseInlineStyle(cell);
+        const cellStyle = resolveCellStyle(baseStyle, sectionInlineStyle, rowInlineStyle, cellInline, cell.name);
 
-        const cellStyle: TextStyle = {
-          ...parentStyle,
-          ...sectionInlineStyle,
-          ...rowInlineStyle,
-          ...cellInlineStyle,
-          backgroundColor: inheritedBg,
-          color: inheritedColor,
-          fontSize: cellInlineStyle.fontSize ?? FONT_SIZES_TABLE[cell.name] ?? parentStyle.fontSize,
-          bold: cell.name === 'th' || cellInlineStyle.bold || rowInlineStyle.bold || parentStyle.bold,
-        };
-
-        const padding = cellStyle.padding ?? defaultPadding;
-        const fontFamily = resolveFontFamily(cellStyle.fontFamily, cellStyle.bold, cellStyle.italic, fontAliasSet);
-        const fontSize = cellStyle.fontSize;
+        const padding = cellPadding(cellInline, defaultPadding);
+        const border = cellBorder(cellInline, tableBorder);
+        const verticalAlign =
+          cellInline.verticalAlign ?? rowInlineStyle.verticalAlign ?? sectionInlineStyle.verticalAlign ?? 'middle';
+        const verticalFactor = verticalAlign === 'middle' ? 0.5 : verticalAlign === 'bottom' ? 1 : 0;
 
         // O(1) cell width using precomputed prefix sums
         const currentCellWidth = colX(col + colspan) - colX(col);
-        const textWidth = Math.max(10, currentCellWidth - padding * 2);
-
-        const text = getCellText(cell);
-        const textHeight = text ? textCache.measure(doc, text, fontFamily, fontSize, textWidth) : 0;
+        const textWidth = Math.max(10, currentCellWidth - padding.left - padding.right);
 
         const childTags = cell.children.filter((c: any) => c.type === 'tag') as Element[];
         const hasComplexChildren = childTags.some(
           (c) => c.name === 'div' || c.name === 'p' || c.name === 'svg' || c.name === 'img',
         );
 
+        const badgeTag = !hasComplexChildren
+          ? childTags.find((c) => {
+              const s = parseInlineStyle(c);
+              return Boolean(s.backgroundColor || s.border || s.borderWidth);
+            })
+          : undefined;
+
+        // Inline formatting (<b>, <span style="…">) is honored: a single wrapper style becomes the text
+        // style, differing styles are kept as runs (left-aligned cells).
+        let textStyle = cellStyle;
+        let runs: InlineRun[] | undefined;
+        if (
+          collectRunsFn &&
+          childTags.length > 0 &&
+          !hasComplexChildren &&
+          !badgeTag &&
+          childTags.every((c) => INLINE_FORMATTING_TAGS.has(c.name))
+        ) {
+          const collected = collectRunsFn(cell, cellStyle);
+          const styled = collected.filter((r) => r.text.trim() !== '');
+          const first = styled[0];
+          if (first && styled.every((r) => r.style === first.style)) {
+            textStyle = first.style;
+          } else if (styled.length > 1 && (!cellStyle.textAlign || cellStyle.textAlign === 'left')) {
+            runs = collected;
+          }
+        }
+
+        const fontFamily = resolveFontFamily(textStyle.fontFamily, textStyle.bold, textStyle.italic, fontAliasSet);
+        const fontSize = textStyle.fontSize;
+        const lineGap = lineGapFor(textStyle);
+
+        const text = transformText(getCellText(cell), textStyle);
+        const textHeight = text
+          ? textCache.measure(doc, text, fontFamily, fontSize, textWidth, lineGap, textStyle.letterSpacing)
+          : 0;
+
         let complexChildrenHeight = 0;
-        if (hasComplexChildren) {
+        if (hasComplexChildren && estimateHeightFn) {
+          // Same estimator as the other block layouts, so the row fits what the children will render.
+          for (const child of cell.children) {
+            if (child.type === 'tag') {
+              if ((child as Element).name !== 'table') {
+                complexChildrenHeight += estimateHeightFn(
+                  doc,
+                  child as Element,
+                  cellStyle,
+                  textWidth,
+                  textCache,
+                  fontAliasSet,
+                );
+              }
+            } else if (child.type === 'text' && (child as any).data?.trim()) {
+              complexChildrenHeight += textCache.measure(
+                doc,
+                (child as any).data.trim(),
+                fontFamily,
+                fontSize,
+                textWidth,
+                lineGap,
+              );
+            }
+          }
+        } else if (hasComplexChildren) {
           for (const el of childTags) {
             if (el.name === 'svg' || el.name === 'img') {
-              const h = parseInt(el.attribs['height'] || '', 10) || 90;
+              const h = parseLength(el.attribs['height']) || 90 * PT_PER_PX;
               complexChildrenHeight += h + 8;
             } else if (el.name === 'div' || el.name === 'p') {
               const cTxt = getCellText(el);
@@ -283,13 +508,6 @@ export async function renderTable(
             }
           }
         }
-
-        const badgeTag = !hasComplexChildren
-          ? childTags.find((c) => {
-              const s = parseInlineStyle(c);
-              return Boolean(s.backgroundColor || s.border || s.borderWidth);
-            })
-          : undefined;
 
         const nestedTables = getCellNestedTables(cell);
         let nestedHeight = 0;
@@ -325,7 +543,7 @@ export async function renderTable(
               ) {
                 const nestedCellElement = nestedCell as Element;
                 const nestedCellStyle = parseInlineStyle(nestedCellElement);
-                const nestedCellFontSize = nestedCellStyle.fontSize ?? fontSize;
+                const nestedCellFontSize = computedFontSize(nestedCellStyle, fontSize);
                 const nestedCellText = getCellText(nestedCellElement);
                 const cellPaddingHorizontal = nestedCellStyle.padding ?? nestedPadding;
                 const cellFontFamily = resolveFontFamily(
@@ -353,20 +571,25 @@ export async function renderTable(
           nestedHeight += calculatedNestedHeight;
         }
 
-        const cellHeight = Math.max(textHeight, fontSize, complexChildrenHeight) + padding * 2 + nestedHeight;
+        const contentHeight = hasComplexChildren ? complexChildrenHeight : Math.max(textHeight, fontSize);
+        const cellHeight = contentHeight + padding.top + padding.bottom + nestedHeight;
 
         const cellData: CellData = {
           text,
           textHeight,
           style: cellStyle,
+          textStyle,
+          runs,
           padding,
+          border,
+          verticalFactor,
+          contentHeight,
           fontSize,
           fontFamily,
           height: cellHeight,
           colspan,
           rowspan,
           nestedTables,
-          nonTableChildren: getCellNonTableChildren(cell),
           rawCell: cell,
           startRow: rowIdx,
           startCol: col,
@@ -438,17 +661,35 @@ export async function renderTable(
       }
     }
 
-    // Le thead est répété en haut de chaque nouvelle page (display: table-header-group)
-    let theadBlockCount = 0;
-    while (theadBlockCount < blocks.length && blocks[theadBlockCount]!.end < theadCount) {
-      theadBlockCount++;
-    }
-    const theadBlockValid =
-      theadCount > 0 && theadBlockCount > 0 && blocks[theadBlockCount - 1]!.end === theadCount - 1;
+    // Table-level box: own background, outer borders declared per side (the legacy `border` shorthand is
+    // applied to cells instead) and vertical margins.
+    const tableX = colX(0);
+    const tableWidth = colX(maxCols) - tableX;
+    const outerSides = tableStyle.border
+      ? []
+      : (
+          [
+            ['top', tableStyle.borderTopWidth, tableStyle.borderTopColor],
+            ['right', tableStyle.borderRightWidth, tableStyle.borderRightColor],
+            ['bottom', tableStyle.borderBottomWidth, tableStyle.borderBottomColor],
+            ['left', tableStyle.borderLeftWidth, tableStyle.borderLeftColor],
+          ] as const
+        ).filter(([, width]) => width !== undefined && width > 0);
+    applyMarginTop(doc, tableStyle.marginTop ?? 0);
 
-    const renderRowRange = async (startRow: number, endRow: number): Promise<void> => {
+    /**
+     * Draws rows `startRow`..`endRow` from doc.y. `first` and `last` tell whether the top and bottom outer
+     * borders of the table close this range.
+     */
+    const renderRowRange = async (startRow: number, endRow: number, first: boolean, last: boolean): Promise<void> => {
       const blockY = doc.y;
       const blockStartOffset = rowPre(startRow);
+      // O(1) block height using precomputed prefix sums
+      const blockHeight = rowPre(endRow + 1) - blockStartOffset;
+
+      if (tableStyle.backgroundColor) {
+        doc.fillColor(tableStyle.backgroundColor).rect(tableX, blockY, tableWidth, blockHeight).fill();
+      }
 
       for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
         const cellY = blockY + (rowPre(rowIndex) - blockStartOffset);
@@ -459,30 +700,25 @@ export async function renderTable(
             // O(1) cell coordinates and width using precomputed prefix sums
             const cellX = colX(cell.startCol);
             const cellWidth = colX(cell.startCol + cell.colspan) - cellX;
-            const endRow = Math.min(rowIndex + cell.rowspan - 1, allRows.length - 1);
-            const cellH = rowPre(endRow + 1) - rowPre(rowIndex);
+            const cellEndRow = Math.min(rowIndex + cell.rowspan - 1, allRows.length - 1);
+            const cellH = rowPre(cellEndRow + 1) - rowPre(rowIndex);
 
             if (cell.style.backgroundColor) {
               doc.fillColor(cell.style.backgroundColor).rect(cellX, cellY, cellWidth, cellH).fill();
             }
+            strokeCellBorder(doc, cell.border, cellX, cellY, cellWidth, cellH);
 
-            if (borderWidth > 0) {
-              doc
-                .strokeColor(borderColor ?? '#000000')
-                .lineWidth(borderWidth)
-                .rect(cellX, cellY, cellWidth, cellH)
-                .stroke();
-            }
+            const textStyle = cell.textStyle;
+            doc.font(cell.fontFamily).fontSize(cell.fontSize).fillColor(textStyle.color);
 
-            doc.font(cell.fontFamily).fontSize(cell.fontSize).fillColor(cell.style.color);
-
-            const textX = cellX + cell.padding;
-            let textY = cellY + cell.padding + cell.fontSize;
-            const textWidth = Math.max(10, cellWidth - cell.padding * 2);
-            const textH = cell.textHeight;
-            if (cell.style.verticalAlign === 'middle' && textH > 0) {
-              textY = cellY + (cellH - textH) / 2;
-            }
+            const pad = cell.padding;
+            const textX = cellX + pad.left;
+            const textWidth = Math.max(10, cellWidth - pad.left - pad.right);
+            const innerH = cellH - pad.top - pad.bottom;
+            // vertical-align: distribute the free space of the row (taller siblings, rowspan) above the content
+            const usedH = cell.height - pad.top - pad.bottom;
+            const textY = cellY + pad.top + Math.max(0, innerH - usedH) * cell.verticalFactor;
+            const lineGap = lineGapFor(textStyle);
 
             if (cell.hasComplexChildren) {
               const cellLayout = Object.create(layout);
@@ -491,7 +727,7 @@ export async function renderTable(
               const savedX = doc.x;
               const savedY = doc.y;
               doc.x = textX;
-              doc.y = cellY + cell.padding;
+              doc.y = textY;
 
               for (const child of cell.rawCell.children) {
                 if (child.type === 'tag') {
@@ -506,9 +742,9 @@ export async function renderTable(
                     imageCache,
                   );
                 } else if (child.type === 'text' && (child as any).data?.trim()) {
-                  doc.font(cell.fontFamily).fontSize(cell.fontSize).fillColor(cell.style.color);
+                  doc.font(cell.fontFamily).fontSize(cell.fontSize).fillColor(textStyle.color);
                   const align = cell.style.textAlign || 'left';
-                  doc.text((child as any).data.trim(), textX, doc.y, { width: textWidth, align });
+                  doc.text((child as any).data.trim(), textX, doc.y, { width: textWidth, align, lineGap });
                 }
               }
               doc.x = savedX;
@@ -519,7 +755,7 @@ export async function renderTable(
               const bText = getCellText(badgeTag);
               const bStyle: TextStyle = {
                 ...cell.style,
-                fontSize: bStyleRaw.fontSize ?? cell.style.fontSize,
+                fontSize: computedFontSize(bStyleRaw, cell.style.fontSize),
                 ...bStyleRaw,
               };
               const bFont = resolveFontFamily(bStyle.fontFamily, bStyle.bold, bStyle.italic, fontAliasSet);
@@ -535,10 +771,10 @@ export async function renderTable(
               if (cell.style.textAlign === 'center') {
                 badgeX = cellX + (cellWidth - badgeW) / 2;
               } else if (cell.style.textAlign === 'right') {
-                badgeX = cellX + cellWidth - cell.padding - badgeW;
+                badgeX = cellX + cellWidth - pad.right - badgeW;
               }
 
-              const badgeY = cellY + (cellH - badgeH) / 2;
+              const badgeY = cellY + pad.top + (innerH - badgeH) * cell.verticalFactor;
 
               if (bStyle.backgroundColor) {
                 doc.fillColor(bStyle.backgroundColor);
@@ -559,23 +795,32 @@ export async function renderTable(
               if (bStyle.textDecoration === 'underline') badgeTextOpts.underline = true;
               else if (bStyle.textDecoration === 'line-through') badgeTextOpts.strike = true;
               doc.fillColor(bStyle.color || cell.style.color).text(bText, badgeX + padL, badgeY + padT, badgeTextOpts);
-            } else if (cell.text && textH + cell.padding <= cellH) {
-              const cellTextOpts: PDFKit.Mixins.TextOptions = { width: textWidth };
+            } else if (cell.runs) {
+              for (let runIndex = 0; runIndex < cell.runs.length; runIndex++) {
+                const run = cell.runs[runIndex] as InlineRun;
+                const runFont = resolveFontFamily(run.style.fontFamily, run.style.bold, run.style.italic, fontAliasSet);
+                doc.font(runFont).fontSize(run.style.fontSize).fillColor(run.style.color);
+                const runOpts = textOptionsFor(run.style, textWidth, lineGap);
+                runOpts.continued = runIndex < cell.runs.length - 1;
+                const runText = transformText(run.text, run.style);
+                if (runIndex === 0) doc.text(runText, textX, textY, runOpts);
+                else doc.text(runText, runOpts);
+              }
+            } else if (cell.text) {
+              const cellTextOpts = textOptionsFor(textStyle, textWidth, lineGap);
               if (cell.style.textAlign === 'center') cellTextOpts.align = 'center';
               else if (cell.style.textAlign === 'right') cellTextOpts.align = 'right';
-              if (cell.style.textDecoration === 'underline') cellTextOpts.underline = true;
-              else if (cell.style.textDecoration === 'line-through') cellTextOpts.strike = true;
               doc.text(cell.text, textX, textY, cellTextOpts);
             }
 
             if (cell.nestedTables.length > 0) {
               const savedX = doc.x;
               const savedY = doc.y;
-              const nestedLayout = Object.create(layout);
-              nestedLayout.leftMargin = textX;
-              nestedLayout.contentWidth = textWidth;
+              // Nested tables are laid out in the content box of their cell.
+              const nestedLayout = Object.create(layout) as PageLayout;
+              Object.assign(nestedLayout, { leftMargin: textX, contentWidth: textWidth });
               doc.x = textX;
-              doc.y = cellY + cell.padding;
+              doc.y = cellY + pad.top;
               for (const nestedTable of cell.nestedTables) {
                 await renderElementFn(
                   doc,
@@ -599,41 +844,112 @@ export async function renderTable(
         }
       }
 
-      doc.y = blockY + (rowPre(endRow + 1) - blockStartOffset);
+      for (const [side, width, color] of outerSides) {
+        const bottom = blockY + blockHeight;
+        if (side === 'top' && !first) continue;
+        if (side === 'bottom' && !last) continue;
+        doc.strokeColor(color ?? tableStyle.borderColor ?? '#000000').lineWidth(width as number);
+        if (side === 'top')
+          doc
+            .moveTo(tableX, blockY)
+            .lineTo(tableX + tableWidth, blockY)
+            .stroke();
+        else if (side === 'bottom')
+          doc
+            .moveTo(tableX, bottom)
+            .lineTo(tableX + tableWidth, bottom)
+            .stroke();
+        else if (side === 'left') doc.moveTo(tableX, blockY).lineTo(tableX, bottom).stroke();
+        else
+          doc
+            .moveTo(tableX + tableWidth, blockY)
+            .lineTo(tableX + tableWidth, bottom)
+            .stroke();
+      }
+
+      doc.y = blockY + blockHeight;
     };
 
-    // Rendre d'abord le thead, puis les blocs du corps
-    if (theadBlockValid) {
-      const theadHeight = rowPre(theadCount) - rowPre(0);
-      if (doc.y + theadHeight > layout.pageBottom) {
-        doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
-        doc.y = layout.contentTop;
-        doc.x = layout.leftMargin;
-      }
-      await renderRowRange(0, theadCount - 1);
-      let theadOnCurrentPage = true;
+    const newPage = (): void => {
+      doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
+      doc.y = layout.contentTop;
+      doc.x = layout.leftMargin;
+    };
+    const blockHeightOf = (block: { start: number; end: number }): number =>
+      rowPre(block.end + 1) - rowPre(block.start);
 
-      for (const block of blocks.slice(theadBlockCount)) {
-        const blockHeight = rowPre(block.end + 1) - rowPre(block.start);
-        if (!theadOnCurrentPage || doc.y + blockHeight > layout.pageBottom) {
-          doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
-          doc.y = layout.contentTop;
-          doc.x = layout.leftMargin;
-          await renderRowRange(0, theadCount - 1);
-          theadOnCurrentPage = true;
-        }
-        await renderRowRange(block.start, block.end);
-      }
-    } else {
-      for (const block of blocks) {
-        const blockHeight = rowPre(block.end + 1) - rowPre(block.start);
-        if (doc.y + blockHeight > layout.pageBottom) {
-          doc.addPage({ size: layout.format, layout: layout.orientation, margin: 0 });
-          doc.y = layout.contentTop;
-          doc.x = layout.leftMargin;
-        }
-        await renderRowRange(block.start, block.end);
-      }
+    // The <thead> rows repeat at the top of every page the table continues on, as browsers print a
+    // table-header-group. They must form whole blocks (no rowspan into the body).
+    let headBlockCount = 0;
+    while (headBlockCount < blocks.length && (blocks[headBlockCount] as { end: number }).end < theadCount) {
+      headBlockCount++;
     }
+    const repeatHead =
+      theadCount > 0 &&
+      theadCount < allRows.length &&
+      headBlockCount > 0 &&
+      (blocks[headBlockCount - 1] as { end: number }).end === theadCount - 1;
+    const bodyBlocks = repeatHead ? blocks.slice(headBlockCount) : blocks;
+
+    if (repeatHead) {
+      // Keep the header with the first body rows.
+      const headHeight = rowPre(theadCount) - rowPre(0);
+      const firstBody = bodyBlocks[0] as { start: number; end: number };
+      if (doc.y > layout.contentTop && doc.y + headHeight + blockHeightOf(firstBody) > layout.pageBottom) newPage();
+      await renderRowRange(0, theadCount - 1, true, false);
+    }
+    for (let blockIndex = 0; blockIndex < bodyBlocks.length; blockIndex++) {
+      const block = bodyBlocks[blockIndex] as { start: number; end: number };
+      if (doc.y + blockHeightOf(block) > layout.pageBottom) {
+        newPage();
+        if (repeatHead) await renderRowRange(0, theadCount - 1, true, false);
+      }
+      await renderRowRange(
+        block.start,
+        block.end,
+        !repeatHead && blockIndex === 0,
+        blockIndex === bodyBlocks.length - 1,
+      );
+    }
+
+    applyMarginBottom(doc, tableStyle.marginBottom ?? 0);
+  }
+}
+
+function textOptionsFor(style: TextStyle, width: number, lineGap: number): PDFKit.Mixins.TextOptions {
+  const opts: PDFKit.Mixins.TextOptions = { width, lineGap };
+  if (style.letterSpacing !== undefined) opts.characterSpacing = style.letterSpacing;
+  if (style.textDecoration === 'underline') opts.underline = true;
+  else if (style.textDecoration === 'line-through') opts.strike = true;
+  return opts;
+}
+
+function strokeCellBorder(doc: PDFKit.PDFDocument, border: CellBorder, x: number, y: number, w: number, h: number) {
+  if (border.uniform) {
+    doc.strokeColor(border.uniform.color).lineWidth(border.uniform.width).rect(x, y, w, h).stroke();
+    return;
+  }
+  for (const { side, width, color } of border.sides) {
+    doc.strokeColor(color).lineWidth(width);
+    if (side === 'top')
+      doc
+        .moveTo(x, y)
+        .lineTo(x + w, y)
+        .stroke();
+    else if (side === 'bottom')
+      doc
+        .moveTo(x, y + h)
+        .lineTo(x + w, y + h)
+        .stroke();
+    else if (side === 'left')
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + h)
+        .stroke();
+    else
+      doc
+        .moveTo(x + w, y)
+        .lineTo(x + w, y + h)
+        .stroke();
   }
 }

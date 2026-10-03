@@ -1,11 +1,11 @@
-# 📊 Rapport de Benchmark & Performances — v2.6.0
+# 📊 Rapport de Benchmark & Performances — v3.0.0
 
-> **Date d'exécution** : 2026-09-22  
-> **Version du module** : `pdf-generator@2.6.0` (Branche: `main` @ `dcefd4e`)  
-> **Environnement Système** : Node.js v24.19.0 — Windows_NT 10.0.26200 (x64)  
-> **Processeur Hôte** : AMD Ryzen 5 3600 6-Core Processor               (12 cœurs logiques)  
-> **Mémoire Système** : 15.9 GB RAM  
-> **Workers alloués** : 9 threads logiques (80% CPU)  
+> **Date d'exécution** : 2026-09-29  
+> **Version du module** : `pdf-generator@3.0.0` (Branche: `perf/exact-pdfkit-acceleration` @ `06b4f8e`)  
+> **Environnement Système** : Node.js v24.20.0 — Linux 6.8.0-142-generic (x64)  
+> **Processeur Hôte** : 13th Gen Intel(R) Core(TM) i7-13800H (20 cœurs logiques)  
+> **Mémoire Système** : 31.0 GB RAM  
+> **Workers alloués** : 16 threads logiques (80% CPU)  
 > **Commande de benchmark** : `npm run benchmark`
 
 ---
@@ -21,6 +21,8 @@ Ce benchmark valide l'implémentation complète du **Plan d'Optimisation des Per
 - Résolution directe $O(1)$ des variantes de polices (`_aliasDirectIndex`).
 - Bounded backpressure (`maxQueueSize`, `WorkerPoolBusyError`) et maintien d'un pool de workers chauds (`minWorkers`).
 - Instrumentation de profilage par phase sans surcoût au repos.
+- Accélération exacte de PDFKit (patches 13 à 21) : métriques de polices compilées et partagées, flux de contenu encodés en une passe, sortie identique à l'octet.
+- Rendu fidèle 3.0 : unités CSS exactes (1px = 0,75pt), fusion des marges verticales, polices standard Symbol/ZapfDingbats pour les symboles.
 
 ---
 
@@ -30,23 +32,48 @@ Mesures obtenues en exécution séquentielle après amorçage des caches :
 
 | Catégorie | Scénario d'essai | Latence Min | Latence Moyenne | Latence Max | Débit Unitaire | Taille PDF |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|
-| **CSS** | CSS 100 rules / 1k nodes | 90.37 ms | **99.13 ms** | 136.77 ms | ~10.1 docs/s | 29.4 KB |
-| **CSS** | CSS 500 rules / 5k nodes | 444.53 ms | **462.05 ms** | 499.64 ms | ~2.2 docs/s | 141.1 KB |
-| **Typography** | Typography (1000 repeated par.) | 110.97 ms | **120.71 ms** | 132.99 ms | ~8.3 docs/s | 38.6 KB |
-| **Typography** | Typography (1000 unique par.) | 236.13 ms | **283.03 ms** | 338.29 ms | ~3.5 docs/s | 44.0 KB |
-| **Typography** | Typography (Long wrapped text) | 20.57 ms | **26.37 ms** | 39.05 ms | ~37.9 docs/s | 6.5 KB |
-| **Tables** | Table (100 rows x 5 cols) | 28.80 ms | **32.93 ms** | 38.57 ms | ~30.4 docs/s | 7.5 KB |
-| **Tables** | Table (500 rows x 10 cols) | 220.77 ms | **248.46 ms** | 292.56 ms | ~4.0 docs/s | 53.6 KB |
-| **Tables** | Table (1000 rows x 10 cols) | 437.78 ms | **472.25 ms** | 517.93 ms | ~2.1 docs/s | 106.0 KB |
-| **Layout** | Layout (Deep nested flex) | 5.70 ms | **7.55 ms** | 10.42 ms | ~132.5 docs/s | 1.6 KB |
-| **Layout** | Layout (Deep grid 3x3) | 6.53 ms | **6.86 ms** | 7.23 ms | ~145.8 docs/s | 1.9 KB |
-| **Layout** | Layout (Table inside flex card) | 13.83 ms | **16.12 ms** | 19.97 ms | ~62.0 docs/s | 3.9 KB |
-| **Assets** | Assets (100 repeated images) | 17.82 ms | **21.60 ms** | 37.41 ms | ~46.3 docs/s | 43.9 KB |
-| **Template Réel** | Rapport Éditorial (A4) | 13.49 ms | **16.76 ms** | 21.29 ms | ~59.7 docs/s | 5.4 KB |
-| **Template Réel** | Catalogue Produit (A4) | 11.97 ms | **14.81 ms** | 18.33 ms | ~67.5 docs/s | 5.9 KB |
-| **Template Réel** | Dashboard Analytique (A4) | 15.90 ms | **18.70 ms** | 23.86 ms | ~53.5 docs/s | 7.2 KB |
-| **Template Réel** | Facture Professionnelle (A4) | 11.73 ms | **13.63 ms** | 15.46 ms | ~73.4 docs/s | 4.1 KB |
-| **Template Réel** | Certificat Paysage (A4) | 12.35 ms | **16.36 ms** | 23.57 ms | ~61.1 docs/s | 3.6 KB |
+| **CSS** | CSS 100 rules / 1k nodes | 30.82 ms | **40.53 ms** | 88.84 ms | ~24.7 docs/s | 26.2 KB |
+| **CSS** | CSS 500 rules / 5k nodes | 159.59 ms | **192.43 ms** | 247.93 ms | ~5.2 docs/s | 125.3 KB |
+| **Typography** | Typography (1000 repeated par.) | 36.72 ms | **37.62 ms** | 38.46 ms | ~26.6 docs/s | 17.6 KB |
+| **Typography** | Typography (1000 unique par.) | 96.02 ms | **100.62 ms** | 115.32 ms | ~9.9 docs/s | 37.6 KB |
+| **Typography** | Typography (Long wrapped text) | 8.36 ms | **11.59 ms** | 13.48 ms | ~86.3 docs/s | 5.2 KB |
+| **Typography** | Typography (500 Unicode par.) | 42.47 ms | **46.32 ms** | 55.67 ms | ~21.6 docs/s | 29.5 KB |
+| **Tables** | Table (100 rows x 5 cols) | 9.95 ms | **10.96 ms** | 13.17 ms | ~91.2 docs/s | 7.4 KB |
+| **Tables** | Table (500 rows x 10 cols) | 101.47 ms | **121.21 ms** | 133.43 ms | ~8.3 docs/s | 51.0 KB |
+| **Tables** | Table (1000 rows x 10 cols) | 263.62 ms | **293.83 ms** | 348.45 ms | ~3.4 docs/s | 100.1 KB |
+| **Layout** | Layout (Deep nested flex) | 1.18 ms | **1.50 ms** | 2.68 ms | ~668.3 docs/s | 1.6 KB |
+| **Layout** | Layout (Deep grid 3x3) | 2.01 ms | **2.52 ms** | 3.03 ms | ~396.8 docs/s | 1.8 KB |
+| **Layout** | Layout (Table inside flex card) | 5.90 ms | **7.05 ms** | 10.26 ms | ~141.9 docs/s | 3.4 KB |
+| **Assets** | Assets (100 repeated images) | 3.29 ms | **5.12 ms** | 14.58 ms | ~195.3 docs/s | 2.0 KB |
+| **Template Réel** | Rapport Éditorial (A4) | 9.88 ms | **12.02 ms** | 14.96 ms | ~83.2 docs/s | 4.5 KB |
+| **Template Réel** | Catalogue Produit (A4) | 6.81 ms | **13.77 ms** | 25.77 ms | ~72.6 docs/s | 5.3 KB |
+| **Template Réel** | Dashboard Analytique (A4) | 7.51 ms | **10.95 ms** | 21.38 ms | ~91.3 docs/s | 6.7 KB |
+| **Template Réel** | Facture Professionnelle (A4) | 3.86 ms | **5.04 ms** | 10.30 ms | ~198.4 docs/s | 4.2 KB |
+| **Template Réel** | Certificat Paysage (A4) | 3.10 ms | **4.15 ms** | 9.13 ms | ~241.0 docs/s | 3.8 KB |
+| **Template Réel** | CV Technique (A4) | 5.29 ms | **5.79 ms** | 7.32 ms | ~172.8 docs/s | 5.6 KB |
+| **Template Réel** | Compte-rendu Médical (A4) | 7.66 ms | **8.67 ms** | 12.32 ms | ~115.3 docs/s | 7.2 KB |
+| **Template Réel** | Menu Gastronomique (A4) | 4.27 ms | **4.75 ms** | 6.72 ms | ~210.7 docs/s | 5.2 KB |
+| **Template Réel** | Contrat Juridique (A4) | 4.96 ms | **5.89 ms** | 8.82 ms | ~169.9 docs/s | 6.2 KB |
+| **Template Réel** | Billet Événement (A4) | 6.51 ms | **6.85 ms** | 8.06 ms | ~145.9 docs/s | 4.6 KB |
+| **Template Réel** | Grand Livre 500+ écritures (A4) | 95.88 ms | **102.41 ms** | 111.91 ms | ~9.8 docs/s | 95.9 KB |
+
+### 🎯 Fidélité de rendu des modèles réels (audit SSQI)
+
+Score de `verifyRenderingQuality` sur le PDF mesuré ci-dessus (rappel du texte, ordre de lecture, collisions, structure) :
+
+| Modèle | Fidélité | Pages | Texte retrouvé |
+|:---|:---:|:---:|:---:|
+| Rapport Éditorial (A4) | **100% (A+)** | 1 | 100% |
+| Catalogue Produit (A4) | **86% (B)** | 1 | 100% |
+| Dashboard Analytique (A4) | **59% (F)** | 1 | 100% |
+| Facture Professionnelle (A4) | **100% (A+)** | 1 | 100% |
+| Certificat Paysage (A4) | **81% (B)** | 1 | 100% |
+| CV Technique (A4) | **100% (A+)** | 1 | 99% |
+| Compte-rendu Médical (A4) | **100% (A+)** | 1 | 99% |
+| Menu Gastronomique (A4) | **97% (A+)** | 1 | 91% |
+| Contrat Juridique (A4) | **100% (A+)** | 1 | 100% |
+| Billet Événement (A4) | **61% (D)** | 1 | 71% |
+| Grand Livre 500+ écritures (A4) | **82% (B)** | 10 | 100% |
 
 ---
 
@@ -56,42 +83,42 @@ Mesure sur un document complet (titres, styles, tableaux, listes et paragraphes)
 
 | Phase du Pipeline | Temps d'exécution | Part du Temps Total | Rôle & Optimisation associée |
 |:---|:---:|:---:|:---|
-| **DOM Parsing (Cheerio)** | 1.56 ms | 5.8% | Parsing AST en une seule passe |
-| **CSS Parsing & Indexation** | 0.56 ms | 2.1% | Indexation par sélecteur $O(1)$ (Patch 03) |
-| **Enregistrement Polices** | 0.02 ms | 0.1% | Cache d'actifs et index direct (Patches 04 & 07) |
-| **Layout & Rendu d'Éléments** | 19.92 ms | 74.4% | Sommes préfixes et mémoïsation layout (Patches 05 & 06) |
-| **Assemblage Binaire PDFKit** | 1.53 ms | 5.7% | Émission du flux binaire et compression |
-| **Total Global** | **26.76 ms** | **100%** | Latence totale unitaire de bout en bout |
+| **DOM Parsing (Cheerio)** | 0.94 ms | 11.3% | Parsing AST en une seule passe |
+| **CSS Parsing & Indexation** | 0.03 ms | 0.4% | Indexation par sélecteur $O(1)$ (Patch 03) |
+| **Enregistrement Polices** | 0.02 ms | 0.3% | Cache d'actifs et index direct (Patches 04 & 07) |
+| **Layout & Rendu d'Éléments** | 6.59 ms | 79.0% | Sommes préfixes et mémoïsation layout (Patches 05 & 06) |
+| **Assemblage Binaire PDFKit** | 0.40 ms | 4.9% | Émission du flux binaire et compression |
+| **Total Global** | **8.34 ms** | **100%** | Latence totale unitaire de bout en bout |
 
 > [!NOTE]
-> **Pourquoi le Layout & Rendu d'Éléments représente 75% à 85% du temps ?**  
-> Le découpage ci-dessus démontre que le parsing HTML (1.13 ms) et l'indexation CSS (0.55 ms) sont négligeables. L'essentiel du CPU est consommé par le calcul géométrique des glyphes de texte dans PDFKit (`doc.heightOfString`, `doc.text`), le calcul des retours à la ligne (*word wrapping*) et l'émission des flux d'instructions PDF binaires.
+> **Pourquoi le Layout & Rendu d'Éléments représente 79% du temps ?**  
+> Le découpage ci-dessus démontre que le parsing HTML (0.94 ms) et l'indexation CSS (0.03 ms) sont négligeables. L'essentiel du CPU est consommé par le calcul géométrique des glyphes de texte dans PDFKit (`doc.heightOfString`, `doc.text`), le calcul des retours à la ligne (*word wrapping*) et l'émission des flux d'instructions PDF binaires.
 
 ---
 
 ## 🚀 3. Scalabilité Multi-Thread (Worker Pool)
 
-Évaluation de la montée en charge avec le `WorkerPool` (9 threads alloués) sur deux types de charges contrastées :
+Évaluation de la montée en charge avec le `WorkerPool` (16 threads alloués) sur deux types de charges contrastées :
 
 ### 3A. Charge Standard / Légère (Documents Simples, 1 Passe — Analogue au Soak Test)
 
 | Concurrence | Débit Global | Latence p50 | Latence p95 | RSS Mémoire | Heap Utilisé |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| **1 req. simultanées** | **81.0 docs/s** | 10.5 ms | 21.9 ms | ~888 MB | ~35.9 MB |
-| **2 req. simultanées** | **210.0 docs/s** | 9.0 ms | 10.4 ms | ~930 MB | ~36.0 MB |
-| **4 req. simultanées** | **362.3 docs/s** | 9.6 ms | 13.2 ms | ~943 MB | ~36.1 MB |
-| **8 req. simultanées** | **381.0 docs/s** | 14.2 ms | 21.1 ms | ~989 MB | ~36.2 MB |
-| **16 req. simultanées** | **636.2 docs/s** | 16.6 ms | 25.5 ms | ~1010 MB | ~36.5 MB |
+| **1 req. simultanées** | **61.4 docs/s** | 12.1 ms | 28.0 ms | ~1611 MB | ~241.2 MB |
+| **2 req. simultanées** | **164.7 docs/s** | 10.9 ms | 14.0 ms | ~1613 MB | ~241.3 MB |
+| **4 req. simultanées** | **279.7 docs/s** | 9.4 ms | 14.9 ms | ~1616 MB | ~241.4 MB |
+| **8 req. simultanées** | **503.5 docs/s** | 11.6 ms | 14.6 ms | ~1623 MB | ~241.5 MB |
+| **16 req. simultanées** | **804.4 docs/s** | 10.6 ms | 20.3 ms | ~1644 MB | ~241.8 MB |
 
 ### 3B. Charge Entreprise Complexe (Template Éditorial Multi-Pages, 2 Passes avec `counter(num-pages)`)
 
 | Concurrence | Débit Global | Latence p50 | Latence p95 | RSS Mémoire | Heap Utilisé |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| **1 req. simultanées** | **35.2 docs/s** | 28.1 ms | 32.4 ms | ~1022 MB | ~36.5 MB |
-| **2 req. simultanées** | **85.8 docs/s** | 21.9 ms | 25.3 ms | ~1035 MB | ~36.6 MB |
-| **4 req. simultanées** | **125.6 docs/s** | 26.2 ms | 30.2 ms | ~1058 MB | ~36.6 MB |
-| **8 req. simultanées** | **224.2 docs/s** | 32.8 ms | 35.5 ms | ~1130 MB | ~36.7 MB |
-| **16 req. simultanées** | **226.9 docs/s** | 40.1 ms | 68.5 ms | ~1295 MB | ~36.8 MB |
+| **1 req. simultanées** | **17.9 docs/s** | 53.5 ms | 74.1 ms | ~1669 MB | ~241.8 MB |
+| **2 req. simultanées** | **73.4 docs/s** | 19.4 ms | 37.5 ms | ~1695 MB | ~241.9 MB |
+| **4 req. simultanées** | **117.2 docs/s** | 22.1 ms | 28.6 ms | ~1696 MB | ~241.9 MB |
+| **8 req. simultanées** | **533.4 docs/s** | 9.7 ms | 17.3 ms | ~1698 MB | ~242.0 MB |
+| **16 req. simultanées** | **994.7 docs/s** | 7.8 ms | 16.6 ms | ~1717 MB | ~242.1 MB |
 
 ---
 
@@ -129,15 +156,15 @@ Il exécute des Compute Shaders WGSL (`src/gpu/shaders/tableRowReduce.wgsl.ts`) 
 
 | Scénario de Tableau | Cellules | Kernel CPU Pur | Kernel Accélérateur | Rendu Doc CPU (`gpu: false`) | Rendu Doc Accéléré (`gpu: 'auto'`) | Parité ($\Delta \le 0.001$) | Stratégie d'Exécution |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---|
-| **Table Légère (100x5)** | 500 | 0.002 ms | **0.004 ms** | 29.9 ms | **26.5 ms** | ✅ Conforme | `Sous seuil (< 4096) -> CPU` |
-| **Table Moyenne (500x10)** | 5 000 | 0.008 ms | **0.011 ms** | 223.0 ms | **208.7 ms** | ✅ Conforme | `CPU Fallback Transparent` |
-| **Table Dense (1000x10)** | 10 000 | 0.015 ms | **0.017 ms** | 409.5 ms | **401.0 ms** | ✅ Conforme | `CPU Fallback Transparent` |
-| **Table Massive (2500x10)** | 25 000 | 0.057 ms | **0.056 ms** | 1032.1 ms | **1060.1 ms** | ✅ Conforme | `CPU Fallback Transparent` |
+| **Table Légère (100x5)** | 500 | 0.004 ms | **0.005 ms** | 28.8 ms | **15.7 ms** | ✅ Conforme | `Sous seuil (< 4096) -> CPU` |
+| **Table Moyenne (500x10)** | 5 000 | 0.007 ms | **0.008 ms** | 89.6 ms | **67.3 ms** | ✅ Conforme | `CPU Fallback Transparent` |
+| **Table Dense (1000x10)** | 10 000 | 0.015 ms | **0.015 ms** | 149.7 ms | **160.8 ms** | ✅ Conforme | `CPU Fallback Transparent` |
+| **Table Massive (2500x10)** | 25 000 | 0.039 ms | **0.041 ms** | 482.5 ms | **461.6 ms** | ✅ Conforme | `CPU Fallback Transparent` |
 
 ### 📈 Télémétrie de l'Accélérateur GPU
 - **Disponibilité Matérielle** : ℹ️ Fallback CPU actif (Absence de runtime WebGPU matériel dans l'environnement hôte)
 - **Tables traitées sur GPU (Compute Pipeline)** : `0`
-- **Tables traitées sur CPU (Fast-Path & Fallbacks)** : `179`
+- **Tables traitées sur CPU (Fast-Path & Fallbacks)** : `427`
 - **Basculements en Fallback** : `0`
 - **Temps Kernel GPU cumulé** : `0.00 ms`
 - **Temps Transferts VRAM cumulé (Upload + Readback)** : `0.00 ms`

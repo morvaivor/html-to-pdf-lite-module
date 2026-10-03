@@ -2,10 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) or [Release Please](https://github.com/googleapis/release-please) for automated commit specifications.
 
+## [3.0.0](https://github.com/morvaivor/html-to-pdf-lite-module/compare/v2.7.0...v3.0.0) - 2026-09-29
+
+### ⚡ Performance Improvements
+- **core**: accélération exacte de PDFKit, partage des styles et CSS en une passe ([a673ddd](https://github.com/morvaivor/html-to-pdf-lite-module/commit/a673ddd8dc5b6cbcc407c93f229abad922949a69))
+
+### 📌 Other Changes
+- Update package.lock and dependencies ([06b4f8e](https://github.com/morvaivor/html-to-pdf-lite-module/commit/06b4f8e94686218df32e2eeba6cca49e0119824a))
+- Update version and dependencies ([cd07920](https://github.com/morvaivor/html-to-pdf-lite-module/commit/cd07920f2512bdf9fdbf843ee43817fe2c37b62f))
+
 ## [2.7.0](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.6.1...v2.7.0) - 2026-09-28
 
-### 🚀 Features
-- parsing unités CSS, thead répété, vertical-align et wrap des grilles ([ff46a96](https://github.com/morvaivor/html-to-pdf-lite-module/commit/ff46a963fc531a37aa98b61035af2a16e5723a99))
+### ⚡ Performance Improvements
+- **core**: accélération exacte de PDFKit, partage des styles et CSS en une passe ([a673ddd](https://github.com/morvaivor/html-to-pdf-lite-module/commit/a673ddd8dc5b6cbcc407c93f229abad922949a69))
 
 ## [2.6.1](https://github.com/morvaivor/html-to-pdf-lite-module/compare/2.6.0...v2.6.1) - 2026-09-22
 
