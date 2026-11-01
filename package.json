@@ -61,14 +61,14 @@
     "svg-to-pdfkit": "^0.1.8"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.2.3",
+    "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.3",
-    "@types/pdfkit": "^0.17.6",
+    "@types/pdfkit": "^0.17.7",
     "@types/svg-to-pdfkit": "^0.1.4",
     "domhandler": "^6.0.1",
-    "oxfmt": "^0.70.0",
-    "oxlint": "^1.85.0",
-    "tsdown": "^0.23.0",
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0",
+    "tsdown": "^0.23.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
